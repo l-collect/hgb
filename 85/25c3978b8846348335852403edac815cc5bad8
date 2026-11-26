@@ -1,0 +1,47 @@
+client/console/src/features/dev/Publish.module.css
+  s_75c1698e4ed8c2::t_a870df627fa31f 9
+client/console/src/features/dev/PatchConflicts.tsx
+  s_75c1698e4ed8c2::t_83abc9193c32f1 1-64
+client/console/src/features/dev/HomePage.tsx
+  s_75c1698e4ed8c2::t_8ccabf7ea2be5b 5,8,20,26,90,94
+client/console/src/features/dev/where.tsx
+  s_75c1698e4ed8c2::t_39e1d5b18d1891 3,41-65
+  s_75c1698e4ed8c2::t_c557d9a21a1f14 66
+client/console/src/features/dev/Wb.module.css
+  s_75c1698e4ed8c2::t_83abc9193c32f1 118-126
+client/console/src/features/dev/DevWorkbench.tsx
+  s_75c1698e4ed8c2::t_73507d3f83297f 174-179,190-191,193-200,205-206,222-224,229-230,295-321,326
+  s_75c1698e4ed8c2::t_e62d204577c045 7-9,48-52,88-89
+client/console/src/features/dev/api.ts
+  s_75c1698e4ed8c2::t_7e4c2f0dff026a 14-27,57-60,62,66-96,103-117,144-146,153-154
+client/console/src/features/dev/context.ts
+  s_75c1698e4ed8c2::t_7556af8664655f 3,14-17,49-50
+client/console/src/features/dev/PublishPage.tsx
+  s_75c1698e4ed8c2::t_a870df627fa31f 4,6-7,35-37,46-50,52-55,130,132-133,147-153
+  s_75c1698e4ed8c2::t_77e0baee7fa9ea 131
+  s_75c1698e4ed8c2::t_73fb40ff9a8ef1 14,51,105
+client/console/src/features/dev/Workspace.tsx
+  s_75c1698e4ed8c2::t_fb48e485e89742 196,390-392,427,433,437-438,440
+  s_75c1698e4ed8c2::t_612788f43353d6 256-257,286,292-294,296,299,306-311,424,569,600-607,611-617,619,684-686,688-689,700
+  s_75c1698e4ed8c2::t_59c4035b4632e2 4-5,16,57,100-101,167-174,176-187,189,191,193-195,197-209,213,875-882
+  s_75c1698e4ed8c2::t_88340e17400f8e 624-627,629,634,637-643,706-708
+  s_75c1698e4ed8c2::t_dd63aeef5afcef 216
+client/console/src/features/dev/SyncTools.tsx
+  s_75c1698e4ed8c2::t_aaa72911204bbe 1-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8525c3978b8846348335852403edac815cc5bad8",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
