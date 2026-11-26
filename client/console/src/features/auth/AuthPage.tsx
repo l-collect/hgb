@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiUrl } from "../../api/client";
+import { api, githubStart, herePath } from "../../api/client";
 import type { AuthOptions } from "../../api/types";
 import { Brand, Button, Field, Form, Mark, Message, Tabs, ui } from "../../components/ui";
 import { useAction, useCountdown } from "../../components/useAction";
@@ -13,6 +13,16 @@ type Purpose = "verify" | "login" | "reset";
 /** Asks for a new code to [email] for [purpose]: the same request that sent the first one (sign-up has none of its own). */
 const REQUEST: Record<Purpose, string | null> = { login: "/api/auth/code/request", reset: "/api/auth/password/request", verify: null };
 
+
+/**
+ * Where GitHub sends a sign-in back to: the page that asked (/login?next=…), or the page that was opened signed out;
+ * from /login itself the server's default (任务).
+ */
+function githubNext(): string | null {
+  if (location.pathname !== paths.login) return herePath();
+  const asked = new URLSearchParams(location.search).get("next");
+  return asked && !asked.startsWith(paths.login) ? asked : null;
+}
 
 /** Sign-in, sign-up and password reset by email, or GitHub. [signedIn] opens the console. */
 export function AuthPage({ signedIn, notice: initialNotice }: { signedIn: () => void; notice?: string }) {
@@ -57,7 +67,7 @@ export function AuthPage({ signedIn, notice: initialNotice }: { signedIn: () => 
           <Message text={notice || failed} ok={!!notice} />
           </> : <><div><h2 className={s.title}>登录护肝宝</h2><p className={s.sub}>{options.github ? "用 GitHub 账号登录" : "这台服务器还没有配置登录方式"}</p></div><Message text={failed} /></>}
           {options.email && options.github && <div className={s.or} aria-hidden="true"><span />或者<span /></div>}
-          {options.github && <a className={`${ui.button} ${ui.large} ${ui.ghost} ${s.github}`} href={apiUrl("/api/auth/github/start")}>
+          {options.github && <a className={`${ui.button} ${ui.large} ${ui.ghost} ${s.github}`} href={githubStart({ next: githubNext() })}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7c-.1-.3-.5-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .6 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.8V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z" /></svg>
             使用 GitHub 登录</a>}
           <p className={s.agree}>登录或注册即表示同意<Link to={paths.terms}>《服务条款》</Link>和<Link to={paths.privacy}>《隐私政策》</Link></p>

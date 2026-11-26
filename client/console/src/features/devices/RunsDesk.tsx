@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import type { Job } from "../../api/types";
-import { Button, Card, Empty, Pill, SegmentTabs, TextSelect, join, ui } from "../../components/ui";
+import { Button, Card, Empty, ErrorCard, Loading, Pill, SegmentTabs, TextSelect, join, ui } from "../../components/ui";
 import { useAction } from "../../components/useAction";
 import { ACTIVE, jobStatus, shortTime, waitReason } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { useDesk } from "../../shell/useWidth";
 import { StoppedOn } from "../jobs/JobPage";
-import { jobPlace, JobControls, rerun } from "../jobs/runs";
+import { FILTER_STATES, jobPlace, JobControls, MoreRuns, rerun, useJob, useJobPages } from "../jobs/runs";
 import { NextSteps } from "../jobs/JobPage";
 import d from "../../shell/Desk.module.css";
 import s from "./RunsDesk.module.css";
@@ -51,8 +51,9 @@ export function RunsDesk() {
   }, [askedFilter, askedSpan]);
   const [accountId, setAccountId] = useState("");
   const [sort, setSort] = useState<[Column, 1 | -1] | null>(null);
-  const [limit, setLimit] = useState(50);
   const since = span === "today" ? startOfToday() : span === "week" ? startOfToday() - 6 * DAY : 0;
+  // Read from the server a page at a time, by state, account and since when; sorting is of what has been read.
+  const pages = useJobPages({ states: FILTER_STATES[filter], accountId: accountId || undefined, from: since || undefined });
   const key = (job: Job, column: Column): string | number => {
     switch (column) {
       case "task": return job.taskName;
@@ -64,7 +65,7 @@ export function RunsDesk() {
       case "state": return jobStatus(job, data.devices)[0];
     }
   };
-  let runs = data.jobs.filter((job) => RUN_FILTERS[filter](job) && job.updatedAt >= since && (!accountId || job.accountId === accountId));
+  let runs = pages.items ?? [];
   if (sort) {
     const [column, way] = sort;
     runs = [...runs].sort((a, b) => {
@@ -72,14 +73,15 @@ export function RunsDesk() {
       return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "zh-CN")) * way;
     });
   }
-  const selected = desk && chosen ? data.jobs.find((job) => job.id === chosen) : undefined;
+  const picked = useJob(desk ? chosen : null);
+  const selected = desk && chosen ? runs.find((job) => job.id === chosen) ?? picked.job ?? undefined : undefined;
   const open = (job: Job) => {
     if (!desk) { navigate(paths.job(job.id)); return; }
     const next = new URLSearchParams(query); next.set("job", job.id);
     navigate(`${paths.devices}?${next}`, { replace: true });
   };
   const sortBy = (column: Column) => setSort(sort?.[0] === column ? (sort[1] === -1 ? [column, 1] : null) : [column, -1]);
-  const accounts = data.accounts.filter((a) => data.jobs.some((job) => job.accountId === a.id));
+  const accounts = data.accounts;
 
   const table = (
     <section className={d.stack} aria-labelledby="runs">
@@ -103,7 +105,8 @@ export function RunsDesk() {
             );
           })}
         </div>
-        {runs.length === 0 ? <Empty>没有战报</Empty> : runs.slice(0, limit).map((job) => {
+        {!pages.items ? (pages.error ? <ErrorCard text={pages.error} retry={pages.retry} /> : <Loading />)
+          : runs.length === 0 ? <Empty>没有战报</Empty> : runs.map((job) => {
           const [label, tone] = jobStatus(job, data.devices);
           return (
             <div key={job.id} role="row" tabIndex={0} className={join(d.trow, d.clickable, s.cols, job.id === selected?.id && d.selected)}
@@ -119,7 +122,7 @@ export function RunsDesk() {
             </div>
           );
         })}
-        {runs.length > limit && <div className={s.more}><Button variant="link" onClick={() => setLimit(limit + 100)}>再显示 {Math.min(100, runs.length - limit)} 条 · 共 {runs.length}</Button></div>}
+        <MoreRuns pages={pages} />
       </Card>
     </section>
   );
@@ -128,7 +131,8 @@ export function RunsDesk() {
     <div className={join(d.colsMain, d.colsMainWide)}>
       {table}
       <aside className={d.side} aria-label="战报详情">
-        {selected ? <JobSide key={selected.id} job={selected} /> : <Card><Empty>点一行看详情</Empty></Card>}
+        {selected ? <JobSide key={selected.id} job={selected} />
+          : <Card><Empty>{chosen && picked.state === "missing" ? "找不到这条战报" : chosen && picked.state === "loading" ? "读取中…" : "点一行看详情"}</Empty></Card>}
       </aside>
     </div>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiUrl } from "../../api/client";
+import { api, githubStart } from "../../api/client";
 import type { Account, MergeOffer } from "../../api/types";
 import { Button, ButtonLink, Card, CardHead, Grow, MoreMenu, Pill, Row, RowLink, TextSelect, ui } from "../../components/ui";
 import { platformName, shortTime } from "../../format";
@@ -67,7 +67,7 @@ export function MeDesk() {
             <Row>
               <span className={s.key}>GitHub</span>
               <Grow><span className={ui.tiny}>{account.githubLogin ?? "未绑定"}</span></Grow>
-              {account.githubLogin ? <GithubUnlink account={account} unlink={unlink} /> : <a className={s.button} href={apiUrl("/api/auth/github/start?link=1")}>绑定</a>}
+              {account.githubLogin ? <GithubUnlink account={account} unlink={unlink} /> : <a className={s.button} href={githubStart({ link: true })}>绑定</a>}
             </Row>
           </Card>
           {offer && <MergeCard token={offer.token} offer={offer} settled={(merged) => { setOffer(null); setBinding(false); if (merged) location.reload(); }} />}

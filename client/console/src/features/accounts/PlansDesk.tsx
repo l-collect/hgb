@@ -1,10 +1,12 @@
-import { useState } from "react";
-import type { Game, GameAccount, Job, Plan } from "../../api/types";
+import { useEffect, useState } from "react";
+import { api } from "../../api/client";
+import type { Game, GameAccount, Job, Plan, PlanDayRuns, PlanLastRun } from "../../api/types";
 import { Button, Card, Empty, LiveSwitch, Pill, SegmentTabs, join, ui } from "../../components/ui";
-import { clockText, jobStatus, shortTime, WEEK, type Tone } from "../../format";
+import { clockText, nextTime, PLAN_RUN_STATES, shortTime, WEEK, type Tone } from "../../format";
+import { useConsole } from "../../state/context";
 import { Link, navigate, paths } from "../../router";
 import { ProCount, ProLimitButton, ProLockButton, usePro } from "../../components/Pro";
-import { planEntries, planHref, switchPlan, type PlanEntry } from "./Plans";
+import { planEntries, planHref, planLast, switchPlan, type PlanEntry } from "./Plans";
 import d from "../../shell/Desk.module.css";
 import s from "./PlansDesk.module.css";
 
@@ -45,12 +47,13 @@ function PlanRows({ account, entries, jobs, full }: { account: GameAccount; entr
     <Card flush className={d.table} role="table" aria-label="计划">
       <div className={join(d.trow, d.thead, s.cols)} role="row">
         <span role="columnheader">时间</span><span role="columnheader">计划</span><span role="columnheader">周期</span>
-        <span role="columnheader" className={s.taskCol}>任务</span><span role="columnheader">上次</span><span role="columnheader">启用</span>
+        <span role="columnheader" className={s.taskCol}>任务</span><span role="columnheader">下次</span><span role="columnheader">上次</span><span role="columnheader">启用</span>
       </div>
       {entries.map((entry) => {
         const source = (entry.plan ?? entry.preset)!;
         const days = new Set(daysOf(entry));
-        const last = entry.plan ? jobs.find((job) => job.planId === entry.plan!.id) : undefined;
+        const last = entry.plan ? planLast(entry.plan, jobs) : null;
+        const next = entry.plan?.enabled && entry.plan.nextAt ? nextTime(entry.plan.nextAt) : "";
         const href = planHref(account, entry);
         return (
           <div key={entry.key} role="row" className={join(d.trow, d.clickable, s.cols)} onClick={() => navigate(href)}>
@@ -63,7 +66,8 @@ function PlanRows({ account, entries, jobs, full }: { account: GameAccount; entr
               {WEEK.map((label, i) => <span key={label} className={days.has(i + 1) ? `${s.day} ${s.dayOn}` : s.day} aria-hidden="true">{label}</span>)}
             </span>
             <span role="cell" className={join(ui.tiny, s.taskCol)}>{taskLine(entry) || "未选任务"}</span>
-            <span role="cell" className={ui.tiny}>{last ? <span className={s.last}>{shortTime(last.updatedAt)} <Pill tone={jobStatus(last)[1]}>{jobStatus(last)[0]}</Pill></span> : "—"}</span>
+            <span role="cell" className={join(ui.tiny, ui.mono)}>{next || "—"}</span>
+            <span role="cell" className={ui.tiny}>{last ? <span className={s.last} title={last.detail || undefined}>{shortTime(last.at)} <Pill tone={last.tone}>{last.label}</Pill></span> : "—"}</span>
             <span role="cell" onClick={(e) => e.stopPropagation()}>
               {full && !entry.plan ? <ProLockButton name={`启用${source.name}`} />
                 : <LiveSwitch label={`启用${source.name}`} checked={entry.plan?.enabled ?? false} save={(on) => switchPlan(account, entry, on)} />}
@@ -75,43 +79,81 @@ function PlanRows({ account, entries, jobs, full }: { account: GameAccount; entr
   );
 }
 
-type Cell = "ok" | "bad" | "run" | "warn" | "plan" | "";
-const CELL_TEXT: Record<Cell, string> = { ok: "完成", bad: "异常", run: "运行中", warn: "未完成", plan: "待跑", "": "" };
+type Cell = "ok" | "bad" | "run" | "warn" | "plan" | "miss" | "unknown" | "";
+const CELL_TEXT: Record<Cell, string> = { ok: "完成", bad: "异常", run: "运行中", warn: "未完成", plan: "待跑", miss: "没跑", unknown: "—", "": "" };
 const toneCell = (tone: Tone): Cell => tone === "ok" ? "ok" : tone === "bad" ? "bad" : tone === "info" ? "run" : "warn";
+const DAY = 86400000;
+/** A day as yyyy-MM-dd in [timeZone]. */
+const dayIn = (at: number, timeZone: string) => {
+  try { return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at); }
+  catch { return new Date(at).toLocaleDateString("en-CA"); }
+};
+const dayKey = (utc: number) => new Date(utc).toISOString().slice(0, 10);
 
-/** 周视图: Monday to Sunday of this week by the plans' times; a cell is coloured by the run it made, or 待跑 when none is known. */
-function WeekGrid({ account, entries, jobs }: { account: GameAccount; entries: PlanEntry[]; jobs: Job[] }) {
-  const now = new Date();
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
-  const dates = WEEK.map((_, i) => new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i).toDateString());
-  const today = dates.indexOf(now.toDateString());
+/**
+ * 周视图: Monday to Sunday of a week in the user's time zone, a row per plan. A cell is coloured by the runs the server
+ * lists for that plan and day (/api/plans/days); 待跑 ahead, 没跑 for a day gone by with none, 「—」 while not known.
+ */
+function WeekGrid({ account, entries }: { account: GameAccount; entries: PlanEntry[]; jobs: Job[] }) {
+  const { data } = useConsole();
+  const [weeks, setWeeks] = useState(0);
+  const today = dayIn(Date.now(), data.timeZone);
+  const todayUtc = Date.parse(`${today}T00:00:00Z`);
+  const mondayUtc = todayUtc - ((new Date(todayUtc).getUTCDay() + 6) % 7) * DAY + weeks * 7 * DAY;
+  const dates = WEEK.map((_, i) => dayKey(mondayUtc + i * DAY));
+  // A day either side covers any time zone; the days are matched by name.
+  const from = mondayUtc - DAY, to = mondayUtc + 8 * DAY;
+  const [runs, setRuns] = useState<{ from: number; days: Map<string, PlanLastRun[]> } | null>(null);
+  // Plans are pushed again when a run changes their last, so that is when to read the week again.
+  const changed = data.plans.filter((plan) => plan.accountId === account.id).map((plan) => `${plan.id}:${plan.last?.at ?? 0}:${plan.last?.state ?? ""}`).join();
+  useEffect(() => {
+    let live = true;
+    api<PlanDayRuns[]>(`/api/plans/days?from=${from}&to=${to}`).then((list) => {
+      if (live) setRuns({ from, days: new Map(list.map((item) => [`${item.planId}/${item.day}`, item.runs])) });
+    }).catch(() => { if (live) setRuns((now) => now?.from === from ? now : null); });
+    return () => { live = false; };
+  }, [from, to, changed, data.epoch]);
+  const known = runs?.from === from ? runs.days : null;
   const cell = (entry: PlanEntry, i: number): Cell => {
-    if (!entry.plan?.enabled || !daysOf(entry).includes(i + 1)) return "";
-    const runs = jobs.filter((job) => job.planId === entry.plan!.id && new Date(job.createdAt).toDateString() === dates[i]);
-    if (!runs.length) return "plan";
-    const tones = runs.map((job) => toneCell(jobStatus(job)[1]));
-    return tones.includes("bad") ? "bad" : tones.includes("run") ? "run" : tones.every((t) => t === "ok") ? "ok" : "warn";
+    if (!entry.plan || !entry.plan.days.includes(i + 1)) return "";
+    const date = dates[i];
+    const ran = known?.get(`${entry.plan.id}/${date}`);
+    if (ran?.length) {
+      const tones = ran.map((run) => toneCell((PLAN_RUN_STATES[run.state] ?? ["", ""])[1]));
+      return tones.includes("bad") ? "bad" : tones.includes("run") ? "run" : tones.every((t) => t === "ok") ? "ok" : "warn";
+    }
+    if (date > today) return entry.plan.enabled ? "plan" : "";
+    if (!known) return "unknown";
+    if (date === today) return entry.plan.enabled ? "plan" : "";
+    return entry.plan.enabled ? "miss" : "";
   };
+  const label = weeks === 0 ? "本周" : weeks === -1 ? "上周" : weeks === 1 ? "下周" : `${dates[0].slice(5).replace("-", "/")} 起`;
   return (
     <Card flush>
-      <div className={s.week} role="table" aria-label="本周">
+      <div className={s.weekNav}>
+        <Button small aria-label="上一周" onClick={() => setWeeks(weeks - 1)}>‹</Button>
+        <b>{label}</b>
+        <Button small aria-label="下一周" onClick={() => setWeeks(weeks + 1)}>›</Button>
+        {weeks !== 0 && <Button small variant="link" onClick={() => setWeeks(0)}>回到本周</Button>}
+      </div>
+      <div className={s.week} role="table" aria-label={label}>
         <span role="columnheader" />
-        {WEEK.map((label, i) => <span key={label} role="columnheader" className={i === today ? `${s.weekHead} ${s.today}` : s.weekHead}>周{label}</span>)}
+        {WEEK.map((day, i) => <span key={day} role="columnheader" className={dates[i] === today ? `${s.weekHead} ${s.today}` : s.weekHead}>周{day}</span>)}
         {entries.map((entry) => (
           <div key={entry.key} role="row" className={s.weekRow}>
             <Link to={planHref(account, entry)} role="rowheader" className={s.weekName} title={entry.name}>
               <b className={ui.mono}>{clockText(entry.minuteOfDay)}</b><span>{entry.name}</span>
             </Link>
-            {WEEK.map((label, i) => {
+            {WEEK.map((day, i) => {
               const state = cell(entry, i);
-              return <span key={label} role="cell" className={`${s.cell} ${state ? s[`cell_${state}`] : ""}`} title={state ? `周${label} ${clockText(entry.minuteOfDay)} ${CELL_TEXT[state]}` : undefined}
-                aria-label={state ? CELL_TEXT[state] : "不跑"} />;
+              return <span key={day} role="cell" className={`${s.cell} ${state ? s[`cell_${state}`] : ""}`} title={state ? `周${day} ${clockText(entry.minuteOfDay)} ${CELL_TEXT[state]}` : undefined}
+                aria-label={state ? CELL_TEXT[state] : "不跑"}>{state === "unknown" ? "—" : null}</span>;
             })}
           </div>
         ))}
       </div>
       <div className={s.legend}>
-        {(["ok", "bad", "run", "plan"] as Cell[]).map((state) => <span key={state}><i className={`${s.cell} ${s[`cell_${state}`]}`} />{CELL_TEXT[state]}</span>)}
+        {(["ok", "bad", "run", "miss", "plan"] as Cell[]).map((state) => <span key={state}><i className={`${s.cell} ${s[`cell_${state}`]}`} />{CELL_TEXT[state]}</span>)}
       </div>
     </Card>
   );

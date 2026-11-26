@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { api, enc } from "../../api/client";
-import type { App, Device, GameAccount, Job } from "../../api/types";
-import { Button, Pill, RowLink } from "../../components/ui";
+import { useEffect, useState } from "react";
+import { api, ApiFailure, enc } from "../../api/client";
+import type { App, Device, GameAccount, Job, JobPage, JobState } from "../../api/types";
+import { Button, Empty, ErrorCard, Loading, Pill, RowLink } from "../../components/ui";
 import { ask } from "../../components/Confirm";
 import { orToast } from "../../components/useAction";
 import { toast } from "../../components/Toast";
@@ -131,4 +131,104 @@ export function switchNote(app: App, accountId: string, accounts: GameAccount[])
   if (!app.switchable) return `${app.name}不能切号，需已登录${name}`;
   const back = nameOf(accounts, app.defaultAccountId);
   return `先切到${name}${back ? `，跑完切回${back}` : ""}`;
+}
+
+/** Which 战报 to read from the server: by state, account, plan, and created since [from]. */
+export interface JobQuery { states?: JobState[]; accountId?: string; planId?: string; from?: number; limit?: number }
+const matches = (query: JobQuery, job: Job) => (!query.states || query.states.includes(job.state)) && (!query.accountId || job.accountId === query.accountId)
+  && (!query.planId || job.planId === query.planId) && (!query.from || job.createdAt >= query.from);
+/** The states each 战报 filter asks the server for; all asks for none. */
+export const FILTER_STATES: Record<"all" | "active" | "done" | "bad" | "waiting", JobState[] | undefined> = {
+  all: undefined, active: ["WAITING", "QUEUED", "LEASED", "RUNNING"], done: ["COMPLETED"], bad: ["FAILED", "UNKNOWN"], waiting: ["QUEUED", "WAITING"],
+};
+
+/**
+ * 战报 a page at a time (GET /api/jobs?limit=&before=&state=…), newest first, with 加载更多 while there is more. The
+ * event stream's latest jobs are laid over what was read, so a run changing or starting shows at once; a run that no
+ * longer matches the filter leaves the list.
+ */
+export function useJobPages(query: JobQuery) {
+  const { data } = useConsole();
+  const key = JSON.stringify(query);
+  const [pages, setPages] = useState<{ key: string; items: Job[]; nextBefore: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const read = async (before?: string): Promise<{ items: Job[]; nextBefore: string | null }> => {
+    const params = new URLSearchParams({ limit: String(query.limit ?? 50) });
+    if (query.states) params.set("state", query.states.join(","));
+    if (query.accountId) params.set("accountId", query.accountId);
+    if (query.planId) params.set("planId", query.planId);
+    if (query.from) params.set("from", String(query.from));
+    if (before) params.set("before", before);
+    const reply = await api<JobPage | Job[]>(`/api/jobs?${params}`);
+    // An older server answers with its latest jobs and no more.
+    return Array.isArray(reply) ? { items: reply.filter((job) => matches(query, job)), nextBefore: null } : { items: reply.items, nextBefore: reply.nextBefore ?? null };
+  };
+  useEffect(() => {
+    let live = true;
+    setError(null);
+    read().then((page) => { if (live) setPages({ key, ...page }); }).catch((failure: Error) => { if (live) setError(failure.message); });
+    return () => { live = false; };
+  }, [key, data.epoch, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loaded = pages?.key === key ? pages : null;
+  let items: Job[] | null = null;
+  if (loaded) {
+    const live = new Map(data.jobs.map((job) => [job.id, job]));
+    const have = new Set(loaded.items.map((job) => job.id));
+    const oldest = loaded.nextBefore ? loaded.items[loaded.items.length - 1]?.createdAt ?? 0 : 0;
+    const fresh = data.jobs.filter((job) => !have.has(job.id) && job.createdAt >= oldest && matches(query, job));
+    items = [...fresh, ...loaded.items.map((job) => live.get(job.id) ?? job)].filter((job) => matches(query, job))
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+  const more = loaded?.nextBefore ? async () => {
+    const before = loaded.nextBefore!;
+    setBusy(true);
+    try {
+      const page = await read(before);
+      setPages((now) => {
+        if (!now || now.key !== key) return now;
+        const seen = new Set(now.items.map((job) => job.id));
+        return { key, items: [...now.items, ...page.items.filter((job) => !seen.has(job.id))], nextBefore: page.nextBefore };
+      });
+    } catch (failure) { toast(failure instanceof Error ? failure.message : "读取失败", { tone: "bad" }); }
+    finally { setBusy(false); }
+  } : null;
+  return { items, more, busy, error, retry: () => setAttempt((n) => n + 1) };
+}
+
+/** 加载更多 under a list read a page at a time. */
+export function MoreRuns({ pages }: { pages: ReturnType<typeof useJobPages> }) {
+  if (!pages.more) return null;
+  return <div className={s.more}><Button variant="link" disabled={pages.busy} onClick={() => void pages.more?.()}>{pages.busy ? "读取中…" : "加载更多"}</Button></div>;
+}
+
+/** Run records read from the server a page at a time, as rows (RunRows) with 加载更多. */
+export function PagedRuns({ query, devices, columns, empty = "还没有战报" }: { query: JobQuery; devices: Device[]; columns: RunColumn[]; empty?: string }) {
+  const pages = useJobPages(query);
+  if (!pages.items) return pages.error ? <ErrorCard text={pages.error} retry={pages.retry} /> : <Loading />;
+  if (!pages.items.length) return <Empty>{empty}</Empty>;
+  return <><RunRows jobs={pages.items} devices={devices} columns={columns} /><MoreRuns pages={pages} /></>;
+}
+
+/**
+ * One job: the event stream's copy while it is among the latest, else read by id (GET /api/jobs/{id}). [state] is
+ * missing on 404 (not there, or not this user's).
+ */
+export function useJob(id: string | null) {
+  const { data } = useConsole();
+  const live = id ? data.jobs.find((job) => job.id === id) : undefined;
+  const [read, setRead] = useState<{ id: string; job: Job | null; error: string | null } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!id || live) return;
+    let current = true;
+    api<Job>(`/api/jobs/${enc(id)}`).then((job) => { if (current) setRead({ id, job, error: null }); })
+      .catch((failure: Error) => { if (current) setRead({ id, job: null, error: failure instanceof ApiFailure && failure.status === 404 ? null : failure.message }); });
+    return () => { current = false; };
+  }, [id, !!live, data.epoch, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mine = read?.id === id ? read : null;
+  const job = live ?? mine?.job ?? null;
+  const state: "found" | "loading" | "missing" | "failed" = job ? "found" : !mine ? "loading" : mine.error ? "failed" : "missing";
+  return { job, state, error: mine?.error ?? null, retry: () => { setRead(null); setAttempt((n) => n + 1); } };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { EventFollowUp, GameAccount, GameTask, InterruptionOption } from "../../api/types";
-import { Breadcrumb, Button, Card, CardHead, Empty, LiveSelect, LiveSwitch, PageTabs, Pill, Row, ui } from "../../components/ui";
+import { Breadcrumb, Button, Card, CardHead, LiveSelect, LiveSwitch, PageTabs, Pill, Row, ui } from "../../components/ui";
 import { orToast } from "../../components/useAction";
 import { ProLockCard, usePro } from "../../components/Pro";
 import { ask } from "../../components/Confirm";
@@ -9,7 +9,7 @@ import { shortTime } from "../../format";
 import { Link, navigate, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
-import { RunRows } from "../jobs/runs";
+import { PagedRuns } from "../jobs/runs";
 import { accountNow, ApplyAccountLoginAction, EditAccount, removeAccount, ReportDeviceLoginAction } from "./GameAccountsPage";
 import { PlanList } from "./Plans";
 import s from "./Accounts.module.css";
@@ -23,7 +23,6 @@ export function AccountDetailPage({ id, tab }: { id: string; tab: Tab }) {
   if (!account) return <NotFound text="没有这个账号" back={paths.accounts} backText="回到账号" />;
   const game = data.games.find((item) => item.id === account.gameId);
   const [now, tone] = accountNow(account, data);
-  const runs = data.jobs.filter((job) => job.accountId === account.id);
   return (
     <>
       <Breadcrumb items={[["账号与计划", paths.accounts], [account.name, null]]} />
@@ -38,7 +37,7 @@ export function AccountDetailPage({ id, tab }: { id: string; tab: Tab }) {
       ]} />
       {tab === "settings" && <AccountSettingsTab account={account} gameName={game?.name ?? account.gameId} tasks={game?.tasks ?? []} interruptions={game?.interruptions ?? []} />}
       {tab === "plans" && <PlanList account={account} game={game} plans={data.plans} jobs={data.jobs} />}
-      {tab === "runs" && <Card as="section" flush aria-label="战报">{runs.length ? <RunRows jobs={runs} devices={data.devices} columns={["place", "source"]} /> : <Empty>还没有战报</Empty>}</Card>}
+      {tab === "runs" && <Card as="section" flush aria-label="战报"><PagedRuns query={{ accountId: account.id }} devices={data.devices} columns={["place", "source"]} /></Card>}
     </>
   );
 }

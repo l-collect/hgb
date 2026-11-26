@@ -97,6 +97,8 @@ export interface GameAccount {
   id: string; gameId: string; name: string; uid: string | null; createdAt: number; nickname?: string | null;
   pausedTasks?: PausedTask[]; interruptions?: Record<string, string>; coopPartnerIds?: string[];
   hasLoginSnapshot?: boolean; snapshotPackage?: string | null; snapshotUpdatedAt?: number | null;
+  /** The server named it (「区名·用户名」) and may rename it as it learns more; a name the user gave stays. */
+  nameAuto?: boolean;
 }
 export interface PresetPlan {
   id: string; name: string; days: number[]; minuteOfDay: number; tasks: CloudTask[];
@@ -109,10 +111,28 @@ export interface Plan {
   latestStartMinutes: number; enabled: boolean; revision: number; updatedAt: number; jitterMinutes?: number; coopPartnerIds?: string[];
   /** Only the values this plan changed, by task; a task with no entry follows the account's settings. */
   taskConfigs?: Record<string, Record<string, unknown>>;
+  /** When it fires next, jitter included; null while off. */
+  nextAt?: number | null;
+  /** Its latest firing (立即运行 too); null when it never ran. */
+  last?: PlanLastRun | null;
+  /** 协战: the account's partners, none, or [coopPartnerIds]. */
+  coopMode?: CoopMode;
+}
+export type CoopMode = "account" | "none" | "custom";
+export type PlanRunState = "ACTIVE" | "COMPLETED" | "PARTIAL_FAILED" | "FAILED" | "CANCELLED" | "SKIPPED";
+export interface PlanLastRun { at: number; state: PlanRunState; detail: string; jobIds: string[] }
+/** A plan's runs on one day (yyyy-MM-dd in the user's time zone); a day with none is not listed. */
+export interface PlanDayRuns { planId: string; day: string; runs: PlanLastRun[] }
+/** A page of 战报, newest first; [nextBefore] asks for the page after it, null when there is no more. */
+export interface JobPage { items: Job[]; nextBefore: string | null }
+/** What a phone read when asked to 读取登录 (or by itself, [requestId] null). */
+export interface LoginReportEvent {
+  deviceId: string; ok: boolean; gameId?: string | null; created: string[]; synced: string[]; activeAccountId?: string | null;
+  skippedPrimary: boolean; reason?: string | null; message: string; requestId?: string | null; at: number;
 }
 export interface PlanSave {
   name: string; days: number[]; minuteOfDay: number; tasks: CloudTask[]; deviceIds: string[]; latestStartMinutes: number; enabled: boolean; revision: number;
-  jitterMinutes?: number; coopPartnerIds?: string[];
+  jitterMinutes?: number; coopPartnerIds?: string[]; coopMode?: CoopMode;
   taskConfigs?: Record<string, Record<string, unknown>>;
 }
 export type Widget = "SINGLE_CHOICE" | "MULTI_CHOICE" | "SWITCH" | "NUMBER" | "RANGE" | "TEXT" | "TIME" | "DATE" | string;

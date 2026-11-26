@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, apiUrl, enc } from "../../api/client";
+import { api, enc, githubStart } from "../../api/client";
 import type { Account, MergeOffer } from "../../api/types";
 import { Breadcrumb, Button, ButtonLink, Card, Grow, MoreMenu, Pill, Popover, Row, TextSelect, ui } from "../../components/ui";
 import { applyAppearance, readAppearance, type Appearance } from "../../theme/appearance";
@@ -136,7 +136,7 @@ export function MeAccountPage() {
         </Row>
         <Row>
           <Grow>GitHub<span className={ui.tiny} style={{ display: "block" }}>{account.githubLogin ?? "未绑定"}</span></Grow>
-          {account.githubLogin ? <GithubUnlink account={account} unlink={unlink} /> : <a className={s.button} href={apiUrl("/api/auth/github/start?link=1")}>绑定</a>}
+          {account.githubLogin ? <GithubUnlink account={account} unlink={unlink} /> : <a className={s.button} href={githubStart({ link: true })}>绑定</a>}
         </Row>
         <button type="button" className={s.linkRow} aria-expanded={showDevices} onClick={() => setShowDevices(!showDevices)}>
           <span>已绑定的设备</span><span className={ui.tiny}>{deviceCount ? <ProCount text={deviceCount} /> : `${data.devices.length} 台`} {showDevices ? "▴" : "›"}</span>

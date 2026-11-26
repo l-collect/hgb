@@ -121,3 +121,9 @@
 .orderButton:hover:not(:disabled) { background: var(--color-bg); }
 .orderButton:disabled { opacity: .35; cursor: default; }
 .changed { color: var(--color-run); font-weight: 600; }
+/* 读取登录 and what came of it, beside the button. */
+.loginAction { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+.loginNote { font-size: var(--text-xs); overflow-wrap: anywhere; }
+/* 下次 / 上次 under a plan's tasks. */
+.planWhen { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 2px; }
+.planLast { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }

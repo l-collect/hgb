@@ -7,7 +7,7 @@ import { ACTIVE, clock, eventDetail, eventKind, jobSource, jobStatus, seconds, s
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
-import { jobPlace, JobControls, rerun } from "./runs";
+import { jobPlace, JobControls, rerun, useJob } from "./runs";
 import s from "./Jobs.module.css";
 
 type StepState = "done" | "stop" | "running" | "plain";
@@ -50,7 +50,9 @@ const MARK: Record<StepState, string> = { done: "✓", stop: "!", running: "…"
 /** 战报详情: what the job was, how it ended, and every step and action the device reported. */
 export function JobPage({ id }: { id: string }) {
   const { data } = useConsole();
-  const job = data.jobs.find((item) => item.id === id);
+  // Older than the latest the stream holds: read by id.
+  const found = useJob(id);
+  const job = found.job;
   const version = `${data.epoch}.${data.logVersion[id] ?? 0}`;
   const [events, setEvents] = useState<JobEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +66,11 @@ export function JobPage({ id }: { id: string }) {
       .catch((failure: Error) => { if (current) setError(failure.message); });
     return () => { current = false; };
   }, [id, version, attempt]);
-  if (!job) return <NotFound text="找不到这条战报" />;
+  if (!job) {
+    if (found.state === "loading") return <Loading />;
+    if (found.state === "failed") return <ErrorCard text={found.error ?? "读取失败"} retry={found.retry} />;
+    return <NotFound text="找不到这条战报" />;
+  }
   const [label, tone] = jobStatus(job, data.devices);
   const device = data.devices.find((item) => item.id === job.deviceId);
   const app = device?.apps.find((item) => item.key === job.appKey);

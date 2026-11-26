@@ -34,3 +34,23 @@ export async function api<T = unknown>(path: string, options: { method?: string;
 }
 
 export const enc = encodeURIComponent;
+
+/** A path on this site the server will send GitHub back to: /…, not //… or /\…, no spaces or control characters. */
+export const sitePath = (value: string | null | undefined): value is string =>
+  !!value && value.startsWith("/") && !value.startsWith("//") && !/[\s\\\u0000-\u001f\u007f]/.test(value) && value.length <= 512;
+/** This page's path and query, without what a sign-in left on it (?error= ?merge= ?next=). */
+export function herePath(): string {
+  const query = new URLSearchParams(location.search);
+  ["error", "merge", "next"].forEach((key) => query.delete(key));
+  const rest = query.toString();
+  return location.pathname + (rest ? `?${rest}` : "");
+}
+/** GitHub sign-in, or binding with [link], coming back to [next] (this page unless given; null: the server's default). */
+export function githubStart({ link, next }: { link?: boolean; next?: string | null } = {}): string {
+  const params = new URLSearchParams();
+  const back = next === undefined ? herePath() : next;
+  if (sitePath(back)) params.set("next", back);
+  if (link) params.set("link", "1");
+  const query = params.toString();
+  return apiUrl(`/api/auth/github/start${query ? `?${query}` : ""}`);
+}

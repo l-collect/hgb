@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef } from "react";
 import { api, ApiFailure, apiUrl } from "../api/client";
-import type { ConsoleSnapshot, Device, GameAccount, Game, Job, Plan } from "../api/types";
+import type { ConsoleSnapshot, Device, GameAccount, Game, Job, LoginReportEvent, Plan } from "../api/types";
 
 /** Everything the console shows, as the server's event stream last described it. */
 export interface ConsoleData {
@@ -45,6 +45,25 @@ function reduce(state: ConsoleData, action: Action): ConsoleData {
 }
 
 /**
+ * 读取登录's results as they come (login-report). The latest few are kept, so one that arrives before its request has
+ * returned its id is still found.
+ */
+const loginReports: LoginReportEvent[] = [];
+const loginListeners = new Set<(report: LoginReportEvent) => void>();
+function heardLoginReport(report: LoginReportEvent) {
+  loginReports.unshift(report); loginReports.length = Math.min(loginReports.length, 20);
+  loginListeners.forEach((listen) => listen(report));
+}
+/** Calls [listen] with the result of request [requestId], now if it is already here; returns how to stop. */
+export function awaitLoginReport(requestId: string, listen: (report: LoginReportEvent) => void): () => void {
+  const seen = loginReports.find((report) => report.requestId === requestId);
+  if (seen) { listen(seen); return () => {}; }
+  const one = (report: LoginReportEvent) => { if (report.requestId === requestId) { loginListeners.delete(one); listen(report); } };
+  loginListeners.add(one);
+  return () => { loginListeners.delete(one); };
+}
+
+/**
  * Follows the server's event stream: a snapshot first, then changes. The browser retries a dropped stream by itself,
  * but not after an error status (a proxy's 502 during a deploy); then it is opened again here, a little later each time.
  * [signedOut] is called when the session turns out to be gone.
@@ -75,6 +94,7 @@ export function useConsoleStream(signedOut: () => void): { data: ConsoleData; co
       current.addEventListener("games", (event) => dispatch({ type: "games", games: json(event) }));
       current.addEventListener("time-zone", (event) => dispatch({ type: "time-zone", timeZone: json(event).timeZone }));
       current.addEventListener("job-log", (event) => dispatch({ type: "job-log", id: json(event).id }));
+      current.addEventListener("login-report", (event) => heardLoginReport(json(event)));
       current.addEventListener("notice", () => dispatch({ type: "notices" }));
       current.addEventListener("rules", () => dispatch({ type: "notices" }));
       current.addEventListener("delivery", () => dispatch({ type: "notices" }));

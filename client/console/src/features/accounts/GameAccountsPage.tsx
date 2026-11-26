@@ -1,16 +1,16 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiFailure, enc } from "../../api/client";
 import { ask } from "../../components/Confirm";
-import type { Device, Game, GameAccount } from "../../api/types";
+import type { Device, Game, GameAccount, LoginReportEvent } from "../../api/types";
 import { Button, ButtonLink, Card, CardHead, Chips, Empty, Field, Form, join, Message, MoreMenu, Muted, PageHeader, Pill, Popover, Row, RowLink, Segments, ui } from "../../components/ui";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { jobStatus, shortTime, type Tone } from "../../format";
 import { leave, Link, navigate, paths } from "../../router";
-import type { ConsoleData } from "../../state/console";
+import { awaitLoginReport, type ConsoleData } from "../../state/console";
 import { useConsole } from "../../state/context";
 import { Drawer } from "../../components/Drawer";
-import { ProCount, ProLimitButton, ProLockRow, usePro } from "../../components/Pro";
+import { goPro, ProCount, ProLimitButton, ProLockRow, usePro } from "../../components/Pro";
 import { useWide } from "../../shell/useWidth";
 import { PlanList } from "./Plans";
 import { PlanTable } from "./PlansDesk";
@@ -43,22 +43,60 @@ function DeviceAction({ label, devices, none, primary, small, run, itemText }: {
   );
 }
 
-export function ReportDeviceLoginAction({ gameId, label = "读取登录", primary = false, small = true, onNotice }: {
-  gameId: string; label?: string; primary?: boolean; small?: boolean; onNotice?: (msg: string) => void;
+/** 读取登录's outcome by the server's reason, in a few words. */
+const LOGIN_REASONS: Record<string, string> = {
+  no_root: "手机没 Root，读不了登录", no_role: "没读到角色，先进游戏再试", no_app: "这台设备没装这个游戏",
+  quota: "账号已满，没存", capture_failed: "读取失败，再试一次", invalid: "读到的登录不对，再试一次",
+};
+type LoginState = { kind: "wait" } | { kind: "done"; report: LoginReportEvent } | { kind: "said"; text: string; ok: boolean };
+function loginText(report: LoginReportEvent, accounts: GameAccount[]): [string, boolean] {
+  if (!report.ok) return [LOGIN_REASONS[report.reason ?? ""] ?? (report.message || "读取失败"), false];
+  const ids = [report.activeAccountId, ...report.created, ...report.synced].filter((id, i, all): id is string => !!id && all.indexOf(id) === i);
+  const names = ids.map((id) => accounts.find((a) => a.id === id)?.name).filter(Boolean);
+  const read = names.length ? `读到 ${names.join("、")}` : report.message || "已读取";
+  // Others were kept, the one signed in was not: the quota.
+  return report.skippedPrimary ? [`${read}；当前登录的没存，账号已满`, false] : [read, true];
+}
+
+/**
+ * 读取登录 on a device: the phone reads who is signed in and the server makes or updates the account. The outcome comes
+ * back as a login-report and is said beside the button (「读到 春樱共赏·归雨」, 「手机没 Root，读不了登录」).
+ */
+export function ReportDeviceLoginAction({ gameId, label = "读取登录", primary = false, small = true }: {
+  gameId: string; label?: string; primary?: boolean; small?: boolean;
 }) {
   const { data } = useConsole();
+  const pro = usePro();
   const candidates = onlineGameDevices(data.devices, gameId, false);
-  const trigger = (dev: Device) => {
+  const [state, setState] = useState<LoginState | null>(null);
+  const stop = useRef<() => void>(() => {});
+  useEffect(() => () => stop.current(), []);
+  const trigger = async (dev: Device) => {
+    stop.current();
     const appKey = dev.apps.find((a) => a.gameId === gameId)?.key;
     const qs = new URLSearchParams({ gameId });
     if (appKey) qs.set("appKey", appKey);
-    void orToast(async () => {
-      await api(`/api/devices/${enc(dev.id)}/report-login?${qs.toString()}`, { method: "POST" });
-      const text = `已让「${dev.name}」读取登录，读到后自动建号`;
-      if (onNotice) onNotice(text); else toast(text, { tone: "ok" });
-    });
+    setState({ kind: "wait" });
+    let reply: { requestId?: string | null } | null;
+    try { reply = await api<{ requestId?: string | null } | null>(`/api/devices/${enc(dev.id)}/report-login?${qs.toString()}`, { method: "POST" }); }
+    catch (error) { setState({ kind: "said", text: error instanceof Error ? error.message : "读取失败", ok: false }); return; }
+    const requestId = reply?.requestId;
+    // A server that sends no id says nothing more.
+    if (!requestId) { setState({ kind: "said", text: `已让「${dev.name}」读取`, ok: true }); return; }
+    const timer = window.setTimeout(() => { stopListening(); setState({ kind: "said", text: "手机没回应", ok: false }); }, 60000);
+    const stopListening = awaitLoginReport(requestId, (report) => { window.clearTimeout(timer); setState({ kind: "done", report }); });
+    stop.current = () => { window.clearTimeout(timer); stopListening(); };
   };
-  return <DeviceAction label={label} devices={candidates} none="没有在线设备，先在手机打开护肝宝" primary={primary} small={small} run={trigger} itemText={(dev) => dev.name} />;
+  const [text, ok] = state?.kind === "done" ? loginText(state.report, data.accounts) : state?.kind === "said" ? [state.text, state.ok] : ["读取中…", true];
+  const quota = state?.kind === "done" && (state.report.reason === "quota" || state.report.skippedPrimary) && pro.free;
+  return (
+    <span className={s.loginAction}>
+      <DeviceAction label={label} devices={candidates} none="没有在线设备，先在手机打开护肝宝" primary={primary} small={small} run={(dev) => void trigger(dev)} itemText={(dev) => dev.name} />
+      {state && <span role="status" className={join(s.loginNote, state.kind === "wait" ? ui.tiny : ok ? s.statusOk : s.statusBad)}>
+        {text}{quota && <> · <button type="button" className={s.configLink} onClick={goPro}>开通 Pro</button></>}
+      </span>}
+    </span>
+  );
 }
 
 export function ApplyAccountLoginAction({ account, label = "下发登录", primary = false, small = true, onNotice }: {

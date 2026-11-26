@@ -1,10 +1,14 @@
-import type { AppWaiting, Device, Job, JobEvent, JobState, Plan } from "./api/types";
+import type { AppWaiting, Device, Job, JobEvent, JobState, Plan, PlanRunState } from "./api/types";
 
 export type Tone = "" | "ok" | "info" | "warn" | "bad";
 export const JOB_STATES: Record<JobState, [string, Tone]> = {
   // 已下发 (LEASED) reads as 运行中: the device has it and is starting.
   WAITING: ["等待中", "info"], QUEUED: ["排队", "info"], LEASED: ["运行中", "info"], RUNNING: ["运行中", "info"], COMPLETED: ["完成", "ok"],
   FAILED: ["失败", "bad"], UNKNOWN: ["待核对", "warn"], CANCELLED: ["已取消", ""], SKIPPED: ["已跳过", "warn"],
+};
+/** A plan's latest firing, as a pill. */
+export const PLAN_RUN_STATES: Record<PlanRunState, [string, Tone]> = {
+  ACTIVE: ["运行中", "info"], COMPLETED: ["完成", "ok"], PARTIAL_FAILED: ["部分失败", "warn"], FAILED: ["失败", "bad"], CANCELLED: ["已取消", ""], SKIPPED: ["已跳过", "warn"],
 };
 export const ACTIVE = new Set<JobState>(["WAITING", "QUEUED", "LEASED", "RUNNING"]);
 export const PHASES: Record<string, string> = {
@@ -72,6 +76,16 @@ export function shortTime(value: number | null | undefined): string {
   if (days === 0) return hm;
   if (days === 1) return `昨天 ${hm}`;
   return at.getFullYear() === now.getFullYear() ? `${at.getMonth() + 1}月${at.getDate()}日 ${hm}` : `${at.getFullYear()}年${at.getMonth() + 1}月${at.getDate()}日`;
+}
+/** A time ahead: today shows the clock, then 明天, then the date. */
+export function nextTime(value: number): string {
+  const at = new Date(value); const now = new Date();
+  const hm = at.toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" });
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(at) - day(now)) / 86400000);
+  if (days <= 0) return hm;
+  if (days === 1) return `明天 ${hm}`;
+  return `${at.getMonth() + 1}月${at.getDate()}日 ${hm}`;
 }
 export const seconds = (ms: number) => ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} 秒` : `${Math.floor(ms / 60000)} 分 ${Math.round((ms % 60000) / 1000)} 秒`;
 

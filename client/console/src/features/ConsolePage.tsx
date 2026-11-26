@@ -4,7 +4,8 @@ import { Button, ButtonLink, Card, Empty, Loading, Message, ui } from "../compon
 import { ConfirmHost } from "../components/Confirm";
 import { ToastHost } from "../components/Toast";
 import { MergeCard } from "./me/AccountActions";
-import { match, paths, usePath } from "../router";
+import { match, navigate, paths, usePath } from "../router";
+import { sitePath } from "../api/client";
 import { Shell, type Section } from "../shell/Shell";
 import { useConsoleStream } from "../state/console";
 import { ConsoleContext } from "../state/context";
@@ -42,10 +43,13 @@ export function ConsolePage({ account, admin, signedOut }: { account: Account; a
     if (failed) history.replaceState(null, "", location.pathname);
     return failed;
   });
+  // A GitHub binding that found another account comes back with ?merge= (and ?next=, the page it started from).
   const [merge, setMerge] = useState(() => {
-    const token = new URLSearchParams(location.search).get("merge");
+    const query = new URLSearchParams(location.search);
+    const token = query.get("merge");
     if (token) history.replaceState(null, "", location.pathname);
-    return token;
+    const next = query.get("next");
+    return token ? { token, next: sitePath(next) ? next : null } : null;
   });
   return (
     <ConsoleContext.Provider value={{ data, account: me, setAccount: setMe, signedOut }}>
@@ -54,7 +58,11 @@ export function ConsolePage({ account, admin, signedOut }: { account: Account; a
           <p className={ui.lostBanner} role="status">已断开，数据可能不是最新 · 重连中…<Button variant="link" onClick={retry}>立即重连</Button></p>
         )}
         {linkFailed && <Message text="GitHub 绑定失败，请重试" />}
-        {merge && <MergeCard token={merge} settled={(merged) => { setMerge(null); if (merged) location.reload(); }} />}
+        {merge && <MergeCard token={merge.token} settled={(merged) => {
+          const { next } = merge; setMerge(null);
+          // Merged: load again, on the page the binding started from.
+          if (merged) { if (next) location.assign(next); else location.reload(); } else if (next) navigate(next, { replace: true });
+        }} />}
         {loaded ? page : slow ? (
           <Card className={ui.errorCard} role="alert"><span>连不上服务器</span><Button small onClick={() => { setSlow(false); retry(); }}>重试</Button></Card>
         ) : <Loading />}

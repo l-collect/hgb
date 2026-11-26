@@ -6,7 +6,7 @@ import { ACTIVE, deviceWaiting, JOB_STATES, platformName, shortTime, waitNext, t
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
-import { lastFinished, RunRows } from "../jobs/runs";
+import { FILTER_STATES, lastFinished, PagedRuns } from "../jobs/runs";
 import { useWide } from "../../shell/useWidth";
 import { RunsDesk } from "./RunsDesk";
 import s from "./Devices.module.css";
@@ -37,7 +37,6 @@ export function DevicesPage() {
   const todayOnly = query.get("span") === "today";
   const setFilter = (next: RunFilter) => navigate(next === "all" ? paths.devices : `${paths.devices}?runs=${next}`, { replace: true });
   const today = data.jobs.filter((job) => isToday(job.updatedAt));
-  const runs = data.jobs.filter((job) => FILTERS[filter](job) && (!todayOnly || isToday(job.updatedAt)));
   const stat = (to: string, value: number, label: string, tone?: string) => (
     <Link to={to} className={`${s.stat} ${s.statLink}`} onClick={() => setTimeout(() => (document.getElementById("recent") ?? document.getElementById("runs"))?.scrollIntoView({ block: "start" }))}>
       <b className={tone}>{value}</b><span>{label} ›</span>
@@ -68,7 +67,8 @@ export function DevicesPage() {
           <SegmentTabs label="按状态筛选" value={filter === "waiting" ? "active" : filter} onChange={setFilter} items={[["all", "全部"], ["active", "运行中"], ["done", "完成"], ["bad", "异常"]]} />
           {todayOnly && <Muted>只看今天 · <Link to={filter === "all" ? paths.devices : `${paths.devices}?runs=${filter}`}>看全部时间</Link></Muted>}
           <Card flush>
-            {runs.length ? <RunRows jobs={runs} devices={data.devices} columns={["place", "source"]} limit={15} /> : <Empty>没有战报</Empty>}
+            <PagedRuns query={{ states: FILTER_STATES[filter], from: todayOnly ? new Date(new Date().toDateString()).getTime() : undefined, limit: 20 }}
+              devices={data.devices} columns={["place", "source"]} empty="没有战报" />
           </Card>
         </section>
       )}

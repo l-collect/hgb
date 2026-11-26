@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, enc } from "../../api/client";
-import { settingVisible, type ConfigView, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
-import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui } from "../../components/ui";
+import { settingVisible, type ConfigView, type CoopMode, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
+import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, join, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
 import { ProCount, ProLimitButton, ProLockButton, ProLockCard, ProLockRow, usePro } from "../../components/Pro";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { runSubmitted } from "../jobs/runs";
-import { clockText, cycleText, jobStatus, shortTime, WEEK } from "../../format";
+import { clockText, cycleText, jobStatus, nextTime, PLAN_RUN_STATES, shortTime, WEEK, type Tone } from "../../format";
 import { leave, Link, navigate, paths, useLeaveGuard } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
@@ -18,14 +18,29 @@ import s from "./Accounts.module.css";
 export const saveOf = (plan: Plan, change: Partial<PlanSave> = {}): PlanSave => ({
   name: plan.name, days: plan.days, minuteOfDay: plan.minuteOfDay, tasks: plan.tasks, deviceIds: plan.deviceIds,
   latestStartMinutes: plan.latestStartMinutes, enabled: plan.enabled, revision: plan.revision, jitterMinutes: plan.jitterMinutes ?? 0,
-  coopPartnerIds: plan.coopPartnerIds ?? [], taskConfigs: plan.taskConfigs ?? {}, ...change,
+  coopPartnerIds: plan.coopPartnerIds ?? [], taskConfigs: plan.taskConfigs ?? {}, ...(plan.coopMode ? { coopMode: plan.coopMode } : {}), ...change,
 });
 
 const presetSaveOf = (preset: PresetPlan, enabled = true): PlanSave => ({
   name: preset.name, days: preset.days, minuteOfDay: preset.minuteOfDay, tasks: preset.tasks,
   deviceIds: [], latestStartMinutes: preset.latestStartMinutes ?? 30, enabled, revision: 0, jitterMinutes: preset.jitterMinutes ?? 5,
-  coopPartnerIds: [], taskConfigs: preset.taskConfigs ?? {},
+  coopPartnerIds: [], coopMode: "account", taskConfigs: preset.taskConfigs ?? {},
 });
+
+/** A plan's latest run: the server's [Plan.last], else (an older server) the newest of its jobs the console holds. */
+export function planLast(plan: Plan, jobs: Job[]): { at: number; label: string; tone: Tone; jobId: string | null; detail: string } | null {
+  if (plan.last !== undefined) {
+    if (!plan.last) return null;
+    const [label, tone] = PLAN_RUN_STATES[plan.last.state] ?? [plan.last.state, ""];
+    return { at: plan.last.at, label, tone, jobId: plan.last.jobIds[0] ?? null, detail: plan.last.detail };
+  }
+  const job = jobs.find((item) => item.planId === plan.id);
+  if (!job) return null;
+  const [label, tone] = jobStatus(job);
+  return { at: job.updatedAt, label, tone, jobId: job.id, detail: "" };
+}
+/** 下次 明天 08:03 while the plan is on, as the server worked it out (jitter included). */
+export const planNext = (plan: Plan | null | undefined) => plan?.enabled && plan.nextAt ? `下次 ${nextTime(plan.nextAt)}` : "";
 
 /** One line of 定时计划: the account's own plan, or a preset not yet copied (plan null). */
 export interface PlanEntry { key: string; minuteOfDay: number; name: string; plan: Plan | null; preset: PresetPlan | null }
@@ -50,7 +65,7 @@ export async function switchPlan(account: GameAccount, { plan, preset }: PlanEnt
 export const planHref = (account: GameAccount, { plan, preset }: PlanEntry) => plan ? paths.planEdit(account.id, plan.id) : paths.presetEdit(account.id, preset!.id);
 
 /** 定时计划: presets and the account's own plans by time; the switch enables one (a preset is copied with its defaults). */
-export function PlanList({ account, game, plans }: { account: GameAccount; game?: Game; plans: Plan[]; jobs?: Job[] }) {
+export function PlanList({ account, game, plans, jobs = [] }: { account: GameAccount; game?: Game; plans: Plan[]; jobs?: Job[] }) {
   const unified = planEntries(account, game, plans);
 
   const enabledCount = unified.filter((u) => u.plan?.enabled).length;
@@ -74,6 +89,8 @@ export function PlanList({ account, game, plans }: { account: GameAccount; game?
           ? tasks.map((t) => t.name).join(" · ")
           : `${tasks.slice(0, 2).map((t) => t.name).join(" · ")} 等 ${tasks.length} 项`;
         const targetHref = planHref(account, entry);
+        const next = planNext(plan);
+        const last = plan ? planLast(plan, jobs) : null;
         return (
           <div key={key} className={s.planRow}>
             <Link to={targetHref} className={s.planLink}>
@@ -84,6 +101,12 @@ export function PlanList({ account, game, plans }: { account: GameAccount; game?
               <span className={s.planMain}>
                 <span className={s.planName}><b>{source.name}</b>{!preset && <Pill>自建</Pill>}</span>
                 <span className={`${ui.tiny} ${s.ellipsis}`}>{taskNames || "未选任务"}</span>
+                {(next || last) && (
+                  <span className={join(ui.tiny, s.planWhen)}>
+                    {next && <span>{next}</span>}
+                    {last && <span className={s.planLast}>上次 {shortTime(last.at)} <Pill tone={last.tone}>{last.label}</Pill></span>}
+                  </span>
+                )}
               </span>
             </Link>
             {full && !plan ? <ProLockButton name={`启用${source.name}`} />
@@ -135,7 +158,7 @@ type Configs = Record<string, Record<string, unknown>>;
 /** Everything the editor changes, kept as one value so it can be compared with what was loaded. */
 interface PlanForm {
   name: string; at: string; late: number | undefined; jitter: number | undefined; days: number[]; tasks: string[];
-  configs: Configs; where: string[]; partners: string[];
+  configs: Configs; where: string[]; partners: string[]; coop: CoopMode;
 }
 const formOf = (plan: Plan | null, preset: PresetPlan | null): PlanForm => ({
   name: plan?.name ?? preset?.name ?? "",
@@ -147,6 +170,8 @@ const formOf = (plan: Plan | null, preset: PresetPlan | null): PlanForm => ({
   configs: plan?.taskConfigs ?? preset?.taskConfigs ?? {},
   where: plan?.deviceIds ?? [],
   partners: plan?.coopPartnerIds ?? [],
+  // An older server sends no mode: partners chosen are the plan's own, none means the account's.
+  coop: plan?.coopMode ?? ((plan?.coopPartnerIds?.length ?? 0) > 0 ? "custom" : "account"),
 });
 const formKey = (form: PlanForm) => JSON.stringify({
   ...form, days: [...form.days].sort(), where: [...form.where].sort(), partners: [...form.partners].sort(),
@@ -212,7 +237,8 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
       deviceIds: data.devices.filter((d) => form.where.includes(d.id)).map((d) => d.id),
       latestStartMinutes: Number(form.late ?? 30),
       jitterMinutes: Number(form.jitter ?? 0),
-      coopPartnerIds: peerAccounts.filter((a) => form.partners.includes(a.id)).map((a) => a.id).slice(0, 2),
+      coopMode: form.coop,
+      coopPartnerIds: form.coop === "custom" ? peerAccounts.filter((a) => form.partners.includes(a.id)).map((a) => a.id).slice(0, 2) : [],
       enabled, revision: plan?.revision ?? 0,
       // Only what the plan changed; a task left out follows the account.
       taskConfigs: Object.fromEntries(Object.entries(form.configs).filter(([tid, values]) => form.tasks.includes(tid) && hasOwn(values))),
@@ -264,10 +290,14 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
     }) } });
   };
   const follow = (tid: string) => { const configs = { ...form.configs }; delete configs[tid]; change({ configs }); };
-  const last = plan ? data.jobs.find((job) => job.planId === plan.id) : undefined;
+  const last = plan ? planLast(plan, data.jobs) : null;
+  const next = planNext(plan);
   const unpicked = (game?.tasks ?? []).filter((task) => !form.tasks.includes(task.taskId));
   const deviceText = form.where.length ? data.devices.filter((d) => form.where.includes(d.id)).map((d) => d.name).join("、") || "自动分配" : "自动分配";
-  const partnerText = form.partners.length ? peerAccounts.filter((a) => form.partners.includes(a.id)).map((a) => a.name).join("、") || "不带" : "不带";
+  // 跟随账号 names who that is now; 不带 takes no one, not even the account's partners.
+  const accountPartners = (account.coopPartnerIds ?? []).map((id) => peerAccounts.find((a) => a.id === id)?.name).filter(Boolean).join("、");
+  const chosenPartners = peerAccounts.filter((a) => form.partners.includes(a.id)).map((a) => a.name).join("、");
+  const partnerText = form.coop === "none" ? "不带" : form.coop === "custom" && chosenPartners ? chosenPartners : accountPartners ? `跟随账号 · ${accountPartners}` : "跟随账号";
 
   const title = plan ? plan.name : preset ? preset.name : "新建计划";
   const runNow = plan ? <Button small disabled={starting} onClick={async () => {
@@ -275,9 +305,12 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
     try { if (await orToast(() => api(`/api/plans/${enc(plan.id)}/run`, { method: "POST", body: {} }))) runSubmitted(null, data.devices, paths.account(account.id, "runs")); }
     finally { setStarting(false); }
   }}>立即运行</Button> : undefined;
-  const lastLine = last && (
+  const lastLine = (last || next) && (
     <p className={ui.tiny} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-      上次：{shortTime(last.updatedAt)}{last.deviceName ? ` · ${last.deviceName}` : ""} <Pill tone={jobStatus(last)[1]}>{jobStatus(last)[0]}</Pill>
+      {next && <span>{next}</span>}
+      {last && <>{next && <span aria-hidden="true">·</span>}上次 {shortTime(last.at)} <Pill tone={last.tone}>{last.label}</Pill>
+        {last.detail && last.tone !== "ok" && <span>{last.detail}</span>}
+        {last.jobId && <Link to={paths.job(last.jobId)} className={s.configLink}>查看</Link>}</>}
     </p>
   );
   const dayPicks = (
@@ -329,8 +362,21 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
   </Card>
   );
   const deviceChecks = data.devices.map((device) => <Check key={device.id} label={device.name} checked={form.where.includes(device.id)} onChange={(on) => change({ where: flip(form.where, device.id, on) })} />);
-  const partnerChecks = peerAccounts.map((peer) => <Check key={peer.id} label={peer.nickname ? `${peer.name} · ${peer.nickname}` : peer.name} checked={form.partners.includes(peer.id)}
-    onChange={(on) => { if (!on || form.partners.length < 2) change({ partners: flip(form.partners, peer.id, on) }); }} />);
+  // 跟随账号 / 不带, or up to two partners of the plan's own; taking the last one off follows the account again.
+  const pickPartner = (id: string, on: boolean) => {
+    const now = form.coop === "custom" ? form.partners : [];
+    if (on && now.length >= 2) return;
+    const partners = flip(now, id, on);
+    change(partners.length ? { coop: "custom", partners } : { coop: "account", partners: [] });
+  };
+  const partnerChecks = (
+    <>
+      <Check label={accountPartners ? `跟随账号（${accountPartners}）` : "跟随账号"} checked={form.coop === "account"} onChange={(on) => { if (on) change({ coop: "account", partners: [] }); }} />
+      <Check label="不带" checked={form.coop === "none"} onChange={(on) => { if (on) change({ coop: "none", partners: [] }); }} />
+      {peerAccounts.map((peer) => <Check key={peer.id} label={peer.nickname ? `${peer.name} · ${peer.nickname}` : peer.name}
+        checked={form.coop === "custom" && form.partners.includes(peer.id)} onChange={(on) => pickPartner(peer.id, on)} />)}
+    </>
+  );
   const status = (
     <span role="status" className={message && !message.ok ? s.statusBad : ui.tiny} style={{ flex: 1, minWidth: 0, whiteSpace: "normal", fontSize: 13 }}>
       {message && !message.ok ? message.text : dirty ? "未保存" : ""}
