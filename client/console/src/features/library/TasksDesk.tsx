@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, useEffect } from "react";
 import { api, enc } from "../../api/client";
 import type { Device, App, Game, GameAccount, GameTask, Plan } from "../../api/types";
 import { Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, Switch, TextSelect, join, ui } from "../../components/ui";
@@ -89,6 +89,12 @@ function TaskList({ game, current, account, notes, busy, onRun }: {
   const [view, setView] = useState<"all" | "fav">("all");
   const [query, setQuery] = useState("");
   const [favorites] = useFavorites();
+  // Accordion: the group holding the open task starts open (and opens when another task is picked), the rest start
+  // folded; any group can be opened or folded, and every group shows while searching.
+  const groupOf = (taskId?: string) => { const t = game.tasks.find((x) => x.taskId === taskId); return t ? (t.category || "全部任务") : undefined; };
+  const [opened, setOpened] = useState<Set<string>>(() => new Set([groupOf(current) ?? ""]));
+  useEffect(() => { const g = groupOf(current); if (g) setOpened((prev) => (prev.has(g) ? prev : new Set(prev).add(g))); }, [current, game.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = (label: string) => setOpened((prev) => { const next = new Set(prev); if (next.has(label)) next.delete(label); else next.add(label); return next; });
   const starred = game.tasks.filter((t) => favorites.has(favKey(t.targetId, t.taskId)));
   const needle = query.trim().toLowerCase();
   const shown = (view === "fav" ? starred : game.tasks).filter((t) => !needle || t.name.toLowerCase().includes(needle));
@@ -105,8 +111,13 @@ function TaskList({ game, current, account, notes, busy, onRun }: {
       {groups.size === 0 && <Card><Empty>{needle ? "没有匹配的任务" : view === "fav" ? "还没有常用，点 ★" : "没有任务"}</Empty></Card>}
       {[...groups.entries()].map(([label, tasks]) => (
         <Card key={label} flush as="section" aria-label={label}>
-          <div className={d.groupHead}>{label} · {tasks.length}</div>
-          {tasks.map((task) => {
+          {(() => {
+            const open = !!needle || opened.has(label);
+            return <>
+          <button type="button" className={d.groupHead} aria-expanded={open} onClick={() => toggle(label)}>
+            {label} · {tasks.length}<span className={d.chev} aria-hidden="true">▾</span>
+          </button>
+          {open && tasks.map((task) => {
             const chips = summarizeWebTaskConfig(task, {}, 3);
             const state = taskState(data.jobs, task, account?.id);
             return (
@@ -126,6 +137,8 @@ function TaskList({ game, current, account, notes, busy, onRun }: {
               </div>
             );
           })}
+            </>;
+          })()}
         </Card>
       ))}
     </nav>

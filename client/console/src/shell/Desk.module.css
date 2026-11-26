@@ -12,6 +12,8 @@
   position: sticky; top: var(--space-4); max-height: calc(100vh - 2 * var(--space-4)); overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; scrollbar-width: thin;
 }
+/* Cards in a side column keep their full height; the column scrolls instead of squeezing and clipping them. */
+.side > * { flex-shrink: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .detail { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 
@@ -31,6 +33,12 @@
 
 .search { min-height: var(--control-height); width: 100%; }
 .groupHead { display: flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: 0 14px; background: var(--color-surface-head); border-bottom: 1px solid var(--color-line-soft); font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
+/* A collapsible group head (accordion): the whole bar toggles; collapsed groups show only the bar. */
+button.groupHead { width: 100%; border: 0; text-align: left; cursor: pointer; font: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
+button.groupHead:hover { color: var(--color-ink); }
+button.groupHead[aria-expanded="false"] { border-bottom: 0; }
+.chev { margin-left: auto; transition: transform .15s; }
+button.groupHead[aria-expanded="false"] .chev { transform: rotate(-90deg); }
 
 /* Tables built from grid rows, so a whole row can be a target and cells line up across rows. */
 .table { display: flex; flex-direction: column; }
