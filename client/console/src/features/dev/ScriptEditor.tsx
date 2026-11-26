@@ -135,7 +135,7 @@ function settingHover(look: () => ((id: string) => SettingView | null)) {
     const line = view.state.doc.lineAt(pos);
     const at = pos - line.from;
     const found = [...line.text.matchAll(/^(\s*按设置\s+)(\S+)/g)].map((m) => ({ id: m[2], from: m[1].length }))
-      .concat([...line.text.matchAll(/\{\s*([^{}\s=:|?]+)[^{}]*\}/g)].map((m) => ({ id: m[1], from: m.index! + m[0].indexOf(m[1], 1) })))
+      .concat([...line.text.matchAll(/\{\s*([^{}|\s]+)[^{}]*\}/g)].map((m) => ({ id: m[1], from: m.index! + m[0].indexOf(m[1], 1) })))
       .find((x) => at >= x.from && at <= x.from + x.id.length);
     if (!found) return null;
     const shown = look()(found.id); if (!shown) return null;
@@ -234,6 +234,11 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
             ".cm-gutters": { background: "transparent", border: "none", color: "var(--color-muted)" },
             ".cm-activeLine": { background: "color-mix(in srgb, var(--color-line) 35%, transparent)" },
             "&.cm-focused": { outline: "none" },
+            // Tooltips and the completion list in the page's colours: the light base theme's #f5f5f5 left dark mode's light text unreadable.
+            "& .cm-tooltip": { background: "var(--color-surface)", color: "var(--color-ink)", border: "1px solid var(--color-line)", borderRadius: "6px" },
+            "& .cm-tooltip-autocomplete ul li": { color: "var(--color-ink)" },
+            "& .cm-tooltip-autocomplete ul li[aria-selected]": { background: "var(--color-nav-current-bg)", color: "var(--color-nav-current)" },
+            "& .cm-completionDetail": { color: "var(--color-muted)" },
           }),
         ],
       }),

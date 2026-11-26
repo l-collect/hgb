@@ -15,8 +15,22 @@ export interface DraftPatch { op: "set" | "put" | "delete" | "insert"; path: str
 export interface PatchConflict { path: string; reason: string }
 export interface PatchResult { revision: number; conflicts: PatchConflict[] }
 export interface Capability { id: string; version: number; inputs: Record<string, string>; outputs: Record<string, string>; role: string; sendsInput: boolean; optional: string[] }
-export interface CheckIssue { location: string; reason: string; /** "warning" when it only warns; missing or "error" otherwise. */ severity?: string }
-export interface CheckResult { ok: boolean; issues: CheckIssue[]; tasks: number; publishedBytes: number; expandedBytes: number }
+/** Where an issue is, as the server reads its location: what the editor can jump to; [line] is the script's line (1-based). */
+export interface IssueWhere { target?: string | null; task?: string | null; step?: string | null; snippet?: string | null; line?: number | null }
+export interface CheckIssue { location: string; reason: string; where?: IssueWhere | null;
+  /** Older servers' mark on an issue that only warns; newer ones list warnings apart ([CheckResult.warnings]). */ severity?: string }
+/** One way a 按设置 goes: [test] equals / contains ([value]), range ([atLeast]..[atMost]), missing (没有值) or otherwise (其他). */
+export interface SettingCase { test: string; value?: Json; atLeast?: Json; atMost?: Json; line?: number | null; location?: string | null }
+/**
+ * One place a setting is read (the engine's SettingUse). [kind]: branch | repeat | until | input | runWhen | trigger.
+ * [location] is the script line when a script, else the program path ([path] always). For input: [capability], [input],
+ * [scale] (1000: seconds read as milliseconds). [default]: `{x|3}`'s 3.
+ */
+export interface SettingUse { field: string; kind: string; location: string; path: string; task?: string | null; step?: string | null; snippet?: string | null;
+  line?: number | null; capability?: string | null; input?: string | null; scale?: number | null; default?: Json; cases?: SettingCase[] }
+/** [ok] counts [issues] only; [warnings] (same shape) never block a publish. [settingUses] covers what was checked ([scope]). */
+export interface CheckResult { ok: boolean; issues: CheckIssue[]; tasks: number; publishedBytes: number; expandedBytes: number;
+  scope?: string; warnings?: CheckIssue[]; settingUses?: SettingUse[] }
 export interface CompiledWait { key: string; label: string; states: Obj[] }
 export interface DevMe { maintainer: boolean | null; samples: number; sampleBytes: number; sampleQuota: number; serverRecognizer?: boolean }
 export interface SampleText { text: string; box: number[] }

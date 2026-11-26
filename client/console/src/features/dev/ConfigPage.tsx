@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Chips, Stepper, Switch, join, ui } from "../../components/ui";
 import { Link, navigate, useQuery } from "../../router";
 import { NameButton } from "./NameButton";
-import type { Json, Obj } from "./api";
+import { dev, type Json, type Obj, type SettingUse } from "./api";
 import { devPaths, useDev } from "./context";
 import { uniqueId } from "./HomePage";
 import { childIds, childrenOf, isObj, nodeDigest, objs, programOf, snippets, str, tasks } from "./model";
@@ -30,12 +30,25 @@ export function ConfigPage({ id }: { id: string }) {
   const task = draft ? tasks(draft.body).find((x) => x.id === id) : undefined;
   const wantedAt = wanted && task ? task.fields.findIndex((x) => String(x.id) === wanted) : -1;
   useEffect(() => { if (wantedAt >= 0) setPick(wantedAt); }, [wanted, wantedAt >= 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Where the server's check says each setting is read (it compiles the scripts, so it sees every {x}); null until it
+  // answers, or when it is an older server: then the scripts are read here.
+  const [served, setServed] = useState<SettingUse[] | null>(null);
+  const body = draft?.body;
+  useEffect(() => {
+    setServed(null);
+    if (!body || !task) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      dev.check({ bundle: body, task: id, measure: false }).then((r) => { if (live) setServed(r.settingUses ?? null); }, () => undefined);
+    }, 400);
+    return () => { live = false; clearTimeout(timer); };
+  }, [body, id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!draft || !task) return <div className={w.card}><div className={w.empty}>草稿里没有这个任务</div></div>;
   const fields = task.fields;
 
   const f = fields[Math.min(pick, fields.length - 1)];
   const lib = snippets(draft.body);
-  const usesOf = (fid: string) => findUses(task.raw, task.steps, lib, fid, id);
+  const usesOf = (fid: string) => findUses(task.raw, task.steps, lib, fid, id, served);
   const values: Obj = Object.fromEntries(fields.map((x) => [String(x.id), test[String(x.id)] ?? x.recommended ?? null]));
   const visible = (x: Obj) => { const v = isObj(x.visibleWhen) ? x.visibleWhen : null; if (!v) return true; const cur = values[String(v.field)];
     if (typeof v.equals === "boolean") return (cur === true) === v.equals;
@@ -188,8 +201,16 @@ function Preview({ field: x, value, onChange }: { field: Obj; value: Json | unde
   );
 }
 
-/** Where [fid] is read: 运行条件, each 按设置 with its value lines, each {fid} as a number, block inputs and branches, the passive trigger. */
-export function findUses(raw: Obj, steps: Obj[], lib: Obj[], fid: string, task: string): Uses {
+/** What a number read from a setting counts, by the action input it fills (the engine's SettingUse). */
+const INPUT_ROLES: Record<string, string> = { durationMs: "等待秒数", timeoutMs: "最多秒数", maximum: "点击次数" };
+const caseText = (v: Json | undefined) => v === true ? "开" : v === false ? "关" : typeof v === "string" ? v : JSON.stringify(v);
+
+/**
+ * Where [fid] is read: 运行条件, each 按设置 with its value lines, each {fid} as a number, block inputs and branches, the
+ * passive trigger. [served]: the server's [SettingUse]s for this task, used for the steps' own scripts and programs when
+ * given; the snippets they call, 运行条件 and the trigger are read here either way.
+ */
+export function findUses(raw: Obj, steps: Obj[], lib: Obj[], fid: string, task: string, served: SettingUse[] | null = null): Uses {
   const found: Uses = { branches: [], numbers: [], other: [] };
   const field = objs(raw.fields).find((x) => x.id === fid);
   const bound = (v: unknown) => isObj(v as never) && (v as Obj).type === "configuration" && (v as Obj).fieldId === fid;
@@ -204,10 +225,23 @@ export function findUses(raw: Obj, steps: Obj[], lib: Obj[], fid: string, task: 
     if ((node.type === "repeat" && bound(node.count)) || (node.type === "until" && bound(node.maximum))) found.numbers.push({ role: node.type === "repeat" ? "反复次数" : "直到次数", at: { label: where, href } });
     childrenOf(node).forEach(([, child]) => walk(child, where, href));
   });
-  const scan = (script: string, where: string, href: (line: number) => string, seen: Set<string>) => {
+  const fromServer = (u: SettingUse, where: string, href: (line: number | null) => string) => {
+    const at = (line: number | null | undefined) => ({ label: line ? `${where} · L${line}` : where, href: href(line ?? null) });
+    const fallback = u.default !== undefined && u.default !== null ? ` · 没值时 ${String(u.default)}` : "";
+    if (u.kind === "branch") found.branches.push({ at: at(u.line), cases: (u.cases ?? []).map((cs) => ({
+      value: cs.test === "equals" || cs.test === "contains" ? cs.value : undefined, otherwise: cs.test === "otherwise" || undefined, missing: cs.test === "missing" || undefined,
+      text: cs.test === "otherwise" ? "其他" : cs.test === "missing" ? "没有值" : cs.test === "range" ? `${String(cs.atLeast ?? "")}–${String(cs.atMost ?? "")}` : caseText(cs.value),
+      at: at(cs.line ?? u.line) })) });
+    else if (u.kind === "repeat" || u.kind === "until") found.numbers.push({ role: (u.kind === "repeat" ? "反复次数" : "直到次数") + fallback, at: at(u.line) });
+    else if (u.kind === "input") {
+      if (u.scale !== undefined && u.scale !== null) found.numbers.push({ role: (INPUT_ROLES[String(u.input)] ?? `输入 ${String(u.input)}`) + fallback, at: at(u.line) });
+      else found.other.push({ label: `${at(u.line).label} · 输入 ${String(u.input)}`, href: href(u.line ?? null) });
+    }
+  };
+  const scan = (script: string, where: string, href: (line: number) => string, seen: Set<string>, own = true) => {
     const { reads, calls } = readsOf(script);
     const at = (line: number) => ({ label: `${where} · L${line}`, href: href(line) });
-    for (const r of reads) {
+    for (const r of own ? reads : []) {
       if (r.field !== fid) continue;
       if (r.kind === "number") { found.numbers.push({ role: r.role, at: at(r.line) }); continue; }
       found.branches.push({ at: at(r.line), cases: r.cases.map((cs) => ({ ...(caseValue(field, cs) ?? {}), text: cs.text, at: at(cs.line) })) });
@@ -224,7 +258,16 @@ export function findUses(raw: Obj, steps: Obj[], lib: Obj[], fid: string, task: 
     const use = str(st.use);
     const sn = use ? lib.find((x) => x.id === use) : undefined;
     const owner = sn ?? st;
-    if (typeof owner.script === "string") scan(owner.script, name, (l) => `${devPaths.step(task, String(st.id))}?line=${l}`, new Set(use ? [use] : []));
+    const scriptHref = (l: number) => `${devPaths.step(task, String(st.id))}?line=${l}`;
+    if (served && !sn) {
+      // A line under 逐个 is compiled once per value: one use per line is enough here.
+      const seenUse = new Set<string>();
+      served.filter((u) => u.field === fid && u.task === task && u.step === st.id)
+        .filter((u) => { const k = `${u.kind}|${u.line ?? u.path}|${u.input ?? ""}`; if (seenUse.has(k)) return false; seenUse.add(k); return true; })
+        .forEach((u) => fromServer(u, name, (l) => typeof st.script === "string" && l ? scriptHref(l) : devPaths.blocks(task, String(st.id))));
+      // The server does not follow 用 into snippets: those are still read here.
+      if (typeof st.script === "string") scan(st.script, name, scriptHref, new Set(), false);
+    } else if (typeof owner.script === "string") scan(owner.script, name, scriptHref, new Set(use ? [use] : []));
     else walk(programOf(owner), name, sn ? devPaths.snippetBlocks(use!) : devPaths.blocks(task, String(st.id)));
   }
   const trigger = isObj(raw.trigger) ? raw.trigger : null;

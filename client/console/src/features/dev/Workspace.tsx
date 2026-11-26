@@ -16,7 +16,7 @@ import { lineDiff, useDevice } from "./wb";
 import { Located } from "./where";
 import pub from "./Publish.module.css";
 import type { LineFailure, LineMark, ScriptNames, ScriptProblem, TemplateView } from "./ScriptEditor";
-import { isNumberField, lintSettings, settingView, type SettingView } from "./settingUse";
+import { lintSettings, readsAsNumber, settingView, type SettingView } from "./settingUse";
 import w from "./Wb.module.css";
 import s from "./Workspace.module.css";
 
@@ -180,18 +180,21 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
         const used = task ? usedSnippets(copy, task.raw).map((id) => `snippet/${id}`) : [];
         const taskAt = task ? `target/${String(task.raw.targetId ?? "")}/task/${taskId}` : null;
         const within = (loc: string, at: string) => loc === at || loc.startsWith(`${at}/`);
-        setIssues(result.issues.filter((x) => within(x.location, prefix)).map((x) => {
-          const line = /\/script\/line\/(\d+)$/.exec(x.location);
-          return { line: line ? Number(line[1]) : null, reason: x.reason, location: x.location, warning: isWarning(x) };
+        // Errors, then warnings (a separate list now; an issue's own severity is still read for older servers).
+        const all = [...result.issues.map((x) => ({ ...x, warning: isWarning(x) })), ...(result.warnings ?? []).map((x) => ({ ...x, warning: true }))];
+        setIssues(all.filter((x) => within(x.location, prefix)).map((x) => {
+          const at = /\/script\/line\/(\d+)$/.exec(x.location);
+          const line = x.where?.line ?? (at ? Number(at[1]) : null);
+          return { line, reason: x.reason, location: x.location, warning: x.warning };
         }));
-        setOthers(result.issues.filter((x) => !within(x.location, prefix) && ((taskAt && within(x.location, taskAt)) || used.some((at) => within(x.location, at))))
-          .map((x) => ({ line: null, reason: x.reason, location: x.location, warning: isWarning(x) })));
+        setOthers(all.filter((x) => !within(x.location, prefix) && ((taskAt && within(x.location, taskAt)) || used.some((at) => within(x.location, at))))
+          .map((x) => ({ line: null, reason: x.reason, location: x.location, warning: x.warning })));
       } catch (error) { if (live) { setIssues([{ line: null, reason: `检查没做成：${failure(error)}`, location: "" }]); setOthers([]); } }
     }, 600);
     return () => { live = false; clearTimeout(timer); };
   }, [text, body, key]); // eslint-disable-line react-hooks/exhaustive-deps
   // Settings read wrong, found on the spot while the server's check (half a minute) is still out; its answer then wins.
-  const local = useMemo(() => isScript ? lintSettings(text, task ? task.fields : null) : [], [text, task, isScript]);
+  const local = useMemo(() => isScript ? lintSettings(text, task ? task.fields : null, !!key?.startsWith("snippet:")) : [], [text, task, isScript, key]);
   const problems = useMemo((): ScriptProblem[] => issues === null
     ? local.map((x) => ({ line: x.line, reason: x.reason, severity: x.severity, col: x.col, len: x.len }))
     : issues.flatMap((x) => x.line === null ? [] : [{ line: x.line, reason: x.reason, severity: x.warning ? "warning" as const : "error" as const,
@@ -208,7 +211,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       regions: isObj(library.regions) ? Object.keys(library.regions) : [],
       snippets: allSnippets.map((sn) => String(sn.id)).filter((id) => key !== snippetKey(id)),
       fields: (task?.fields ?? []).map((f) => String(f.id)),
-      numberFields: (task?.fields ?? []).filter(isNumberField).map((f) => ({ id: String(f.id), label: str(f.label) ?? String(f.id) })),
+      numberFields: (task?.fields ?? []).filter(readsAsNumber).map((f) => ({ id: String(f.id), label: str(f.label) ?? String(f.id) })),
       pages: objs(library.pages).map((p) => str(p.name) ?? String(p.id)),
     };
   }, [body, task, key]); // eslint-disable-line react-hooks/exhaustive-deps
