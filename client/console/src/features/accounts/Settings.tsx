@@ -227,13 +227,15 @@ export function StepGroupedFieldsets({
  * the steps last, on one page.
  */
 export function SettingsForm({
-  account, task, stepHref, onRun, runBusy, replace, desk, head,
+  account, task, stepHref, onRun, runBusy, runLocked, replace, desk, head,
 }: {
   account: GameAccount;
   task: CloudTask;
   stepHref?: (stepId: string) => string;
   onRun?: () => void | Promise<void>;
   runBusy?: boolean;
+  /** Shown in place of ▶ 保存并开跑 when running needs Pro (an account switch on the free tier). */
+  runLocked?: ReactNode;
   /** Shown instead of the settings (the 步骤 tab), keeping the unsaved edits and the bar. */
   replace?: ReactNode;
   desk?: boolean;
@@ -352,7 +354,7 @@ export function SettingsForm({
       <>
         <div className={s.deskBar}>
           {head}{status}{buttons}
-          {onRun && <Button small variant="primary" onClick={saveAndRun} disabled={busy || runBusy}>▶ 保存并开跑</Button>}
+          {onRun && (runLocked ?? <Button small variant="primary" onClick={saveAndRun} disabled={busy || runBusy}>▶ 保存并开跑</Button>)}
         </div>
         <div className={s.deskBody}>
           <JumpList items={jumps} />
@@ -379,7 +381,7 @@ export function SettingsForm({
       <FootBar>
         {buttons}
         {status}
-        {onRun && <Button variant="primary" onClick={saveAndRun} disabled={busy || runBusy} style={{ flex: "1 1 160px" }}>▶ 保存并开跑</Button>}
+        {onRun && (runLocked ?? <Button variant="primary" onClick={saveAndRun} disabled={busy || runBusy} style={{ flex: "1 1 160px" }}>▶ 保存并开跑</Button>)}
       </FootBar>
     </>
   );

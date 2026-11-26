@@ -7,7 +7,8 @@ import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
 import { formatSettingValue, resolveTaskDefaults, SettingsForm, stepWillRun, summarizeWebTaskConfig, TaskStepsList } from "../accounts/Settings";
-import { Note, useRunNow } from "../jobs/runs";
+import { Note, useRunNow, useSwitchLocked } from "../jobs/runs";
+import { ProLockButton, ProLimitButton, ProLockRow } from "../../components/Pro";
 import s from "./Library.module.css";
 
 /** 常用: starred tasks, kept in this browser (the App keeps its own). */
@@ -43,7 +44,7 @@ export function taskState(jobs: Job[] | undefined, task: CloudTask, accountId: s
 
 /** Task rows: the name (★ when starred, the live state), its settings as grey pills, and ▶ to run it now. */
 export function RunTaskRows({
-  tasks, games, account, jobs, busy, notes, onRun, favorites,
+  tasks, games, account, jobs, busy, notes, onRun, favorites, locked,
 }: {
   tasks: CloudTask[];
   games: Game[];
@@ -55,6 +56,8 @@ export function RunTaskRows({
   notes: Record<string, { text: string; ok: boolean }>;
   onRun: (task: CloudTask) => void;
   favorites?: Set<string>;
+  /** Running needs an account switch the free tier does not allow: the lock and Pro in place of ▶. */
+  locked?: boolean;
 }) {
   return (
     <>
@@ -73,7 +76,8 @@ export function RunTaskRows({
               {chips.length > 0 && <span className={s.chips}>{chips.map((chip) => <Pill key={chip}>{chip}</Pill>)}</span>}
               <Note note={notes[task.taskId]} />
             </Link>
-            <Button small variant="primary" aria-label={`运行${task.name}`} title="运行" disabled={busy !== null} onClick={() => onRun(task)}>▶</Button>
+            {locked ? <ProLockButton name={`切号运行${task.name}`} />
+              : <Button small variant="primary" aria-label={`运行${task.name}`} title="运行" disabled={busy !== null} onClick={() => onRun(task)}>▶</Button>}
           </div>
         );
       })}
@@ -101,6 +105,7 @@ export function LibraryPage() {
   const places = game ? data.devices.filter((d) => d.online).flatMap((d) => d.apps.filter((app) => app.gameId === game.id)
     .map((app) => ({ value: JSON.stringify([d.id, app.key]), label: d.apps.length > 1 ? `${d.name} · ${app.name}` : d.name, device: d, app }))) : [];
   const place = places.find((item) => item.value === where);
+  const switchLocked = useSwitchLocked(game?.id, activeAccount?.id, place?.app);
 
   if (!game) {
     return (
@@ -142,6 +147,7 @@ export function LibraryPage() {
         <button type="button" className={s.iconButton} aria-label="搜索" aria-pressed={searching}
           onClick={() => { if (searching) setQuery(""); setSearching(!searching); }}>{searchIcon}</button>
       </div>
+      {switchLocked && <Card flush><ProLockRow compact name="自动切号" label={`切到${activeAccount?.name ?? "这个账号"}跑`} /></Card>}
       {searching && <input type="search" className={s.search} autoFocus placeholder="搜任务" aria-label="搜任务" value={query} onChange={(e) => setQuery(e.target.value)} />}
 
       {groups.size === 0 && <Card><Empty>{needle ? "没有匹配的任务" : view === "fav" ? "还没有常用，在任务页点 ★" : "没有任务"}</Empty></Card>}
@@ -162,6 +168,7 @@ export function LibraryPage() {
                 busy={busy}
                 notes={notes}
                 favorites={favorites}
+                locked={switchLocked}
                 onRun={(cTask) => {
                   if (!activeAccount) { navigate(paths.accounts); return; }
                   void run(cTask, activeAccount.id, place ? { deviceId: place.device.id, appKey: place.app.key } : null);
@@ -194,6 +201,7 @@ function TaskDetail({ gameId, taskId, detail }: { gameId: string; taskId: string
   const [values, setValues] = useState<Record<string, unknown>>(() => resolveTaskDefaults(detail));
   const [favorites, toggleFavorite] = useFavorites();
   const { busy, notes, run } = useRunNow();
+  const switchLocked = useSwitchLocked(gameId, activeAccount?.id, null);
 
   useEffect(() => {
     if (!activeAccount) {
@@ -232,6 +240,7 @@ function TaskDetail({ gameId, taskId, detail }: { gameId: string; taskId: string
       {activeAccount ? (
         <SettingsForm key={`${activeAccount.id}:${taskId}`} account={activeAccount} task={{ targetId: gameId, taskId, name: detail.name }} stepHref={stepUrl}
           replace={tab === "steps" ? steps : undefined} runBusy={busy !== null}
+          runLocked={switchLocked ? <ProLimitButton text="保存并开跑" what="自动切号" label="切号运行需 Pro，去开通" /> : undefined}
           onRun={() => run({ targetId: gameId, taskId }, activeAccount.id, null)} />
       ) : tab === "steps" ? steps : (
         <Card><Row><span style={{ flex: 1 }}>先添加账号</span><ButtonLink to={paths.accounts}>＋ 添加账号</ButtonLink></Row></Card>

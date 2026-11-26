@@ -72,9 +72,9 @@ export function ProLockRow({ label, detail, name, compact }: { label: ReactNode;
 }
 
 /** 上限锁: the 新建 / 添加 button once the quota is used up: grey, locked, 「新建 · Pro」, and it opens 会员与账号. */
-export function ProLimitButton({ text = "新建", what, small }: { text?: string; what: string; small?: boolean }) {
+export function ProLimitButton({ text = "新建", what, small, label }: { text?: string; what: string; small?: boolean; label?: string }) {
   return (
-    <button type="button" className={join(p.limit, small && p.limitSmall)} aria-label={`${what}已达上限，${text}需 Pro，去开通`} onClick={goPro}>
+    <button type="button" className={join(p.limit, small && p.limitSmall)} aria-label={label ?? `${what}已达上限，${text}需 Pro，去开通`} onClick={goPro}>
       <LockIcon />{text} · <span className={p.pro}>Pro</span>
     </button>
   );

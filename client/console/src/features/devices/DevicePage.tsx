@@ -4,9 +4,9 @@ import { Breadcrumb, Card, CardTitle, Empty, Field, Grow, Muted, Pill, Row, Segm
 import { appStatus, clock, jobSource, platformName, waitNext, waitReason } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
-import { ProLockRow, usePro } from "../../components/Pro";
+import { ProLockRow } from "../../components/Pro";
 import { NotFound } from "../ConsolePage";
-import { appJobs, JobControls, switchNote, useRunNow } from "../jobs/runs";
+import { appJobs, JobControls, switchNote, useRunNow, useSwitchLocked } from "../jobs/runs";
 import { RunTaskRows } from "../library/LibraryPage";
 import { AccountMenu, useAppAccounts } from "./appAccounts";
 import { AppDetail } from "./AppPage";
@@ -107,7 +107,8 @@ function RunNow({ device, apps, accounts }: { device: Device; apps: App[]; accou
   const pick = accounts.some((item) => item.id === chosen) ? chosen! : accounts[0]?.id ?? "";
   const tasks = device.tasks.filter((task) => task.targetId === apps[0]?.gameId);
   // Free: an app signed in to another account would switch to this one first, which is Pro.
-  const switchLocked = usePro().locked("allowAutoAccountSwitch") && !!app && !!pick && app.accountId !== pick;
+  // Left to the server, the same unless some app of this game is signed in to it.
+  const switchLocked = useSwitchLocked(apps[0]?.gameId, pick || undefined, app);
   return (
     <Card as="section" flush aria-labelledby="run-now" className={s.half}>
       <CardTitle id="run-now">立即运行</CardTitle>
@@ -135,6 +136,7 @@ function RunNow({ device, apps, accounts }: { device: Device; apps: App[]; accou
             appKey={app?.key}
             busy={busy}
             notes={notes}
+            locked={switchLocked}
             onRun={(task) => run(task, pick, app ? { deviceId: device.id, appKey: app.key } : null)}
           />
         </>

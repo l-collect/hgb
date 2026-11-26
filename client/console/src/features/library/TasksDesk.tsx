@@ -8,7 +8,8 @@ import { useConsole } from "../../state/context";
 import { useDesk } from "../../shell/useWidth";
 import { saveOf } from "../accounts/Plans";
 import { SettingsForm, summarizeWebTaskConfig, TaskStepsList, resolveTaskDefaults } from "../accounts/Settings";
-import { Note, useRunNow } from "../jobs/runs";
+import { Note, useRunNow, useSwitchLocked } from "../jobs/runs";
+import { ProLimitButton, ProLockButton, ProLockRow } from "../../components/Pro";
 import { favKey, StarButton, taskState, useFavorites } from "./LibraryPage";
 import d from "../../shell/Desk.module.css";
 import s from "./Library.module.css";
@@ -34,6 +35,7 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
     .map((app) => ({ value: JSON.stringify([dev.id, app.key]), label: dev.apps.length > 1 ? `${dev.name} · ${app.name}` : dev.name, device: dev, app }))) : [];
   const place = places.find((item) => item.value === where);
   const run = useRunNow();
+  const switchLocked = useSwitchLocked(game?.id, account?.id, place?.app);
 
   if (!game) {
     return (
@@ -60,7 +62,8 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
     place: <TextSelect label="设备" value={place ? where : ""} onChange={(next) => { setWhere(next); run.clear(); }} options={placeOptions} />,
   } : null;
   // Two columns (1024–1279): 在哪跑 sits in the title row, where it is seen before ▶; with three it heads the right column.
-  const context = task && <TaskContext game={game} task={task} account={account} plans={data.plans} pickers={desk ? pickers : null} />;
+  const lockRow = switchLocked ? <ProLockRow compact name="自动切号" label={`切到${account?.name ?? "这个账号"}跑`} /> : null;
+  const context = task && <TaskContext game={game} task={task} account={account} plans={data.plans} pickers={desk ? pickers : null} lock={lockRow} />;
 
   return (
     <>
@@ -69,11 +72,11 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
       ) : undefined} />
       {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => leave(() => { setChosenGame(id); run.clear(); navigate(paths.tasks, { force: true }); })} items={data.games.map((item) => [item.id, item.name])} />}
       <div className={join(d.cols, d.cols3)}>
-        <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} />
+        <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} locked={switchLocked} />
         <div className={d.detail}>
           {!task ? <Card><Empty>{taskId ? "没有这个任务" : "没有任务"}</Empty></Card> : (
             <TaskPane key={`${game.id}:${task.taskId}:${account?.id ?? ""}`} game={game} task={task} account={account}
-              note={<Note note={run.notes[task.taskId]} />} runBusy={run.busy !== null} onRun={() => runTask(task)} />
+              note={<Note note={run.notes[task.taskId]} />} runBusy={run.busy !== null} onRun={() => runTask(task)} locked={switchLocked} />
           )}
           {!desk && context}
         </div>
@@ -84,8 +87,8 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
 }
 
 /** The left column: 全部 / ★ 常用, a search box, and the tasks by category; ▶ runs one now (shown on hover with a mouse). */
-function TaskList({ game, current, account, notes, busy, onRun }: {
-  game: Game; current?: string; account?: GameAccount; notes: Record<string, { text: string; ok: boolean }>; busy: string | null; onRun: (task: GameTask) => void;
+function TaskList({ game, current, account, notes, busy, onRun, locked }: {
+  game: Game; current?: string; account?: GameAccount; notes: Record<string, { text: string; ok: boolean }>; busy: string | null; onRun: (task: GameTask) => void; locked?: boolean;
 }) {
   const { data } = useConsole();
   const [view, setView] = useState<"all" | "fav">("all");
@@ -134,7 +137,8 @@ function TaskList({ game, current, account, notes, busy, onRun }: {
                   {task.taskId !== current && <Note note={notes[task.taskId]} />}
                 </Link>
                 <span className={d.hoverOnly}>
-                  <Button small variant="primary" aria-label={`运行${task.name}`} title="运行" disabled={busy !== null} onClick={() => onRun(task)}>▶</Button>
+                  {locked ? <ProLockButton name={`切号运行${task.name}`} />
+                    : <Button small variant="primary" aria-label={`运行${task.name}`} title="运行" disabled={busy !== null} onClick={() => onRun(task)}>▶</Button>}
                 </span>
               </div>
             );
@@ -148,8 +152,8 @@ function TaskList({ game, current, account, notes, busy, onRun }: {
 }
 
 /** The middle column: the task's name and ★, the bar fixed at the top, the steps to jump to, and every settings card. */
-function TaskPane({ game, task, account, note, runBusy, onRun }: {
-  game: Game; task: GameTask; account?: GameAccount; note: ReactNode; runBusy: boolean; onRun: () => void;
+function TaskPane({ game, task, account, note, runBusy, onRun, locked }: {
+  game: Game; task: GameTask; account?: GameAccount; note: ReactNode; runBusy: boolean; onRun: () => void; locked?: boolean;
 }) {
   const [favorites, toggleFavorite] = useFavorites();
   const key = favKey(game.id, task.taskId);
@@ -172,13 +176,16 @@ function TaskPane({ game, task, account, note, runBusy, onRun }: {
   }
   return (
     <SettingsForm desk head={head} account={account} task={{ targetId: game.id, taskId: task.taskId, name: task.name }}
-      stepHref={stepHref} runBusy={runBusy} onRun={onRun} />
+      stepHref={stepHref} runBusy={runBusy} onRun={onRun}
+      runLocked={locked ? <ProLimitButton small text="保存并开跑" what="自动切号" label="切号运行需 Pro，去开通" /> : undefined} />
   );
 }
 
 /** The right column: 在哪跑, this task's latest runs for the account, and the plans that include it. */
-function TaskContext({ game, task, account, plans, pickers }: {
+function TaskContext({ game, task, account, plans, pickers, lock }: {
   game: Game; task: GameTask; account?: GameAccount; plans: Plan[]; pickers: { account: ReactNode; place: ReactNode } | null;
+  /** The 单行锁 when running here needs an account switch the free tier does not allow. */
+  lock?: ReactNode;
 }) {
   const { data } = useConsole();
   const runs = data.jobs.filter((job) => job.targetId === game.id && job.taskId === task.taskId && (!account || job.accountId === account.id)).slice(0, 4);
@@ -190,8 +197,10 @@ function TaskContext({ game, task, account, plans, pickers }: {
           <CardHead soft title="在哪跑" />
           <Row><span style={{ flex: 1 }}>账号</span>{pickers.account}</Row>
           <Row><span style={{ flex: 1 }}>设备</span>{pickers.place}</Row>
+          {lock}
         </Card>
       )}
+      {!pickers && lock && <Card flush>{lock}</Card>}
       <Card flush as="section" aria-label="这个任务的战报">
         <CardHead soft title="这个任务的战报" aside={account ? <Link to={paths.account(account.id, "runs")} className={ui.tiny} style={{ textDecoration: "none" }}>全部 ›</Link> : undefined} />
         {runs.length === 0 ? <Empty>还没有战报</Empty> : runs.map((job) => {

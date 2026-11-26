@@ -116,6 +116,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
                 appKey={app.key}
                 busy={busy}
                 notes={notes}
+                locked={switchLocked}
                 onRun={(task) => run(task, pick, { deviceId: device.id, appKey: app.key })}
               />
             ) : <Muted className={s.cardNote}>设备未上报任务</Muted>}

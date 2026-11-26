@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { App, Device, GameAccount } from "../../api/types";
 import { Button, Popover, ui } from "../../components/ui";
+import { ProLockButton, usePro } from "../../components/Pro";
 
 const GEAR = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -43,6 +44,8 @@ export function AccountMenu({ app, accounts, current, fallback, setCurrent, setD
   app: App; accounts: GameAccount[]; current: string | null; fallback: string | null; setCurrent: (id: string | null) => void; setDefault: (id: string | null) => void;
 }) {
   const reads = !!app.observed;
+  // Switching back to the default after another account's run is auto-switching, a Pro feature; 取消默认 stays.
+  const defaultLocked = usePro().locked("allowAutoAccountSwitch");
   const name = accounts.find((item) => item.id === current)?.name ?? app.observed?.nickname ?? "未指定";
   return (
     <Popover label={`${app.name} 的账号设置`} plain trigger={<span className={s.accountTrigger}><span className={s.accountName}>{name}</span>{GEAR}</span>}>
@@ -56,9 +59,11 @@ export function AccountMenu({ app, accounts, current, fallback, setCurrent, setD
               <div key={account.id} className={selected ? `${s.accountItem} ${s.accountSelected}` : s.accountItem}>
                 <button type="button" role="option" aria-selected={selected} className={s.accountChoice} disabled={reads}
                   title={reads ? "当前登录从游戏里读出" : undefined} onClick={() => { setCurrent(account.id); close(); }}>{account.name}</button>
-                <button type="button" className={isDefault ? s.unsetDefault : s.setDefault} onClick={() => { setDefault(isDefault ? null : account.id); close(); }}>
-                  {isDefault ? "取消默认" : "设为默认"}
-                </button>
+                {defaultLocked && !isDefault ? <span onClick={close}><ProLockButton name="设为默认" /></span> : (
+                  <button type="button" className={isDefault ? s.unsetDefault : s.setDefault} onClick={() => { setDefault(isDefault ? null : account.id); close(); }}>
+                    {isDefault ? "取消默认" : "设为默认"}
+                  </button>
+                )}
               </div>
             );
           })}

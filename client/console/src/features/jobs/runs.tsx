@@ -7,6 +7,7 @@ import { orToast } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { ACTIVE, jobPaused, jobSource, jobStatus, shortTime, waitReason } from "../../format";
 import { paths } from "../../router";
+import { usePro } from "../../components/Pro";
 import { useConsole } from "../../state/context";
 import s from "./Jobs.module.css";
 
@@ -121,6 +122,18 @@ export function useRunNow() {
 export function Note({ note }: { note?: { text: string; ok: boolean } }) {
   if (!note?.text) return null;
   return <span className={!note.ok ? s.noteBad : s.note} role="status">{note.text}</span>;
+}
+
+/**
+ * Free: running [accountId] needs the switch to it, a Pro feature, unless the app it goes to is signed in to it; left to
+ * the server ([place] null), unless some app of [gameId] is.
+ */
+export function useSwitchLocked(gameId: string | undefined, accountId: string | undefined, place: App | null | undefined): boolean {
+  const { data } = useConsole();
+  const locked = usePro().locked("allowAutoAccountSwitch");
+  if (!locked || !gameId || !accountId) return false;
+  if (place) return place.accountId !== accountId;
+  return !data.devices.some((device) => device.apps.some((app) => app.gameId === gameId && app.accountId === accountId));
 }
 
 const nameOf = (accounts: GameAccount[], id: string | null) => accounts.find((item) => item.id === id)?.name ?? null;
