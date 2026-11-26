@@ -5,6 +5,7 @@ import { Button, ButtonLink, Card, CardHead, Grow, MoreMenu, Pill, Row, RowLink,
 import { platformName, shortTime } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
+import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
 import { applyAppearance, readAppearance, type Appearance } from "../../theme/appearance";
 import { JumpList } from "../accounts/Settings";
 import { BindEmail, DeleteAccount, MergeCard } from "./AccountActions";
@@ -28,6 +29,8 @@ export function MeDesk() {
   const [offer, setOffer] = useState<MergeOffer | null>(null);
   const [look, setLook] = useState<Appearance>(readAppearance);
   const who = account.email ?? account.githubLogin ?? "";
+  const pro = usePro();
+  const devicesFull = pro.full("maxDevices", data.devices.length);
   return (
     <div className={s.page}>
       <JumpList items={GROUPS} />
@@ -83,7 +86,7 @@ export function MeDesk() {
         </section>
 
         <section id="me-devices" className={s.group} aria-labelledby="me-devices-h">
-          <h2 id="me-devices-h" className={s.groupTitle}>设备 <span className={ui.tiny}>{data.devices.length} 台</span></h2>
+          <h2 id="me-devices-h" className={s.groupTitle}>设备 {pro.count("maxDevices", data.devices.length) ? <ProCount text={pro.count("maxDevices", data.devices.length)} /> : <span className={ui.tiny}>{data.devices.length} 台</span>}</h2>
           <Card flush>
             {data.devices.map((device) => (
               <Row key={device.id}>
@@ -91,7 +94,9 @@ export function MeDesk() {
                 <MoreMenu label={`${device.name} 的操作`} actions={[["解绑", () => void unbind(device.id, device.name), true]]} />
               </Row>
             ))}
-            <Row><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/releases/latest`}>下载</a></Row>
+            {devicesFull
+              ? <Row><Grow><span className={ui.tiny}>已达上限</span></Grow><ProLimitButton small text="添加" what="设备" /></Row>
+              : <Row><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/releases/latest`}>下载</a></Row>}
           </Card>
         </section>
 

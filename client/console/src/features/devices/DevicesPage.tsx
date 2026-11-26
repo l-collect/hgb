@@ -5,6 +5,7 @@ import { ButtonLink, Card, Empty, Muted, PageHeader, Pill, RowLink, SegmentTabs,
 import { ACTIVE, deviceWaiting, JOB_STATES, platformName, shortTime, waitNext, type Tone } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
+import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
 import { lastFinished, RunRows } from "../jobs/runs";
 import { useWide } from "../../shell/useWidth";
 import { RunsDesk } from "./RunsDesk";
@@ -27,6 +28,7 @@ const CHANNEL_NAMES: Record<ChannelKind, string> = { DINGTALK: "钉钉", WECOM: 
  */
 export function DevicesPage() {
   const { data } = useConsole();
+  const pro = usePro();
   const wide = useWide();
   // A number opens the runs it counts: ?runs=done&span=today (the table reads the same address).
   const query = useQuery();
@@ -52,7 +54,10 @@ export function DevicesPage() {
       </div>
       {!wide && <NoticeEntry />}
       <section aria-labelledby="devices" className={s.section}>
-        <h2 id="devices" className={s.h2}>我的设备</h2>
+        <div className={s.h2Line}>
+          <h2 id="devices" className={s.h2}>我的设备 <ProCount text={pro.count("maxDevices", data.devices.length)} /></h2>
+          {pro.full("maxDevices", data.devices.length) && <ProLimitButton small text="添加" what="设备" />}
+        </div>
         {data.devices.length === 0
           ? <Card><Empty>在 App 登录同一账号即可添加</Empty></Card>
           : <div className={s.grid}>{data.devices.map((device) => <DeviceCard key={device.id} device={device} accounts={data.accounts} jobs={data.jobs} />)}</div>}

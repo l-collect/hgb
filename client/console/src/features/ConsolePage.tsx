@@ -25,6 +25,8 @@ import { useWide } from "../shell/useWidth";
 
 export function ConsolePage({ account, admin, signedOut }: { account: Account; admin: boolean; signedOut: () => void }) {
   const { data, connection, loaded, retry } = useConsoleStream(signedOut);
+  const [me, setMe] = useState(account);
+  useEffect(() => { setMe(account); }, [account]);
   // The first connection taking more than about five seconds: say so and offer 重试, instead of 读取中… for ever.
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -46,7 +48,7 @@ export function ConsolePage({ account, admin, signedOut }: { account: Account; a
     return token;
   });
   return (
-    <ConsoleContext.Provider value={{ data, account, signedOut }}>
+    <ConsoleContext.Provider value={{ data, account: me, setAccount: setMe, signedOut }}>
       <Shell section={section} connection={connection} full={full} admin={admin} stale={loaded && connection === "lost"}>
         {loaded && connection === "lost" && (
           <p className={ui.lostBanner} role="status">已断开，数据可能不是最新 · 重连中…<Button variant="link" onClick={retry}>立即重连</Button></p>

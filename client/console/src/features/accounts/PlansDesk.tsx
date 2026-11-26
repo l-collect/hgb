@@ -3,6 +3,7 @@ import type { Game, GameAccount, Job, Plan } from "../../api/types";
 import { Button, Card, Empty, LiveSwitch, Pill, SegmentTabs, join, ui } from "../../components/ui";
 import { clockText, jobStatus, shortTime, WEEK, type Tone } from "../../format";
 import { Link, navigate, paths } from "../../router";
+import { ProCount, ProLimitButton, ProLockButton, usePro } from "../../components/Pro";
 import { planEntries, planHref, switchPlan, type PlanEntry } from "./Plans";
 import d from "../../shell/Desk.module.css";
 import s from "./PlansDesk.module.css";
@@ -22,21 +23,24 @@ export function PlanTable({ account, game, plans, jobs }: { account: GameAccount
   const [view, setView] = useState<"list" | "week">("list");
   const entries = planEntries(account, game, plans);
   const enabled = entries.filter((e) => e.plan?.enabled).length;
+  const pro = usePro();
+  // Plans count over all accounts, as the server counts them; a preset switched on becomes one too.
+  const full = pro.full("maxPlans", plans.length);
   return (
     <section className={d.stack} aria-label="定时计划">
       <div className={d.toolbar}>
-        <h2>定时计划 <span className={ui.tiny}>{enabled}/{entries.length} 启用</span></h2>
+        <h2>定时计划 <span className={ui.tiny}>{enabled}/{entries.length} 启用</span> <ProCount text={pro.count("maxPlans", plans.length) && `计划 ${pro.count("maxPlans", plans.length)}`} /></h2>
         <SegmentTabs label="视图" value={view} onChange={setView} items={[["list", "列表"], ["week", "周视图"]]} />
-        <Button small onClick={() => navigate(paths.planNew(account.id))}>＋ 新建</Button>
+        {full ? <ProLimitButton small what="计划" /> : <Button small onClick={() => navigate(paths.planNew(account.id))}>＋ 新建</Button>}
       </div>
       {entries.length === 0 ? <Card><Empty>还没有计划，点「＋ 新建」</Empty></Card>
-        : view === "list" ? <PlanRows account={account} entries={entries} jobs={jobs} />
+        : view === "list" ? <PlanRows account={account} entries={entries} jobs={jobs} full={full} />
         : <WeekGrid account={account} entries={entries} jobs={jobs} />}
     </section>
   );
 }
 
-function PlanRows({ account, entries, jobs }: { account: GameAccount; entries: PlanEntry[]; jobs: Job[] }) {
+function PlanRows({ account, entries, jobs, full }: { account: GameAccount; entries: PlanEntry[]; jobs: Job[]; full: boolean }) {
   return (
     <Card flush className={d.table} role="table" aria-label="计划">
       <div className={join(d.trow, d.thead, s.cols)} role="row">
@@ -61,7 +65,8 @@ function PlanRows({ account, entries, jobs }: { account: GameAccount; entries: P
             <span role="cell" className={join(ui.tiny, s.taskCol)}>{taskLine(entry) || "未选任务"}</span>
             <span role="cell" className={ui.tiny}>{last ? <span className={s.last}>{shortTime(last.updatedAt)} <Pill tone={jobStatus(last)[1]}>{jobStatus(last)[0]}</Pill></span> : "—"}</span>
             <span role="cell" onClick={(e) => e.stopPropagation()}>
-              <LiveSwitch label={`启用${source.name}`} checked={entry.plan?.enabled ?? false} save={(on) => switchPlan(account, entry, on)} />
+              {full && !entry.plan ? <ProLockButton name={`启用${source.name}`} />
+                : <LiveSwitch label={`启用${source.name}`} checked={entry.plan?.enabled ?? false} save={(on) => switchPlan(account, entry, on)} />}
             </span>
           </div>
         );

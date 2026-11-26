@@ -1,0 +1,45 @@
+/* Pro locks: what a free account sees of a Pro feature. The violet is the soft pill's (Cloud Pro). */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 10px; border-radius: var(--radius-pill);
+  background: var(--color-primary-soft); color: var(--color-nav-current); font-size: var(--text-xs); font-weight: 700; white-space: nowrap;
+}
+.badgeLarge { padding: 4px 14px; font-size: var(--text-md); }
+.badgeButton { display: inline-flex; flex: none; padding: 0; border: 0; border-radius: var(--radius-pill); background: none; cursor: pointer; }
+.badgeButton:hover .badge { background: var(--color-nav-current-bg); }
+.lockIcon { flex: none; display: block; }
+
+/* 整块锁: the content drawn as usual under a veil of the surface colour; the whole block is one button. */
+.lockCard { position: relative; min-width: 0; }
+.under { pointer-events: none; user-select: none; }
+.veil {
+  position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; width: 100%; padding: 0; border: 0; border-radius: inherit;
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent); cursor: pointer;
+}
+.veil:hover .badge { background: var(--color-nav-current-bg); }
+.veil:focus-visible { outline-offset: -2px; }
+
+/* 单行锁: a greyed row; the lock and Pro stand where the switch or value would be. */
+.row {
+  display: flex; align-items: center; gap: var(--space-2) 14px; width: 100%; min-height: 56px; padding: 10px var(--space-4); border: 0;
+  border-bottom: 1px solid var(--color-line-soft); background: none; color: var(--color-muted); font: inherit; text-align: left; cursor: pointer;
+}
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--color-bg); }
+.row:focus-visible { outline-offset: -2px; }
+.rowText { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.rowDetail { display: block; color: var(--color-faint); font-size: var(--text-xs); }
+.compact { min-height: 44px; }
+
+/* 上限锁: the 新建 button, grey with a lock. */
+.limit {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-height); padding: 0 14px;
+  border: 1px solid var(--color-control); border-radius: var(--radius-md); background: var(--color-neutral-bg); color: var(--color-faint);
+  font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.limit:hover { color: var(--color-muted); }
+.limit .pro { color: var(--color-nav-current); }
+.limitSmall { min-height: var(--control-height-sm); }
+.count { color: var(--color-muted); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; }
+.countFull { color: var(--color-warn); }
+/* A locked block of rows with more rows after it keeps the line under its last row. */
+.lockCard:not(:last-child) > .under > :last-child { border-bottom: 1px solid var(--color-line-soft); }

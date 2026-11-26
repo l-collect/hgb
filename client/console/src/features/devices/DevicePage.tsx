@@ -4,6 +4,7 @@ import { Breadcrumb, Card, CardTitle, Empty, Field, Grow, Muted, Pill, Row, Segm
 import { appStatus, clock, jobSource, platformName, waitNext, waitReason } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
+import { ProLockRow, usePro } from "../../components/Pro";
 import { NotFound } from "../ConsolePage";
 import { appJobs, JobControls, switchNote, useRunNow } from "../jobs/runs";
 import { RunTaskRows } from "../library/LibraryPage";
@@ -105,6 +106,8 @@ function RunNow({ device, apps, accounts }: { device: Device; apps: App[]; accou
   const app = apps.find((item) => item.key === where);
   const pick = accounts.some((item) => item.id === chosen) ? chosen! : accounts[0]?.id ?? "";
   const tasks = device.tasks.filter((task) => task.targetId === apps[0]?.gameId);
+  // Free: an app signed in to another account would switch to this one first, which is Pro.
+  const switchLocked = usePro().locked("allowAutoAccountSwitch") && !!app && !!pick && app.accountId !== pick;
   return (
     <Card as="section" flush aria-labelledby="run-now" className={s.half}>
       <CardTitle id="run-now">立即运行</CardTitle>
@@ -120,8 +123,9 @@ function RunNow({ device, apps, accounts }: { device: Device; apps: App[]; accou
             <Field inline label="账号">
               <AccountSelectRequired value={pick} accounts={accounts} onChange={(id) => { setChosen(id); clear(); }} />
             </Field>
-            {app && switchNote(app, pick, accounts) && <Muted as="span" className={s.full}>{switchNote(app, pick, accounts)}</Muted>}
+            {app && !switchLocked && switchNote(app, pick, accounts) && <Muted as="span" className={s.full}>{switchNote(app, pick, accounts)}</Muted>}
           </Row>
+          {switchLocked && <ProLockRow compact name="自动切号" label={`切到${accounts.find((item) => item.id === pick)?.name ?? "这个账号"}跑`} />}
           <RunTaskRows
             tasks={tasks}
             games={data.games}

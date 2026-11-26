@@ -3,6 +3,7 @@ import { api, enc } from "../../api/client";
 import type { EventFollowUp, GameAccount, GameTask, InterruptionOption } from "../../api/types";
 import { Breadcrumb, Button, Card, CardHead, Empty, LiveSelect, LiveSwitch, PageTabs, Pill, Row, ui } from "../../components/ui";
 import { orToast } from "../../components/useAction";
+import { ProLockCard, usePro } from "../../components/Pro";
 import { ask } from "../../components/Confirm";
 import { shortTime } from "../../format";
 import { Link, navigate, paths } from "../../router";
@@ -44,6 +45,7 @@ export function AccountDetailPage({ id, tab }: { id: string; tab: Tab }) {
 
 function AccountSettingsTab({ account, gameName, tasks, interruptions }: { account: GameAccount; gameName: string; tasks: GameTask[]; interruptions: InterruptionOption[] }) {
   const { data } = useConsole();
+  const pro = usePro();
   const [editing, setEditing] = useState(false);
   const peerAccounts = data.accounts.filter((item) => item.gameId === account.gameId && item.id !== account.id);
   const partner1 = account.coopPartnerIds?.[0] ?? "";
@@ -75,6 +77,7 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
 
       <Card as="section" flush aria-label="协战与登录态">
         <CardHead title="协战与登录态" />
+        <ProLockCard name="协战" locked={pro.locked("allowCoopTeam") && peerAccounts.length > 0}>
         {peerAccounts.length > 0 && (
           <Row>
             <span style={{ flex: 1 }}>1 号协战</span>
@@ -89,6 +92,7 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
               options={[["", "不带"], ...peerAccounts.filter((a) => a.id !== partner1).map(peerName)]} />
           </Row>
         )}
+        </ProLockCard>
         <Row>
           <span style={{ flex: 1, minWidth: 0 }}>
             登录快照

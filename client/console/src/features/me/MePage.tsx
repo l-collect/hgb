@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, apiUrl, enc } from "../../api/client";
 import type { Account, MergeOffer } from "../../api/types";
 import { Breadcrumb, Button, ButtonLink, Card, Grow, MoreMenu, Pill, Popover, Row, TextSelect, ui } from "../../components/ui";
@@ -9,15 +9,16 @@ import { ask } from "../../components/Confirm";
 import { platformName, shortTime } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
+import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
 import { BindEmail, DeleteAccount, MergeCard } from "./AccountActions";
 import s from "./Me.module.css";
 
 /** 我的: the member summary, the developer workbench, preferences, and help; 会员 › opens 会员与账号. */
 export function MePage() {
-  const { data, account: initial } = useConsole();
+  const { data, account: initial, setAccount: share } = useConsole();
   const [account, setAccount] = useState(initial);
-  // Read again: a code redeemed on 会员与账号 changes the tier shown here.
-  useEffect(() => { api<Account>("/api/me").then(setAccount).catch(() => {}); }, []);
+  // Read again: a code redeemed on 会员与账号 changes the tier shown here (and the console's Pro locks).
+  useEffect(() => { api<Account>("/api/me").then((next) => { setAccount(next); share(next); }).catch(() => {}); }, [share]);
   const [look, setLook] = useState<Appearance>(readAppearance);
   const who = account.email ?? account.githubLogin ?? "";
   const isPro = account.tier === "PRO";
@@ -62,8 +63,10 @@ const dayText = (at: number) => new Date(at).toLocaleDateString("sv-SE");
 
 /** What 会员与账号 does, shared by the phone page and the wide settings page: redeem a code, unlink GitHub, unbind a device, sign out. */
 export function useMeActions() {
-  const { account: initial, signedOut } = useConsole();
-  const [account, setAccount] = useState(initial);
+  const { account: initial, setAccount: share, signedOut } = useConsole();
+  const [account, keep] = useState(initial);
+  // Shared with the console too, so its Pro locks follow a redeemed code.
+  const setAccount = useCallback((next: Account) => { keep(next); share(next); }, [share]);
   const [codeInput, setCodeInput] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const redeem = async (done?: () => void) => {
@@ -105,6 +108,8 @@ export function MeAccountPage() {
   const [redeeming, setRedeeming] = useState(false);
   const [showDevices, setShowDevices] = useState(false);
   const redeem = () => void redeemCode(() => setRedeeming(false));
+  const pro = usePro();
+  const deviceCount = pro.count("maxDevices", data.devices.length);
   return (
     <div className={s.page}>
       <Breadcrumb items={[["我的", paths.me], ["会员与账号", null]]} />
@@ -134,7 +139,7 @@ export function MeAccountPage() {
           {account.githubLogin ? <GithubUnlink account={account} unlink={unlink} /> : <a className={s.button} href={apiUrl("/api/auth/github/start?link=1")}>绑定</a>}
         </Row>
         <button type="button" className={s.linkRow} aria-expanded={showDevices} onClick={() => setShowDevices(!showDevices)}>
-          <span>已绑定的设备</span><span className={ui.tiny}>{data.devices.length} 台 {showDevices ? "▴" : "›"}</span>
+          <span>已绑定的设备</span><span className={ui.tiny}>{deviceCount ? <ProCount text={deviceCount} /> : `${data.devices.length} 台`} {showDevices ? "▴" : "›"}</span>
         </button>
         {showDevices && data.devices.map((device) => (
           <Row key={device.id} className={s.subRow}>
@@ -142,7 +147,8 @@ export function MeAccountPage() {
             <MoreMenu label={`${device.name} 的操作`} actions={[["解绑", () => void unbind(device.id, device.name), true]]} />
           </Row>
         ))}
-        {showDevices && <Row className={s.subRow}><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/releases/latest`}>下载</a></Row>}
+        {showDevices && pro.full("maxDevices", data.devices.length) && <Row className={s.subRow}><Grow><span className={ui.tiny}>已达上限</span></Grow><ProLimitButton small text="添加" what="设备" /></Row>}
+        {showDevices && !pro.full("maxDevices", data.devices.length) && <Row className={s.subRow}><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/releases/latest`}>下载</a></Row>}
       </Card>
       {offer && <MergeCard token={offer.token} offer={offer} settled={(merged) => { setOffer(null); setBinding(false); if (merged) location.reload(); }} />}
       <Button variant="danger" className={s.wide} onClick={logout}>退出登录</Button>

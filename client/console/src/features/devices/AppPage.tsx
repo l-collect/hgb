@@ -4,6 +4,7 @@ import { Breadcrumb, Card, Empty, Grow, Muted, PageTabs, Pill, Row, Segments, Te
 import { appStatus, jobSource, jobStatus, waitNext, waitReason } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
+import { ProLockRow, usePro } from "../../components/Pro";
 import { NotFound } from "../ConsolePage";
 import { appJobs, JobControls, RunRows, switchNote, useRunNow } from "../jobs/runs";
 import { RunTaskRows } from "../library/LibraryPage";
@@ -66,7 +67,10 @@ function RunTab({ device, app }: { device: Device; app: App }) {
   const [chosen, setChosen] = useState<string | null>(null);
   const pick = accounts.some((item) => item.id === chosen) ? chosen! : (app.accountId && accounts.some((item) => item.id === app.accountId) ? app.accountId : accounts[0]?.id ?? "");
   const { notes, busy, run, clear } = useRunNow();
-  const note = [pick ? switchNote(app, pick, accounts) : null, device.online ? null : "设备离线，30 分钟内上线才执行"].filter(Boolean).join("；");
+  // Free: running another account than the one signed in means switching to it first, which is Pro.
+  const switchLocked = usePro().locked("allowAutoAccountSwitch") && !!pick && app.accountId !== pick;
+  const pickName = accounts.find((item) => item.id === pick)?.name ?? "这个账号";
+  const note = [pick && !switchLocked ? switchNote(app, pick, accounts) : null, device.online ? null : "设备离线，30 分钟内上线才执行"].filter(Boolean).join("；");
   // An idle, online app has nothing to show here: the header already says 空闲.
   const showNow = job || queued.length > 0 || app.currentTask || !device.online;
   return (
@@ -100,6 +104,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
         )}
         {accounts.length === 0 ? <Muted className={s.cardNote}>先添加账号</Muted> : (
           <>
+            {switchLocked && <ProLockRow compact name="自动切号" label={`切到${pickName}跑`} />}
             {note && <Muted className={s.cardNote}>{note}</Muted>}
             {tasks.length ? (
               <RunTaskRows

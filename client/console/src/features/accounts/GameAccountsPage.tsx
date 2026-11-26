@@ -10,6 +10,7 @@ import { leave, Link, navigate, paths } from "../../router";
 import type { ConsoleData } from "../../state/console";
 import { useConsole } from "../../state/context";
 import { Drawer } from "../../components/Drawer";
+import { ProCount, ProLimitButton, ProLockRow, usePro } from "../../components/Pro";
 import { useWide } from "../../shell/useWidth";
 import { PlanList } from "./Plans";
 import { PlanTable } from "./PlansDesk";
@@ -113,14 +114,22 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
   useEffect(() => { if (routed) { setSelectedId(routed.id); setChosen(routed.gameId); } }, [routed]);
   const activeAccount = accounts.find((a) => a.id === (routed?.id ?? selectedId)) ?? accounts[0];
   const isOnmyoji = !gameId || gameId === "onmyoji";
+  const pro = usePro();
+  // Game accounts count over all games, as the server counts them.
+  const accountsFull = pro.full("maxGameAccounts", data.accounts.length);
+  const accountCount = pro.count("maxGameAccounts", data.accounts.length);
+  // Onmyoji accounts are made by reading a phone's login, so there is no 添加 to lock: the list ends with the limit.
+  const moreAccounts = isOnmyoji && accountsFull && <ProLockRow compact name="更多账号" label={<>账号 <ProCount text={accountCount} /></>} detail="再多需 Pro" />;
 
   return (
     <>
       <PageHeader title="账号与计划" aside={
         <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {!isOnmyoji && <ProCount text={accountCount} />}
           {accounts.length > 0 && <Button small onClick={() => setManaging(!managing)}>{managing ? "回到计划" : "管理账号"}</Button>}
           {isOnmyoji
             ? <ReportDeviceLoginAction gameId={gameId || "onmyoji"} label="读取设备登录" primary small />
+            : accountsFull && !adding ? <ProLimitButton small text="添加账号" what="游戏账号" />
             : <Button small variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>{adding ? "收起" : "＋ 添加账号"}</Button>}
         </span>
       } />
@@ -147,11 +156,13 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
                   <tbody>{accounts.map((account) => <AccountRow key={account.id} account={account} />)}</tbody>
                 </table>
               </div>
+              {moreAccounts}
             </Card>
           ) : activeAccount && (
             <>
               <Chips label="切换账号" value={activeAccount.id} onChange={(id) => leave(() => { setSelectedId(id); if (accountId) navigate(paths.accounts, { force: true }); })}
                 items={accounts.map((a): [string, string] => [a.id, a.name])} />
+              {moreAccounts && <Card flush>{moreAccounts}</Card>}
               <div className={wide ? d.colsMain : s.columns}>
                 {wide
                   ? <PlanTable account={activeAccount} game={game} plans={data.plans} jobs={data.jobs} />
@@ -187,6 +198,7 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
 /** The account at a glance: its state, partners, login snapshot, pop-up handling and paused tasks; 设置 opens the rest. */
 function AccountSummary({ account, accounts, game }: { account: GameAccount; accounts: GameAccount[]; game?: Game }) {
   const { data } = useConsole();
+  const pro = usePro();
   const [now, tone] = accountNow(account, data);
   const partners = (account.coopPartnerIds ?? []).map((id) => accounts.find((a) => a.id === id)?.name).filter(Boolean).join("、");
   const popup = game?.interruptions?.[0];
@@ -195,7 +207,9 @@ function AccountSummary({ account, accounts, game }: { account: GameAccount; acc
   return (
     <Card flush as="section" aria-label="当前账号">
       <CardHead title={account.name} aside={<><Pill tone={tone} live>{now}</Pill><ButtonLink small to={paths.account(account.id)}>设置</ButtonLink></>} />
-      <Row><span style={{ flex: 1 }}>协战</span><span className={ui.tiny}>{partners || "不带"}</span></Row>
+      {pro.locked("allowCoopTeam")
+        ? <ProLockRow label="协战" />
+        : <Row><span style={{ flex: 1 }}>协战</span><span className={ui.tiny}>{partners || "不带"}</span></Row>}
       <Row>
         <span style={{ flex: 1 }}>登录快照</span>
         <span className={ui.tiny}>{account.hasLoginSnapshot ? "已存" : "未存"}</span>

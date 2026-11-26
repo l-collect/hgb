@@ -3,6 +3,7 @@ import { api, enc } from "../../api/client";
 import { settingVisible, type ConfigView, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
 import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
+import { ProCount, ProLimitButton, ProLockButton, ProLockCard, ProLockRow, usePro } from "../../components/Pro";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { runSubmitted } from "../jobs/runs";
@@ -53,11 +54,15 @@ export function PlanList({ account, game, plans }: { account: GameAccount; game?
   const unified = planEntries(account, game, plans);
 
   const enabledCount = unified.filter((u) => u.plan?.enabled).length;
+  const pro = usePro();
+  // Plans count over all accounts, as the server counts them; a preset switched on becomes one too.
+  const full = pro.full("maxPlans", plans.length);
+  const count = pro.count("maxPlans", plans.length);
 
   return (
     <Card as="section" flush aria-label="定时计划">
-      <CardHead title={<>定时计划 <span className={ui.tiny}>{enabledCount}/{unified.length} 启用</span></>}
-        aside={<Button small onClick={() => navigate(paths.planNew(account.id))}>＋ 新建</Button>} />
+      <CardHead title={<>定时计划 <span className={ui.tiny}>{enabledCount}/{unified.length} 启用</span> <ProCount text={count && `计划 ${count}`} /></>}
+        aside={full ? <ProLimitButton small what="计划" /> : <Button small onClick={() => navigate(paths.planNew(account.id))}>＋ 新建</Button>} />
       {unified.length === 0 ? (
         <Empty>还没有计划，点「＋ 新建」</Empty>
       ) : unified.map((entry) => {
@@ -81,7 +86,8 @@ export function PlanList({ account, game, plans }: { account: GameAccount; game?
                 <span className={`${ui.tiny} ${s.ellipsis}`}>{taskNames || "未选任务"}</span>
               </span>
             </Link>
-            <LiveSwitch label={`启用${source.name}`} checked={enabled} save={(on) => switchPlan(account, entry, on)} />
+            {full && !plan ? <ProLockButton name={`启用${source.name}`} />
+              : <LiveSwitch label={`启用${source.name}`} checked={enabled} save={(on) => switchPlan(account, entry, on)} />}
           </div>
         );
       })}
@@ -165,6 +171,10 @@ function ownText(detail: GameTask, values: Record<string, unknown>): string {
  */
 function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account: GameAccount; game?: Game; plan: Plan | null; preset: PresetPlan | null; drawer?: boolean; openTask?: string }) {
   const { data } = useConsole();
+  const pro = usePro();
+  const coopLocked = pro.locked("allowCoopTeam");
+  // Free: a plan runs only on an app signed in to its account; switching the app to it first is Pro.
+  const switchLocked = pro.locked("allowAutoAccountSwitch");
   const peerAccounts = data.accounts.filter((a) => a.gameId === account.gameId && a.id !== account.id);
   const [loaded, setLoaded] = useState(() => ({ form: formOf(plan, preset), revision: plan?.revision ?? 0 }));
   const [form, setForm] = useState(loaded.form);
@@ -354,9 +364,10 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
           {(data.devices.length > 0 || peerAccounts.length > 0) && (
             <DrawerGrid>
               {data.devices.length > 0 && pick("设备", deviceText, deviceChecks)}
-              {peerAccounts.length > 0 && pick("协战（最多 2 个）", partnerText, partnerChecks)}
+              {peerAccounts.length > 0 && <ProLockCard name="协战" locked={coopLocked}>{pick("协战（最多 2 个）", partnerText, partnerChecks)}</ProLockCard>}
             </DrawerGrid>
           )}
+          {switchLocked && data.devices.length > 0 && <Card flush><ProLockRow compact name="自动切号" label="自动切号" detail={`只在登录着${account.name}的应用上跑`} /></Card>}
         </DrawerBody>
         <DrawerFoot>
           {plan && <Button variant="danger" onClick={remove}>{preset ? "重置" : "删除"}</Button>}
@@ -401,8 +412,9 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
           {data.devices.length > 0 && (
             <PickRow label="设备" text={deviceText}>{deviceChecks}</PickRow>
           )}
+          {switchLocked && data.devices.length > 0 && <ProLockRow name="自动切号" label="自动切号" detail={`只在登录着${account.name}的应用上跑`} />}
           {peerAccounts.length > 0 && (
-            <PickRow label="协战（最多 2 个）" text={partnerText}>{partnerChecks}</PickRow>
+            <ProLockCard name="协战" locked={coopLocked}><PickRow label="协战（最多 2 个）" text={partnerText}>{partnerChecks}</PickRow></ProLockCard>
           )}
         </Card>
       )}

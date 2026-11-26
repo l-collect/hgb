@@ -7,6 +7,7 @@ import { toast } from "../../components/Toast";
 import { ask } from "../../components/Confirm";
 import { shortTime, type Tone } from "../../format";
 import { useConsole } from "../../state/context";
+import { ProLockButton, ProLockRow, usePro } from "../../components/Pro";
 import s from "./Notices.module.css";
 
 /** [secret]: never sent back once saved. [masked]: typed as a password (a key), not a web address one reads to check. */
@@ -27,6 +28,8 @@ const KINDS: [ChannelKind, string, FieldSpec[]][] = [
     { id: "header", label: "认证头（可不填）", hint: "Authorization: Bearer …", note: "保存后不再显示", secret: true, masked: true }]],
 ];
 const KIND_NAMES = Object.fromEntries(KINDS.map(([kind, name]) => [kind, name])) as Record<ChannelKind, string>;
+/** Every kind but 本机通知 goes out of the app: Pro. */
+const external = (kind: ChannelKind) => kind !== "LOCAL";
 const DELIVERY: Record<Delivery["state"], Tone> = { SENT: "ok", PENDING: "warn", FAILED: "bad" };
 
 /** One delivery in words: “钉钉 · 运维群 已送达”, “重试中 2/4”, “4 次都失败：…”. */
@@ -43,6 +46,7 @@ export function DeliveryPill({ delivery }: { delivery: Delivery }) { return <Pil
  */
 export function Channels({ channels, rules }: { channels: Channel[]; rules: EventRule[] }) {
   const [editing, setEditing] = useState<Channel | "new" | null>(null);
+  const locked = usePro().locked("allowExternalChannels");
   const names = Object.fromEntries(rules.map((rule) => [rule.ruleId, rule.name]));
   const remove = async (channel: Channel) => {
     if (!await ask({ title: `删除「${channel.name}」？`, body: "还没发出的通知不会再发到这里", ok: "删除", danger: true })) return;
@@ -63,7 +67,8 @@ export function Channels({ channels, rules }: { channels: Channel[]; rules: Even
             <Card key={channel.id} as="article" className={s.channel}>
               <div className={s.channelHead}>
                 <span className={s.grow}><b className={s.channelName}>{channel.name}</b><Muted as="span">{KIND_NAMES[channel.kind]} · {channel.target}</Muted></span>
-                <LiveSwitch checked={channel.enabled} label={`启用渠道：${channel.name}`} save={(on) => toggle(channel, on)} />
+                {locked && external(channel.kind) ? <ProLockButton name={`渠道：${channel.name}`} />
+                  : <LiveSwitch checked={channel.enabled} label={`启用渠道：${channel.name}`} save={(on) => toggle(channel, on)} />}
               </div>
               <div className={s.chips}>
                 {channel.rules.length ? channel.rules.map((id) => <Pill key={id} tone="info">{names[id] ?? id}</Pill>) : <Muted as="span">还没有订阅规则</Muted>}
@@ -83,7 +88,8 @@ export function Channels({ channels, rules }: { channels: Channel[]; rules: Even
 
 function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules: EventRule[]; done: () => void }) {
   const { data } = useConsole();
-  const [kind, setKind] = useState<ChannelKind>(channel?.kind ?? "DINGTALK");
+  const locked = usePro().locked("allowExternalChannels");
+  const [kind, setKind] = useState<ChannelKind>(channel?.kind ?? (locked ? "LOCAL" : "DINGTALK"));
   const [name, setName] = useState(channel?.name ?? "");
   const [values, setValues] = useState<Record<string, string>>(channel?.fields ?? {});
   const [cleared, setCleared] = useState<string[]>([]);
@@ -92,7 +98,10 @@ function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules:
   // Mail is sent by this server's mail service; without one, 邮件 is not offered (an existing mail channel still shows).
   const [mail, setMail] = useState(true);
   useEffect(() => { api<AuthOptions>("/api/auth/options").then((options) => setMail(options.email)).catch(() => {}); }, []);
-  const kinds = KINDS.filter(([id]) => id !== "EMAIL" || mail || channel?.kind === "EMAIL");
+  const offered = KINDS.filter(([id]) => id !== "EMAIL" || mail || channel?.kind === "EMAIL");
+  // Free: the outside kinds are listed under the choice as locked rows (one being edited stays choosable).
+  const kinds = offered.filter(([id]) => !locked || !external(id) || id === channel?.kind);
+  const lockedKinds = offered.filter(([id]) => !kinds.some(([k]) => k === id));
   const spec = KINDS.find(([id]) => id === kind)![2];
   // Only the fields of the chosen kind are sent; a blank secret of a saved channel of this kind keeps the saved one.
   const draft = (): ChannelSave => ({ kind, name: name.trim() || KIND_NAMES[kind], enabled: channel?.enabled ?? true, rules: subscribed,
@@ -123,6 +132,11 @@ function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules:
       <div role="radiogroup" aria-label="渠道类型" className={s.kinds}>
         {kinds.map(([id, label]) => <button key={id} type="button" role="radio" aria-checked={kind === id} className={s.kind} onClick={() => pick(id)}>{label}</button>)}
       </div>
+      {lockedKinds.length > 0 && (
+        <div className={s.lockedKinds}>
+          {lockedKinds.map(([id, label]) => <ProLockRow key={id} compact name={`${label}渠道`} label={label} />)}
+        </div>
+      )}
       <div className={s.fields}>
         <label className={s.field}><span>名称</span><input value={name} maxLength={40} placeholder={KIND_NAMES[kind]} onChange={(e) => setName(e.target.value)} /></label>
         {spec.map((field) => (
