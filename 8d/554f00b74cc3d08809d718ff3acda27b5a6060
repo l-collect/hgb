@@ -1,0 +1,67 @@
+client/docs/src/pages/home.astro
+  s_fae32e7f0efe76::t_a981673d66019f 1-359
+client/console/src/App.tsx
+  s_fae32e7f0efe76::t_0a5da00d5a31b8 1,10-12,16-17,21-30,50-51,54-60,62
+client/console/index.html
+  s_fae32e7f0efe76::t_0d08931a9d39e3 11-12
+client/console/public/reload.js
+  s_fae32e7f0efe76::t_415aa272eed053 1
+client/console/src/features/admin/AdminApp.tsx
+  s_fae32e7f0efe76::t_3d666423268f29 2-4,6,10,15-17,19,21,39,42-43,65-66,71,79
+client/console/src/features/admin/api.ts
+  s_fae32e7f0efe76::t_fd2cbf01b8a90a 1
+client/console/src/features/admin/failure.ts
+  s_fae32e7f0efe76::t_b55c50b3f5f016 1-14
+client/console/src/features/admin/format.ts
+  s_fae32e7f0efe76::t_f2e4605082bdf9 1
+client/console/src/features/admin/pages/Codes.tsx
+  s_fae32e7f0efe76::t_f3bd2f96924fa1 2-3,5,73
+client/console/src/features/admin/pages/Generate.tsx
+  s_fae32e7f0efe76::t_9d76cd27dc0566 2,4
+client/console/src/features/admin/pages/Users.tsx
+  s_fae32e7f0efe76::t_0368fbecebfdbf 2-3,5,51
+client/console/src/features/admin/pages/parts.tsx
+  s_fae32e7f0efe76::t_540be4ddfbd66f 2
+client/console/src/features/site/Legal.module.css
+  s_fae32e7f0efe76::t_2c3d5f5e067ce2 1,5,15-18,24,31-34
+client/console/src/features/site/LegalPage.tsx
+  s_fae32e7f0efe76::t_fe462f7c6f3c0d 4,8-12,19-21,28-33
+client/console/src/shell/Shell.tsx
+  s_fae32e7f0efe76::t_319f0ea7fc999c 26,35,49,51
+client/console/vite.config.ts
+  s_fae32e7f0efe76::t_23d6d43e04e2dd 17-42
+client/docs/astro.config.mjs
+  s_fae32e7f0efe76::t_83c9f3ffe1560f 4-6,8-31,33,60
+client/docs/src/components/DocsTitle.astro
+  s_fae32e7f0efe76::t_eb1fd7be9eb971 2,7
+client/docs/src/components/Mark.astro
+  s_fae32e7f0efe76::t_1a03e8a0912c7d 1-11
+client/docs/src/content/docs/start/quick-start.mdx
+  s_fae32e7f0efe76::t_8c9e568ee58f44 11
+client/docs/src/instance.mjs
+  s_fae32e7f0efe76::t_76274d08187be3 1-3,16,21-27
+config/instance.json
+  s_fae32e7f0efe76::t_187898bace450e 2
+design/tokens.mjs
+  s_fae32e7f0efe76::t_5f842348449f35 1,4,35
+scripts/build-sites.sh
+  s_fae32e7f0efe76::t_55c4d7e70f7b59 2-8,16,19,21-23
+vercel.json
+  s_fae32e7f0efe76::t_e13508230e3b8e 25,27,30-35,45-48,82,88,94,96,100,102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d554f00b74cc3d08809d718ff3acda27b5a6060",
+  "prompts": {},
+  "sessions": {
+    "s_fae32e7f0efe76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e4ff622-41d3-4c0b-919b-3730481be66a",
+        "model": "unknown"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
