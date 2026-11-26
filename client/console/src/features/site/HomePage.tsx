@@ -1,6 +1,7 @@
 import { useEffect, type CSSProperties } from "react";
 import { Mark } from "../../components/ui";
 import { Link, paths } from "../../router";
+import { consoleLink, SiteAccount, type SiteSession } from "./SiteAccount";
 import s from "./Home.module.css";
 
 const repoUrl = `https://github.com/${import.meta.env.VITE_CODE_REPO}`;
@@ -31,8 +32,8 @@ const faq = [
   ["电脑能用吗？", "Windows 版在计划中，会支持游戏多开；现在可以先用网页控制台管理手机上的任务。"],
 ];
 
-/** The site's home page, shown at "/" to a visitor who is not signed in; signed in, "/" is the console. */
-export function HomePage() {
+/** The site's home page at "/", for anyone; signed in, its top bar has the account and the way into the console. */
+export function HomePage({ site }: { site: SiteSession }) {
   useEffect(() => { document.title = "护肝宝 · 日常交给它，你去睡觉"; return () => { document.title = "护肝宝控制台"; }; }, []);
   return (
     <div className={s.home}>
@@ -44,7 +45,7 @@ export function HomePage() {
             <a href="#how">怎么用</a><a href="#features">功能</a><a href="#games">支持的游戏</a><a href="/docs/">文档</a>
           </div>
           <a className={s.docs} href="/docs/">文档</a>
-          <Link className={`${s.cta} ${s.small} ${s.primary}`} to={paths.login}>登录控制台</Link>
+          <SiteAccount site={site} />
         </nav>
       </header>
 
@@ -133,7 +134,7 @@ export function HomePage() {
             <div className={s.downloads}>
               <a className={`${s.card} ${s.dl}`} href={`${repoUrl}/releases/latest`}><span><b>安卓版</b><span className={s.muted}>APK · Android 11 及以上</span></span><span className={s.go}>下载最新版</span></a>
               <div className={`${s.card} ${s.dl} ${s.off}`}><span><b>Windows 版</b><span className={s.muted}>计划中 · 将支持游戏多开</span></span><span className={`${s.go} ${s.muted}`}>敬请期待</span></div>
-              <Link className={`${s.card} ${s.dl}`} to={paths.login}><span><b>网页控制台</b><span className={s.muted}>不用安装，管理所有设备</span></span><span className={s.go}>打开</span></Link>
+              <Link className={`${s.card} ${s.dl}`} to={consoleLink(site)}><span><b>网页控制台</b><span className={s.muted}>不用安装，管理所有设备</span></span><span className={s.go}>{site.account ? "打开" : "登录"}</span></Link>
             </div>
           </div>
         </section>
@@ -144,18 +145,18 @@ export function HomePage() {
         </section>
       </main>
 
-      <SiteFooter />
+      <SiteFooter site={site} />
     </div>
   );
 }
 
 /** The links at the foot of the home page, privacy and terms. */
-export function SiteFooter() {
+export function SiteFooter({ site }: { site: SiteSession }) {
   return (
     <footer className={s.foot}>
       <div className={`${s.wrap} ${s.row}`}>
         <span className={`${s.brand} ${s.brandSmall}`}><Mark size={22} />护肝宝</span>
-        <a href="/docs/">文档</a><a href={`${repoUrl}/releases/latest`}>下载</a><Link to={paths.login}>控制台</Link><a href={repoUrl}>GitHub</a><a href={`${repoUrl}/issues`}>反馈问题</a><Link to={paths.privacy}>隐私政策</Link><Link to={paths.terms}>服务条款</Link>
+        <a href="/docs/">文档</a><a href={`${repoUrl}/releases/latest`}>下载</a><Link to={consoleLink(site)}>控制台</Link><a href={repoUrl}>GitHub</a><a href={`${repoUrl}/issues`}>反馈问题</a><Link to={paths.privacy}>隐私政策</Link><Link to={paths.terms}>服务条款</Link>
       </div>
     </footer>
   );

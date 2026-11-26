@@ -21,7 +21,7 @@ import { TasksDesk } from "./library/TasksDesk";
 import { MeDesk } from "./me/MeDesk";
 import { useWide } from "../shell/useWidth";
 
-export function ConsolePage({ account, signedOut }: { account: Account; signedOut: () => void }) {
+export function ConsolePage({ account, admin, signedOut }: { account: Account; admin: boolean; signedOut: () => void }) {
   const { data, connection, loaded } = useConsoleStream(signedOut);
   const path = usePath();
   const wide = useWide();
@@ -38,7 +38,7 @@ export function ConsolePage({ account, signedOut }: { account: Account; signedOu
   });
   return (
     <ConsoleContext.Provider value={{ data, account, signedOut }}>
-      <Shell section={section} connection={connection} full={full}>
+      <Shell section={section} connection={connection} full={full} admin={admin}>
         {linkFailed && <Message text="GitHub 绑定失败，请重试" />}
         {merge && <MergeCard token={merge} settled={(merged) => { setMerge(null); if (merged) location.reload(); }} />}
         {loaded ? page : <Empty>正在加载…</Empty>}
@@ -53,7 +53,7 @@ export function ConsolePage({ account, signedOut }: { account: Account; signedOu
  */
 function deskRoute(path: string): readonly [Section, ReactNode, boolean] | null {
   let p: Record<string, string> | null;
-  if (path === "/" || path === paths.tasks || path === "/library") return ["tasks", <TasksDesk />, true];
+  if (path === paths.tasks || path === "/library") return ["tasks", <TasksDesk />, true];
   if ((p = match("/tasks/:gameId/:taskId", path))) return ["tasks", <TasksDesk gameId={p.gameId} taskId={p.taskId} />, true];
   // A plan opens in a drawer over 账号与计划, and its task settings push into the same drawer.
   if (path === paths.accounts) return ["accounts", <GameAccountsPage />, true];
@@ -73,7 +73,7 @@ function deskRoute(path: string): readonly [Section, ReactNode, boolean] | null 
 
 function route(path: string): [Section, ReactNode] {
   let p: Record<string, string> | null;
-  if (path === "/" || path === paths.tasks || path === "/library") return ["tasks", <LibraryPage />];
+  if (path === paths.tasks || path === "/library") return ["tasks", <LibraryPage />];
   if ((p = match("/tasks/:gameId/:taskId", path))) return ["tasks", <TaskDetailPage key={`${p.gameId}:${p.taskId}`} gameId={p.gameId} taskId={p.taskId} />];
   if ((p = match("/tasks/:gameId/:taskId/steps/:stepId", path))) return ["tasks", <TaskStepDetailPage key={`${p.gameId}:${p.taskId}:${p.stepId}`} gameId={p.gameId} taskId={p.taskId} stepId={p.stepId} />];
   if (path === paths.devices) return ["devices", <DevicesPage />];

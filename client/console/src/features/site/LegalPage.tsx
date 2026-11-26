@@ -2,12 +2,13 @@ import { useEffect, type ReactNode } from "react";
 import { Mark } from "../../components/ui";
 import { Link, paths } from "../../router";
 import { SiteFooter } from "./HomePage";
+import { SiteAccount, type SiteSession } from "./SiteAccount";
 import s from "./Home.module.css";
 
 const repoUrl = `https://github.com/${import.meta.env.VITE_CODE_REPO}`;
 
 /** 隐私政策 or 服务条款: a page anyone can open, signed in or not. */
-export function LegalPage({ page }: { page: "privacy" | "terms" }) {
+export function LegalPage({ page, site }: { page: "privacy" | "terms"; site: SiteSession }) {
   const [title, body] = page === "privacy" ? ["隐私政策", <Privacy />] : ["服务条款", <Terms />];
   useEffect(() => { document.title = `${title} · 护肝宝`; window.scrollTo(0, 0); return () => { document.title = "护肝宝控制台"; }; }, [title]);
   return (
@@ -16,14 +17,14 @@ export function LegalPage({ page }: { page: "privacy" | "terms" }) {
         <nav className={s.bar} aria-label="网站导航">
           <Link className={s.brand} to="/" aria-label="护肝宝首页"><Mark /><span>护肝宝</span></Link>
           <a className={s.docs} style={{ display: "inline" }} href="/docs/">文档</a>
-          <Link className={`${s.cta} ${s.small} ${s.primary}`} to={paths.login}>控制台</Link>
+          <SiteAccount site={site} />
         </nav>
       </header>
       <main className={`${s.wrap} ${s.legal}`}>
         <h1>{title}</h1>
         {body}
       </main>
-      <SiteFooter />
+      <SiteFooter site={site} />
     </div>
   );
 }
