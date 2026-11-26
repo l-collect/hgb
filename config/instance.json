@@ -1,0 +1,8 @@
+{
+  "$comment": "这一套护肝宝部署的地址和仓库：网页（console、docs、admin）和 App 构建时都从这里读默认值。fork 后不用改：在 GitHub 仓库变量或 Vercel 环境变量里设 HGB_API_URL、HGB_SITE_URL、HGB_CODE_REPO、HGB_TASK_REPO、HGB_GITHUB_CLIENT_ID 覆盖。",
+  "apiUrl": "https://api-hgb.l2cl.link",
+  "siteUrl": "https://hgb.l2cl.link",
+  "codeRepo": "l-collect/hgb",
+  "taskRepo": "l-collect/hgb-tasks",
+  "githubClientId": "Iv23liVW7AdPVQ5Ue4iz"
+}

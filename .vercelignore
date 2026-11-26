@@ -1,0 +1,6 @@
+/.git
+/.github
+/latest
+**/node_modules
+**/dist
+client/docs/.astro
