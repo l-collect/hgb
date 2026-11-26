@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Chips, Stepper, Switch, join, ui } from "../../components/ui";
-import { Link, navigate } from "../../router";
+import { Link, navigate, useQuery } from "../../router";
 import { NameButton } from "./NameButton";
 import type { Json, Obj } from "./api";
 import { devPaths, useDev } from "./context";
 import { uniqueId } from "./HomePage";
 import { childIds, childrenOf, isObj, nodeDigest, objs, programOf, snippets, str, tasks } from "./model";
+import { caseValue, readsOf, valuesOf } from "./settingUse";
 import { wbPaths } from "./wb";
 import w from "./Wb.module.css";
 import c from "./Config.module.css";
@@ -13,16 +14,25 @@ import c from "./Config.module.css";
 const WIDGETS: [string, string][] = [["SINGLE_CHOICE", "单选"], ["MULTI_CHOICE", "多选"], ["NUMBER", "数字"], ["RANGE", "范围"],
   ["SWITCH", "开关"], ["TIME", "时间"], ["DATE", "日期"], ["DATE_RANGE", "日期段"], ["TEXT", "文字"]];
 interface Use { label: string; href: string }
+/** One value line of a branch on the setting: what it matches, and where it is. */
+interface Handler { value?: Json; otherwise?: boolean; missing?: boolean; text: string; at: Use }
+/** Where a setting is read: branches on it (each with its value lines), numbers it stands for, and the rest. */
+interface Uses { branches: { at: Use; cases: Handler[] }[]; numbers: { role: string; at: Use }[]; other: Use[] }
 
 /** 配置项 (v7 V7WbConfig): fields | the selected one's form and where it is read | what the player sees, whose values a trial takes. */
 export function ConfigPage({ id }: { id: string }) {
   const { draft, apply } = useDev();
   const [pick, setPick] = useState(0);
+  // ?field=<id> (the editor's 去配置项) opens on that setting.
+  const wanted = useQuery().get("field");
   const [test, setTest] = useState<Obj>({});
   const [text, setText] = useState<string | null>(null);
   const task = draft ? tasks(draft.body).find((x) => x.id === id) : undefined;
+  const wantedAt = wanted && task ? task.fields.findIndex((x) => String(x.id) === wanted) : -1;
+  useEffect(() => { if (wantedAt >= 0) setPick(wantedAt); }, [wanted, wantedAt >= 0]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!draft || !task) return <div className={w.card}><div className={w.empty}>草稿里没有这个任务</div></div>;
   const fields = task.fields;
+
   const f = fields[Math.min(pick, fields.length - 1)];
   const lib = snippets(draft.body);
   const usesOf = (fid: string) => findUses(task.raw, task.steps, lib, fid, id);
@@ -104,10 +114,10 @@ export function ConfigPage({ id }: { id: string }) {
             </div>)}
             {row("推荐", <input id="rc" className={c.mono} defaultValue={f.recommended === undefined ? "" : JSON.stringify(f.recommended)}
               onBlur={(e) => { try { set("recommended", e.target.value === "" ? undefined : JSON.parse(e.target.value) as Json); } catch { set("recommended", e.target.value); } }} />, "rc")}
-            {row("提供", <select id="stId" value={str(f.stepId) ?? ""} onChange={(e) => set("stepId", e.target.value || undefined)}>
+            {row("提供", <div className={c.stack}><select id="stId" value={str(f.stepId) ?? ""} onChange={(e) => set("stepId", e.target.value || undefined)}>
               <option value="">按读它的步骤</option>
               {task.steps.map((st, idx) => <option key={String(st.id)} value={String(st.id)}>步骤 {idx + 1} · {str(st.name) ?? String(st.id)}</option>)}
-            </select>, "stId")}
+            </select><span className={c.hint}>决定玩家界面里归在哪一步下；脚本任意位置都能读</span></div>, "stId")}
             {row("分组", <input id="sc" defaultValue={str(f.section) ?? ""} onBlur={(e) => set("section", e.target.value)} />, "sc")}
             {row("显示条件", <select id="vw" value={isObj(f.visibleWhen) ? condKey(f.visibleWhen) : ""} onChange={(e) => set("visibleWhen", e.target.value ? JSON.parse(e.target.value) as Json : undefined)}>
               <option value="">—</option>
@@ -117,8 +127,8 @@ export function ConfigPage({ id }: { id: string }) {
                   return <option key={k} value={k}>{str(x.label)} 选「{str(o.label)}」</option>; }))}
             </select>, "vw")}
             {row("必填", <Switch label="必填" checked={f.required === true} onChange={(on) => set("required", on || undefined)} />)}
-            {row("用在", usesOf(String(f.id)).length ? <div className={c.uses}>{usesOf(String(f.id)).map((u, i) => <Link key={i} to={u.href} className={c.use}>{u.label} ›</Link>)}</div>
-              : <span className={c.warn}>没人读 · 发布前删掉或用上</span>)}
+            <div className={c.row} style={{ alignItems: "flex-start" }}><span className={c.k} style={{ paddingTop: 10 }}>用在</span>
+              <div className={c.v}><UsesView field={f} uses={usesOf(String(f.id))} /></div></div>
           </section>
         ) : <section className={`${w.card} ${c.form}`}><div className={w.empty}>还没有配置项</div></section>}
 
@@ -178,28 +188,39 @@ function Preview({ field: x, value, onChange }: { field: Obj; value: Json | unde
   );
 }
 
-/** Where [fid] is read, as short links: 运行条件, a script line's 按设置, an input bound to it, counts, the passive trigger. */
-function findUses(raw: Obj, steps: Obj[], lib: Obj[], fid: string, task: string): Use[] {
-  const found: Use[] = [];
+/** Where [fid] is read: 运行条件, each 按设置 with its value lines, each {fid} as a number, block inputs and branches, the passive trigger. */
+export function findUses(raw: Obj, steps: Obj[], lib: Obj[], fid: string, task: string): Uses {
+  const found: Uses = { branches: [], numbers: [], other: [] };
+  const field = objs(raw.fields).find((x) => x.id === fid);
   const bound = (v: unknown) => isObj(v as never) && (v as Obj).type === "configuration" && (v as Obj).fieldId === fid;
   const walk = (program: Obj[], where: string, href: string) => program.forEach((node) => {
     const a = isObj(node.action) ? node.action : null;
-    if (a && isObj(a.bindings)) for (const [input, b] of Object.entries(a.bindings)) if (bound(b)) found.push({ label: `${where} · 输入 ${input}`, href });
-    if (node.type === "branch" && bound(node.value)) found.push({ label: `${where} · 分支`, href });
-    if ((node.type === "repeat" && bound(node.count)) || (node.type === "until" && bound(node.maximum))) found.push({ label: `${where} · 次数`, href });
+    if (a && isObj(a.bindings)) for (const [input, b] of Object.entries(a.bindings)) if (bound(b)) found.other.push({ label: `${where} · 输入 ${input}`, href });
+    if (node.type === "branch" && bound(node.value)) {
+      const at = { label: `${where} · 分支`, href };
+      found.branches.push({ at, cases: objs(node.cases).map((cs) => ({ value: cs.equals as Json | undefined, otherwise: cs.otherwise === true || undefined, missing: cs.missing === true || undefined,
+        text: cs.otherwise === true ? "其他" : cs.missing === true ? "没有值" : JSON.stringify(cs.equals), at })) });
+    }
+    if ((node.type === "repeat" && bound(node.count)) || (node.type === "until" && bound(node.maximum))) found.numbers.push({ role: node.type === "repeat" ? "反复次数" : "直到次数", at: { label: where, href } });
     childrenOf(node).forEach(([, child]) => walk(child, where, href));
   });
-  const scan = (script: string, where: string, href: (line: number) => string, seen: Set<string>) => script.split("\n").forEach((text, i) => {
-    const reads = /^\s*按设置\s+([^\s#]+)/.exec(text);
-    if (reads?.[1] === fid) found.push({ label: `${where} · L${i + 1} 按设置`, href: href(i + 1) });
-    const calls = /^\s*用\s+([^\s#]+)/.exec(text)?.[1];
-    const sn = calls && !seen.has(calls) ? lib.find((x) => x.id === calls) : undefined;
-    if (sn && typeof sn.script === "string") { seen.add(calls!); scan(sn.script, `${where} · ${calls}`, (l) => `${devPaths.taskSnippet(task, calls!)}?line=${l}`, seen); }
-  });
+  const scan = (script: string, where: string, href: (line: number) => string, seen: Set<string>) => {
+    const { reads, calls } = readsOf(script);
+    const at = (line: number) => ({ label: `${where} · L${line}`, href: href(line) });
+    for (const r of reads) {
+      if (r.field !== fid) continue;
+      if (r.kind === "number") { found.numbers.push({ role: r.role, at: at(r.line) }); continue; }
+      found.branches.push({ at: at(r.line), cases: r.cases.map((cs) => ({ ...(caseValue(field, cs) ?? {}), text: cs.text, at: at(cs.line) })) });
+    }
+    for (const call of calls) {
+      const sn = !seen.has(call.snippet) ? lib.find((x) => x.id === call.snippet) : undefined;
+      if (sn && typeof sn.script === "string") { seen.add(call.snippet); scan(sn.script, `${where} · ${call.snippet}`, (l) => `${devPaths.taskSnippet(task, call.snippet)}?line=${l}`, seen); }
+    }
+  };
   for (const st of steps) {
     const name = `步骤 ${steps.indexOf(st) + 1}`;
     const when = isObj(st.when) ? st.when : null;
-    if (when && when.field === fid) found.push({ label: `${name} · 运行条件`, href: devPaths.step(task, String(st.id)) });
+    if (when && when.field === fid) found.other.push({ label: `${name} · 运行条件`, href: devPaths.step(task, String(st.id)) });
     const use = str(st.use);
     const sn = use ? lib.find((x) => x.id === use) : undefined;
     const owner = sn ?? st;
@@ -207,8 +228,47 @@ function findUses(raw: Obj, steps: Obj[], lib: Obj[], fid: string, task: string)
     else walk(programOf(owner), name, sn ? devPaths.snippetBlocks(use!) : devPaths.blocks(task, String(st.id)));
   }
   const trigger = isObj(raw.trigger) ? raw.trigger : null;
-  if (trigger && trigger.enabledBy === fid) found.push({ label: "被动触发", href: devPaths.task(task) });
+  if (trigger && trigger.enabledBy === fid) found.other.push({ label: "被动触发", href: devPaths.task(task) });
   return found;
+}
+
+/** 用在 as a cross-reference: for a switch or choice, each value and where it is handled (or that nothing handles it); numbers by what they count. */
+
+function UsesView({ field, uses }: { field: Obj; uses: Uses }) {
+  const { branches, numbers, other } = uses;
+  if (!branches.length && !numbers.length && !other.length) return <span className={c.warn}>没人读 · 发布前删掉或用上</span>;
+  const values = valuesOf(field);
+  const many = branches.length > 1;
+  const go = (u: Use, text = u.label) => <Link to={u.href} className={c.use}>{text} ›</Link>;
+  const short = (u: Use) => u.label.split(" · ").pop()!;
+  /** How one branch takes [v]: its own line, its 其他, or nothing. With several branches each is a column and cells give only the line. */
+  const take = (b: Uses["branches"][number], v: Json) => {
+    const own = b.cases.find((cs) => !cs.otherwise && !cs.missing && cs.value === v);
+    if (own) return go(own.at, many ? short(own.at) : own.at.label);
+    const rest = b.cases.find((cs) => cs.otherwise);
+    if (rest) return <span className={c.muted}>其他 {go(rest.at, short(rest.at))}</span>;
+    return <span className={c.warn}>{many ? "没处理" : "没处理：玩家选了无效"}</span>;
+  };
+  const known = new Set(values.map((x) => JSON.stringify(x.value)));
+  const strays = (b: Uses["branches"][number]) => b.cases.filter((cs) => !cs.otherwise && (cs.missing || !known.has(JSON.stringify(cs.value))));
+  const strayRows = branches.flatMap((b, col) => strays(b).map((cs) => ({ col, cs })));
+  return (
+    <div className={c.usesBox}>
+      {branches.length > 0 && values.length > 0 && <table className={c.map}>
+        <thead><tr><th>取值</th>{many ? branches.map((b, i) => <th key={i}>按设置 {go(b.at)}</th>) : <th>处理位置 <span className={c.thin}>按设置 {go(branches[0].at, short(branches[0].at))}</span></th>}</tr></thead>
+        <tbody>
+          {values.map((x) => <tr key={x.word}><td>{x.label}{x.label !== x.word && <span className={c.muted}> {x.word}</span>}</td>
+            {branches.map((b, i) => <td key={i}>{take(b, x.value)}</td>)}</tr>)}
+          {strayRows.map(({ col, cs }, i) => <tr key={`s${i}`}><td>{cs.text}</td>
+            {branches.map((_, j) => <td key={j}>{j !== col ? null : cs.missing ? <span className={c.muted}>没设值时 {go(cs.at, many ? short(cs.at) : cs.at.label)}</span>
+              : <span className={c.warn}>不在选项里 {go(cs.at, many ? short(cs.at) : cs.at.label)}</span>}</td>)}</tr>)}
+        </tbody>
+      </table>}
+      {branches.length > 0 && !values.length && <div className={c.uses}>{branches.map((b, i) => <span key={i}>{go(b.at, `按设置 ${b.at.label}`)} <span className={c.muted}>{b.cases.map((cs) => cs.text).join(" / ")}</span></span>)}</div>}
+      {numbers.length > 0 && <div className={c.uses}>{numbers.map((n, i) => <span key={i}><span className={c.muted}>用作</span> {n.role} {go(n.at)}</span>)}</div>}
+      {other.length > 0 && <div className={c.uses}>{other.map((u, i) => <span key={i}>{go(u)}</span>)}</div>}
+    </div>
+  );
 }
 
 /** A display condition as the select's value: its two keys in a fixed order, so the current one is found again. */

@@ -15,7 +15,7 @@ export interface DraftPatch { op: "set" | "put" | "delete" | "insert"; path: str
 export interface PatchConflict { path: string; reason: string }
 export interface PatchResult { revision: number; conflicts: PatchConflict[] }
 export interface Capability { id: string; version: number; inputs: Record<string, string>; outputs: Record<string, string>; role: string; sendsInput: boolean; optional: string[] }
-export interface CheckIssue { location: string; reason: string }
+export interface CheckIssue { location: string; reason: string; /** "warning" when it only warns; missing or "error" otherwise. */ severity?: string }
 export interface CheckResult { ok: boolean; issues: CheckIssue[]; tasks: number; publishedBytes: number; expandedBytes: number }
 export interface CompiledWait { key: string; label: string; states: Obj[] }
 export interface DevMe { maintainer: boolean | null; samples: number; sampleBytes: number; sampleQuota: number; serverRecognizer?: boolean }

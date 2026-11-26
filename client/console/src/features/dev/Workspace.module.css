@@ -101,3 +101,4 @@
 .code { white-space: pre-wrap; }
 .conflict { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin-bottom: 8px; border-color: var(--color-danger); }
 .toolCol { display: flex; flex-direction: column; gap: 6px; }
+.warnTag { font-size: 11px; color: var(--color-warn); margin-right: 6px; font-weight: 600; }

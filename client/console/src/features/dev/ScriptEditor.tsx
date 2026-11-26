@@ -6,6 +6,8 @@ import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
 import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
 import { Decoration, EditorView, GutterMarker, WidgetType, gutter, highlightActiveLine, hoverTooltip, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { href as hrefOf, navigate } from "../../router";
+import type { SettingView } from "./settingUse";
 
 /** Words a line starts with (docs/design/task-script.md), with what each does, for completion. */
 export const STATEMENTS: [string, string][] = [
@@ -17,11 +19,13 @@ const LEADING = new Set(STATEMENTS.map(([w]) => w));
 const MODIFIERS = new Set(["且", "或", "没有", "没看到", "图", "色", "容差", "页", "偏", "大小", "步进", "格大小", "点偏", "锚", "命中格", "最多", "计", "最上", "最下", "最左", "最右", "整行", "空白", "开", "关", "其他", "没有值"]);
 
 /** Colors each part of a line: its statement word, quoted text, @region, numbers, comments, and a case's name. */
-const scriptLanguage = StreamLanguage.define<{ first: boolean }>({
-  startState: () => ({ first: true }),
+const scriptLanguage = StreamLanguage.define<{ first: boolean; setting: boolean }>({
+  startState: () => ({ first: true, setting: false }),
   token(stream, state) {
-    if (stream.sol()) state.first = true;
+    if (stream.sol()) { state.first = true; state.setting = false; }
     if (stream.eatSpace()) return null;
+    // A setting read: the name after 按设置, and {名} where a number goes.
+    if (stream.match(/^\{[^{}\s]+\}/)) { state.first = false; return "propertyName"; }
     if (stream.peek() === "#") { stream.skipToEnd(); return "comment"; }
     const ch = stream.next()!;
     if (ch === "\"" || ch === "“") {
@@ -39,6 +43,8 @@ const scriptLanguage = StreamLanguage.define<{ first: boolean }>({
     stream.eatWhile(/[^\s@"“#]/);
     const word = stream.current();
     const wasFirst = state.first; state.first = false;
+    if (state.setting) { state.setting = false; return "propertyName"; }
+    if (wasFirst && word === "按设置") { state.setting = true; return "keyword"; }
     if (wasFirst && LEADING.has(word)) return "keyword";
     if (MODIFIERS.has(word)) return "operator";
     // The first word of a line that is no statement names a case (under 分情况) or a value (under 按设置).
@@ -54,9 +60,14 @@ const highlight = HighlightStyle.define([
   { tag: tags.comment, color: "#8a8f98", fontStyle: "italic" },
   { tag: tags.operator, color: "#b45309" },
   { tag: tags.labelName, color: "#db2777", fontWeight: "600" },
+  { tag: tags.propertyName, color: "#0e7490", fontWeight: "600", background: "color-mix(in srgb, #0e7490 10%, transparent)", borderRadius: "3px" },
 ]);
 
-export interface ScriptNames { templates: string[]; regions: string[]; snippets: string[]; fields: string[]; pages: string[] }
+export interface ScriptNames { templates: string[]; regions: string[]; snippets: string[]; fields: string[]; pages: string[];
+  /** Number settings, offered after `{`. */
+  numberFields?: { id: string; label: string }[] }
+/** A problem on a line, as a wavy underline; [col]/[len] narrow it to part of the line. */
+export interface ScriptProblem { line: number; reason: string; severity?: "error" | "warning"; col?: number; len?: number }
 
 /** How a line went in the trial shown: ran, or stopped there. */
 export type LineMark = { line: number; tone: "ok" | "bad" };
@@ -118,6 +129,31 @@ function templateHover(look: () => ((name: string) => TemplateView | null)) {
   });
 }
 
+/** A setting's card when the pointer rests on the name after 按设置 or inside {名}. */
+function settingHover(look: () => ((id: string) => SettingView | null)) {
+  return hoverTooltip((view, pos) => {
+    const line = view.state.doc.lineAt(pos);
+    const at = pos - line.from;
+    const found = [...line.text.matchAll(/^(\s*按设置\s+)(\S+)/g)].map((m) => ({ id: m[2], from: m[1].length }))
+      .concat([...line.text.matchAll(/\{\s*([^{}\s=:|?]+)[^{}]*\}/g)].map((m) => ({ id: m[1], from: m.index! + m[0].indexOf(m[1], 1) })))
+      .find((x) => at >= x.from && at <= x.from + x.id.length);
+    if (!found) return null;
+    const shown = look()(found.id); if (!shown) return null;
+    return { pos: line.from + found.from, end: line.from + found.from + found.id.length, above: true, create: () => {
+      const dom = document.createElement("div"); dom.className = "cm-setting-tip";
+      const el = (tag: string, text: string, cls?: string) => Object.assign(document.createElement(tag), { textContent: text, className: cls ?? "" });
+      const head = el("div", "", "cm-setting-head"); head.append(el("b", shown.label), el("span", `${shown.id} · ${shown.type}`, "cm-setting-muted"));
+      dom.append(head);
+      const row = (k: string, v: string) => { if (!v) return; const r = el("div", "", "cm-setting-row"); r.append(el("span", k, "cm-setting-muted"), el("span", v)); dom.append(r); };
+      row("取值", shown.values); row("推荐", shown.recommended); row("提供", shown.step);
+      const a = el("a", "去配置项 ›", "cm-setting-link") as HTMLAnchorElement; a.href = hrefOf(shown.href);
+      a.addEventListener("click", (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(shown.href); });
+      dom.append(a);
+      return { dom };
+    } };
+  });
+}
+
 /** Completes by place: statement words at a line's start, templates after 图, regions after @, snippets after 用, settings after 按设置. */
 function completer(names: () => ScriptNames) {
   return (context: CompletionContext) => {
@@ -132,6 +168,11 @@ function completer(names: () => ScriptNames) {
     if (m) return list(names().snippets, "function", context.pos - m[1].length);
     m = /^\s*去\s+(\S*)$/.exec(before);
     if (m) return list(names().pages, "constant", context.pos - m[1].length);
+    m = /\{([^{}\s]*)$/.exec(before);
+    if (m) {
+      const closed = line.text.slice(context.pos - line.from).startsWith("}");
+      return { from: context.pos - m[1].length, options: (names().numberFields ?? []).map((f) => ({ label: f.id, detail: f.label, type: "property", apply: closed ? f.id : `${f.id}}` })) };
+    }
     m = /^\s*按设置\s+(\S*)$/.exec(before);
     if (m) return list(names().fields, "property", context.pos - m[1].length);
     m = /^\s*(\S*)$/.exec(before);
@@ -144,15 +185,17 @@ function completer(names: () => ScriptNames) {
  * The script editor: [value] edited in place, [onChange] on every edit, Ctrl/⌘+S calls [onSave]. [problems] (line,
  * reason) are drawn as wavy underlines on their lines. [names] feeds completion and is read when it is asked for.
  */
-export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, onJumped, onCursor, marks = [], failure = null, template = () => null }: { value: string; onChange: (text: string) => void; onSave: () => void;
-  problems: { line: number; reason: string }[]; names: ScriptNames; goTo: { line: number; at: number } | null;
+export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, onJumped, onCursor, marks = [], failure = null, template = () => null, setting = () => null }: { value: string; onChange: (text: string) => void; onSave: () => void;
+  problems: ScriptProblem[]; names: ScriptNames; goTo: { line: number; at: number } | null;
   marks?: LineMark[]; failure?: LineFailure | null; template?: (name: string) => TemplateView | null; onJumped?: () => void;
+  /** What hovering a setting's name shows; null when there is no such setting. */
+  setting?: (id: string) => SettingView | null;
   /** The line the cursor is on, as it moves. */
   onCursor?: (line: number) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const latest = useRef({ onChange, onSave, names, template, onCursor });
-  latest.current = { onChange, onSave, names, template, onCursor };
+  const latest = useRef({ onChange, onSave, names, template, onCursor, setting });
+  latest.current = { onChange, onSave, names, template, onCursor, setting };
 
   useEffect(() => {
     if (!host.current) return;
@@ -161,7 +204,7 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
       state: EditorState.create({
         doc: value,
         extensions: [
-          runField, runGutter, lineNumbers(), highlightActiveLine(), history(), lintGutter(), templateHover(() => latest.current.template),
+          runField, runGutter, lineNumbers(), highlightActiveLine(), history(), lintGutter(), templateHover(() => latest.current.template), settingHover(() => latest.current.setting),
           indentUnit.of("  "), EditorState.tabSize.of(2),
           scriptLanguage, syntaxHighlighting(highlight),
           autocompletion({ override: [completer(() => latest.current.names)] }),
@@ -181,6 +224,12 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
             ".cm-template-tip": { display: "flex", gap: "10px", alignItems: "center", padding: "8px", maxWidth: "320px" },
             ".cm-template-tip img": { maxWidth: "96px", maxHeight: "72px", borderRadius: "6px", background: "#2e2a3a", imageRendering: "pixelated" },
             ".cm-template-tip div": { display: "flex", flexDirection: "column", fontSize: "12px" },
+            ".cm-setting-tip": { display: "flex", flexDirection: "column", gap: "3px", padding: "8px 10px", background: "var(--color-surface)", color: "var(--color-ink)", borderRadius: "6px", maxWidth: "340px", fontSize: "12px", lineHeight: "18px" },
+            ".cm-setting-head": { display: "flex", gap: "8px", alignItems: "baseline" },
+            ".cm-setting-row": { display: "flex", gap: "8px" },
+            ".cm-setting-row > :first-child": { flex: "none", width: "28px" },
+            ".cm-setting-muted": { color: "var(--color-muted)" },
+            ".cm-setting-link": { color: "var(--color-nav-current)", textDecoration: "none", marginTop: "2px" },
             ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: "22px" },
             ".cm-gutters": { background: "transparent", border: "none", color: "var(--color-muted)" },
             ".cm-activeLine": { background: "color-mix(in srgb, var(--color-line) 35%, transparent)" },
@@ -205,8 +254,10 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     const doc = v.state.doc;
     const diagnostics: Diagnostic[] = problems.filter((p) => p.line >= 1 && p.line <= doc.lines).map((p) => {
       const line = doc.line(p.line);
+      const severity = p.severity ?? "error";
+      if (p.col !== undefined && p.len && p.col + p.len <= line.length) return { from: line.from + p.col, to: line.from + p.col + p.len, severity, message: p.reason };
       const start = line.from + (line.text.length - line.text.trimStart().length);
-      return { from: start, to: Math.max(start + 1, line.to), severity: "error", message: p.reason };
+      return { from: start, to: Math.max(start + 1, line.to), severity, message: p.reason };
     });
     v.dispatch(setDiagnostics(v.state, diagnostics));
   }, [problems]);

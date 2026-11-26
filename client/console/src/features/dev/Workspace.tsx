@@ -15,7 +15,8 @@ import type { InsertTarget } from "./sentence";
 import { lineDiff, useDevice } from "./wb";
 import { Located } from "./where";
 import pub from "./Publish.module.css";
-import type { LineFailure, LineMark, ScriptNames, TemplateView } from "./ScriptEditor";
+import type { LineFailure, LineMark, ScriptNames, ScriptProblem, TemplateView } from "./ScriptEditor";
+import { isNumberField, lintSettings, settingView, type SettingView } from "./settingUse";
 import w from "./Wb.module.css";
 import s from "./Workspace.module.css";
 
@@ -53,7 +54,7 @@ const HELP: [string, string][] = [
 ];
 
 type Tab = "run" | "problems" | "screen" | "help";
-type Issue = { line: number | null; reason: string; location: string };
+type Issue = { line: number | null; reason: string; location: string; warning?: boolean };
 
 /**
  * 工作区: a task (or, with no task, the snippet library) as one page — steps on the left, the script in the middle,
@@ -181,15 +182,20 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
         const within = (loc: string, at: string) => loc === at || loc.startsWith(`${at}/`);
         setIssues(result.issues.filter((x) => within(x.location, prefix)).map((x) => {
           const line = /\/script\/line\/(\d+)$/.exec(x.location);
-          return { line: line ? Number(line[1]) : null, reason: x.reason, location: x.location };
+          return { line: line ? Number(line[1]) : null, reason: x.reason, location: x.location, warning: isWarning(x) };
         }));
         setOthers(result.issues.filter((x) => !within(x.location, prefix) && ((taskAt && within(x.location, taskAt)) || used.some((at) => within(x.location, at))))
-          .map((x) => ({ line: null, reason: x.reason, location: x.location })));
+          .map((x) => ({ line: null, reason: x.reason, location: x.location, warning: isWarning(x) })));
       } catch (error) { if (live) { setIssues([{ line: null, reason: `检查没做成：${failure(error)}`, location: "" }]); setOthers([]); } }
     }, 600);
     return () => { live = false; clearTimeout(timer); };
   }, [text, body, key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const problems = useMemo(() => (issues ?? []).flatMap((x) => x.line === null ? [] : [{ line: x.line, reason: x.reason }]), [issues]);
+  // Settings read wrong, found on the spot while the server's check (half a minute) is still out; its answer then wins.
+  const local = useMemo(() => isScript ? lintSettings(text, task ? task.fields : null) : [], [text, task, isScript]);
+  const problems = useMemo((): ScriptProblem[] => issues === null
+    ? local.map((x) => ({ line: x.line, reason: x.reason, severity: x.severity, col: x.col, len: x.len }))
+    : issues.flatMap((x) => x.line === null ? [] : [{ line: x.line, reason: x.reason, severity: x.warning ? "warning" as const : "error" as const,
+      ...placeIn(local, x.line) }]), [issues, local]);
 
   // ---- completion and template pictures
   const names = useMemo((): ScriptNames => {
@@ -202,6 +208,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       regions: isObj(library.regions) ? Object.keys(library.regions) : [],
       snippets: allSnippets.map((sn) => String(sn.id)).filter((id) => key !== snippetKey(id)),
       fields: (task?.fields ?? []).map((f) => String(f.id)),
+      numberFields: (task?.fields ?? []).filter(isNumberField).map((f) => ({ id: String(f.id), label: str(f.label) ?? String(f.id) })),
       pages: objs(library.pages).map((p) => str(p.name) ?? String(p.id)),
     };
   }, [body, task, key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -217,6 +224,10 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       setSizes(Object.fromEntries(Array.from(grouped.entries()).map(([k, v]) => [k, v.count > 1 ? `${v.dim} · ${v.count} 套主题` : v.dim])));
     }).catch(() => undefined);
   }, [game]);
+  const setting = useCallback((id: string): SettingView | null => {
+    const f = task?.fields.find((x) => String(x.id) === id);
+    return f && task ? settingView(f, task.steps, `${devPaths.config(task.id)}?field=${encodeURIComponent(id)}`) : null;
+  }, [task]);
   const template = useCallback((name: string): TemplateView | null => names.templates.includes(name) ? { src: dev.templateImage(game, name), meta: sizes[name] ?? "模板" } : null, [names, game, sizes]);
 
   // ---- trials: the task's newest one, followed while it goes on
@@ -360,7 +371,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
             <div className={`${w.card} ${s.script}`}>
               <Suspense fallback={<div className={w.empty}>正在打开编辑器…</div>}>
                 <ScriptEditor key={key} value={text} onChange={(v) => setEdit(key, v === saved ? undefined : v)} onSave={() => { if (!conflicted) void save(key); }} onCursor={setCursor}
-                  problems={problems} names={names} goTo={goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)} marks={marks} failure={failed} template={template} />
+                  problems={problems} names={names} goTo={goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)} marks={marks} failure={failed} template={template} setting={setting} />
               </Suspense>
             </div>
           ) : (
@@ -383,11 +394,15 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
               preparing={preparing} error={runError} fromPhone={fromPhone} body={body} onRefresh={(x) => { if (shown.current === x.id) setRun(x); }}
               onStart={() => void start()} onOpen={openKey} onMessage={(t) => setRunError(t)} target={insertTarget} backHere={backHere} />
           )}
-          {tab === "problems" && (issues === null ? <span className={w.muted}>检查中…</span> : <>
+          {tab === "problems" && (issues === null ? <>
+            <span className={w.muted}>检查中…{local.length ? " 先看本地查到的：" : ""}</span>
+            {local.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && setGoTo({ key, line: x.line, at: Date.now() })}>
+              <span className={s.ln}>L{x.line}</span>{x.severity === "warning" && <span className={s.warnTag}>提醒</span>}{x.reason}</button>)}
+          </> : <>
             <div className={s.group}>本脚本</div>
             {issues.length === 0 ? <span className={w.muted}>没问题</span>
               : issues.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && x.line !== null && setGoTo({ key, line: x.line, at: Date.now() })}>
-                {x.line !== null && <span className={s.ln}>L{x.line}</span>}{x.reason}</button>)}
+                {x.line !== null && <span className={s.ln}>L{x.line}</span>}{x.warning && <span className={s.warnTag}>提醒</span>}{x.reason}</button>)}
             {task && <>
               <div className={s.group}>这个任务用到的</div>
               {others.length === 0 ? <span className={w.muted}>没问题</span>
@@ -797,4 +812,12 @@ function RunCondition({ step, fields, editing, setEditing, onChange }: { step: O
       <button type="button" className={`${w.btn} ${w.sm}`} onClick={() => { setEditing(false); onChange(null); }}>去掉</button>
     </span>
   );
+}
+
+/** A server issue that only warns (it does not stop a publish). */
+const isWarning = (x: { severity?: string }) => x.severity === "warning" || x.severity === "warn";
+/** The server's issue narrowed to the part of the line the local check found for the same thing, when it did. */
+function placeIn(local: { line: number; col: number; len: number }[], line: number): { col?: number; len?: number } {
+  const hit = local.find((x) => x.line === line);
+  return hit ? { col: hit.col, len: hit.len } : {};
 }
