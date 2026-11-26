@@ -8,9 +8,10 @@ import { Link, navigate, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
 import { resolveTaskDefaults, StepGroupedFieldsets, summarizeWebTaskConfig, TaskStepsList } from "./Settings";
+import { DrawerBody, DrawerField, DrawerFoot, DrawerGrid, DrawerHead, drawerStyles } from "../../components/Drawer";
 import s from "./Accounts.module.css";
 
-const saveOf = (plan: Plan, change: Partial<PlanSave> = {}): PlanSave => ({
+export const saveOf = (plan: Plan, change: Partial<PlanSave> = {}): PlanSave => ({
   name: plan.name, days: plan.days, minuteOfDay: plan.minuteOfDay, tasks: plan.tasks, deviceIds: plan.deviceIds,
   latestStartMinutes: plan.latestStartMinutes, enabled: plan.enabled, revision: plan.revision, jitterMinutes: plan.jitterMinutes ?? 0,
   coopPartnerIds: plan.coopPartnerIds ?? [], taskConfigs: plan.taskConfigs ?? {}, ...change,
@@ -22,16 +23,28 @@ const presetSaveOf = (preset: PresetPlan, enabled = true): PlanSave => ({
   coopPartnerIds: [], taskConfigs: preset.taskConfigs ?? {},
 });
 
-/** 定时计划: presets and the account's own plans by time; the switch enables one (a preset is copied with its defaults). */
-export function PlanList({ account, game, plans }: { account: GameAccount; game?: Game; plans: Plan[]; jobs?: Job[] }) {
+/** One line of 定时计划: the account's own plan, or a preset not yet copied (plan null). */
+export interface PlanEntry { key: string; minuteOfDay: number; name: string; plan: Plan | null; preset: PresetPlan | null }
+/** The account's plans and the presets it has not copied, by time. */
+export function planEntries(account: GameAccount, game: Game | undefined, plans: Plan[]): PlanEntry[] {
   const mine = plans.filter((plan) => plan.accountId === account.id);
   const presets = game?.presetPlans ?? [];
-
-  const unified = [
+  return [
     ...mine.map((plan) => ({ key: `plan:${plan.id}`, minuteOfDay: plan.minuteOfDay, name: plan.name, plan, preset: presets.find((p) => p.name === plan.name) ?? null })),
     ...presets.filter((preset) => !mine.some((plan) => plan.name === preset.name))
       .map((preset) => ({ key: `preset:${preset.id}`, minuteOfDay: preset.minuteOfDay, name: preset.name, plan: null as Plan | null, preset })),
   ].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.name.localeCompare(b.name));
+}
+/** The switch of a plan line: a plan is saved with the new state; a preset is copied, enabled, the first time it is switched on. */
+export function switchPlan(account: GameAccount, { plan, preset }: PlanEntry, on: boolean) {
+  if (plan) orAlert(() => api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body: saveOf(plan, { enabled: on }) }));
+  else if (on && preset) orAlert(() => api(`/api/accounts/${enc(account.id)}/plans`, { method: "POST", body: presetSaveOf(preset, true) }));
+}
+export const planHref = (account: GameAccount, { plan, preset }: PlanEntry) => plan ? paths.planEdit(account.id, plan.id) : paths.presetEdit(account.id, preset!.id);
+
+/** 定时计划: presets and the account's own plans by time; the switch enables one (a preset is copied with its defaults). */
+export function PlanList({ account, game, plans }: { account: GameAccount; game?: Game; plans: Plan[]; jobs?: Job[] }) {
+  const unified = planEntries(account, game, plans);
 
   const enabledCount = unified.filter((u) => u.plan?.enabled).length;
 
@@ -41,14 +54,15 @@ export function PlanList({ account, game, plans }: { account: GameAccount; game?
         aside={<Button small onClick={() => navigate(paths.planNew(account.id))}>＋ 新建</Button>} />
       {unified.length === 0 ? (
         <Empty>还没有计划，点「＋ 新建」</Empty>
-      ) : unified.map(({ key, plan, preset }) => {
+      ) : unified.map((entry) => {
+        const { key, plan, preset } = entry;
         const enabled = plan?.enabled ?? false;
         const tasks = plan?.tasks ?? preset?.tasks ?? [];
         const source = plan ?? preset!;
         const taskNames = tasks.length <= 2
           ? tasks.map((t) => t.name).join(" · ")
           : `${tasks.slice(0, 2).map((t) => t.name).join(" · ")} 等 ${tasks.length} 项`;
-        const targetHref = plan ? paths.planEdit(account.id, plan.id) : paths.presetEdit(account.id, preset!.id);
+        const targetHref = planHref(account, entry);
         return (
           <div key={key} className={s.planRow}>
             <Link to={targetHref} className={s.planLink}>
@@ -64,13 +78,7 @@ export function PlanList({ account, game, plans }: { account: GameAccount; game?
             <Switch
               label={`启用${source.name}`}
               checked={enabled}
-              onChange={(on) => {
-                if (plan) {
-                  orAlert(() => api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body: saveOf(plan, { enabled: on }) }));
-                } else if (on && preset) {
-                  orAlert(() => api(`/api/accounts/${enc(account.id)}/plans`, { method: "POST", body: presetSaveOf(preset, true) }));
-                }
-              }}
+              onChange={(on) => switchPlan(account, entry, on)}
             />
           </div>
         );
@@ -95,7 +103,7 @@ function PickRow({ label, text, children }: { label: string; text: string; child
  * Level-2 (`/accounts/:id/plans/new` | `/accounts/:id/plans/:planId` | `/accounts/:id/presets/:presetId`):
  * 时间与周期 / 执行任务 / 设备与协战, with 删除 / 保存计划 at the bottom.
  */
-export function PlanDetailPage({ accountId, planId, presetId }: { accountId: string; planId?: string; presetId?: string }) {
+export function PlanDetailPage({ accountId, planId, presetId, drawer }: { accountId: string; planId?: string; presetId?: string; drawer?: boolean }) {
   const { data } = useConsole();
   const account = data.accounts.find((a) => a.id === accountId);
   if (!account) return <NotFound text="没有这个账号" back={paths.accounts} backText="回到账号" />;
@@ -106,10 +114,11 @@ export function PlanDetailPage({ accountId, planId, presetId }: { accountId: str
     ? game?.presetPlans?.find((p) => p.id === presetId) ?? null
     : plan ? game?.presetPlans?.find((p) => p.name === plan.name) ?? null : null;
   if (presetId && !preset) return <NotFound text="没有这个预设" back={paths.accounts} backText="回到账号" />;
-  return <PlanEditor account={account} game={game} plan={plan} preset={preset} />;
+  return <PlanEditor account={account} game={game} plan={plan} preset={preset} drawer={drawer} />;
 }
 
-function PlanEditor({ account, game, plan, preset }: { account: GameAccount; game?: Game; plan: Plan | null; preset: PresetPlan | null }) {
+/** [drawer]: laid out for the right-hand drawer of a wide window (fields in two columns, the bar fixed at its bottom). */
+function PlanEditor({ account, game, plan, preset, drawer }: { account: GameAccount; game?: Game; plan: Plan | null; preset: PresetPlan | null; drawer?: boolean }) {
   const { data } = useConsole();
   const peerAccounts = data.accounts.filter((a) => a.gameId === account.gameId && a.id !== account.id);
   const [name, setName] = useState(plan?.name ?? preset?.name ?? "");
@@ -131,7 +140,7 @@ function PlanEditor({ account, game, plan, preset }: { account: GameAccount; gam
   // Editing a task's copy before an unsaved plan exists.
   const draftDetail = draftTaskId ? taskMap.get(draftTaskId) : undefined;
   if (!plan && draftDetail) {
-    return (
+    const sub = (
       <UnsavedPlanTaskSubPage
         accountId={account.id}
         planName={name || "新建计划"}
@@ -145,6 +154,7 @@ function PlanEditor({ account, game, plan, preset }: { account: GameAccount; gam
         }}
       />
     );
+    return drawer ? <><DrawerHead title={draftDetail.name} onClose={() => navigate(paths.accounts)} /><DrawerBody>{sub}</DrawerBody></> : sub;
   }
 
   const submit = () => run(async () => {
@@ -182,18 +192,104 @@ function PlanEditor({ account, game, plan, preset }: { account: GameAccount; gam
   const deviceText = where.size ? data.devices.filter((d) => where.has(d.id)).map((d) => d.name).join("、") || "自动分配" : "自动分配";
   const partnerText = partners.size ? peerAccounts.filter((a) => partners.has(a.id)).map((a) => a.name).join("、") || "不带" : "不带";
 
+  const title = plan ? plan.name : preset ? preset.name : "新建计划";
+  const runNow = plan ? <Button small onClick={() => orAlert(() => api(`/api/plans/${enc(plan.id)}/run`, { method: "POST", body: {} }))}>立即运行</Button> : undefined;
+  const lastLine = last && (
+    <p className={ui.tiny} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      上次：{shortTime(last.updatedAt)}{last.deviceName ? ` · ${last.deviceName}` : ""} <Pill tone={jobStatus(last)[1]}>{jobStatus(last)[0]}</Pill>
+    </p>
+  );
+  const dayPicks = (
+    <div className={s.daysRow} role="group" aria-label="星期">
+      {WEEK.map((label, i) => (
+        <button key={label} type="button" role="checkbox" aria-checked={days.has(i + 1)} aria-label={`周${label}`}
+          className={days.has(i + 1) ? `${s.dayPick} ${s.dayOn}` : s.dayPick} onClick={() => setDays(flip(days, i + 1, !days.has(i + 1)))}>{label}</button>
+      ))}
+    </div>
+  );
+  const tasksCard = (
+    <Card flush as="section">
+    <CardHead title="执行任务" aside={<span className={ui.tiny}>{selectedTasks.length} 项</span>} />
+    {selectedTasks.map((tid, idx) => {
+      const task = taskMap.get(tid);
+      if (!task) return null;
+      const cfgSource = plan?.taskConfigs?.[tid] ?? draftConfigs[tid] ?? preset?.taskConfigs?.[tid] ?? {};
+      const chips = summarizeWebTaskConfig(task, cfgSource, 3);
+      return (
+        <Row key={tid}>
+          <span className={`${ui.tiny} ${ui.mono}`}>#{idx + 1}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: "block", fontWeight: 500 }}>{task.name}</span>
+            <span className={ui.tiny}>{chips.length ? chips.join(" · ") : "默认"}</span>
+          </span>
+          {plan
+            ? <Link to={paths.planTaskConfig(account.id, plan.id, tid)} className={s.configLink}>配置 ›</Link>
+            : <button type="button" className={s.configLink} onClick={() => setDraftTaskId(tid)}>配置 ›</button>}
+          <Switch label={task.name} checked onChange={() => setSelectedTasks((prev) => prev.filter((id) => id !== tid))} />
+        </Row>
+      );
+    })}
+    {unpicked.length > 0 && (
+      adding ? unpicked.map((task) => (
+        <Row key={task.taskId}>
+          <span style={{ flex: 1 }} className={ui.tiny}>{task.name}</span>
+          <Button small onClick={() => setSelectedTasks((prev) => [...prev, task.taskId])}>＋ 加入</Button>
+        </Row>
+      )).concat(<Row key="__done"><Button variant="link" onClick={() => setAdding(false)}>收起</Button></Row>)
+      : <Row><Button variant="link" onClick={() => setAdding(true)}>＋ 添加任务</Button></Row>
+    )}
+  </Card>
+  );
+  const deviceChecks = data.devices.map((device) => <Check key={device.id} label={device.name} checked={where.has(device.id)} onChange={(on) => setWhere(flip(where, device.id, on))} />);
+  const partnerChecks = peerAccounts.map((peer) => <Check key={peer.id} label={peer.nickname ? `${peer.name} · ${peer.nickname}` : peer.name} checked={partners.has(peer.id)}
+    onChange={(on) => { if (!on || partners.size < 2) setPartners(flip(partners, peer.id, on)); }} />);
+  const close = () => navigate(paths.accounts);
+
+  if (drawer) {
+    const pick = (label: string, text: string, checks: ReactNode) => (
+      <DrawerField label={label}>
+        <div className={drawerStyles.pick}>
+          <Popover label={label} plain trigger={<span className={drawerStyles.select}><span>{text}</span><span aria-hidden="true">▾</span></span>}>
+            {() => <div className={s.pickPanel}>{checks}</div>}
+          </Popover>
+        </div>
+      </DrawerField>
+    );
+    return (
+      <>
+        <DrawerHead title={title} aside={runNow} onClose={close} />
+        <DrawerBody>
+          {lastLine}
+          <DrawerGrid>
+            <DrawerField label="名称"><input type="text" required maxLength={40} aria-label="名称" value={name} onChange={(e) => setName(e.target.value)} /></DrawerField>
+            <DrawerField label="时间"><input type="time" required aria-label="时间" value={at} onChange={(e) => setAt(e.target.value)} className={ui.mono} /></DrawerField>
+            <DrawerField label="浮动"><Stepper label="浮动" unit="±分" min={0} max={60} value={jitter} onChange={setJitter} /></DrawerField>
+            <DrawerField label="补跑窗口"><Stepper label="补跑窗口" unit="分" min={1} max={1440} step={5} value={late} onChange={setLate} /></DrawerField>
+            <DrawerField label="周期" wide>{dayPicks}</DrawerField>
+          </DrawerGrid>
+          {tasksCard}
+          {(data.devices.length > 0 || peerAccounts.length > 0) && (
+            <DrawerGrid>
+              {data.devices.length > 0 && pick("设备", deviceText, deviceChecks)}
+              {peerAccounts.length > 0 && pick("协战（最多 2 个）", partnerText, partnerChecks)}
+            </DrawerGrid>
+          )}
+        </DrawerBody>
+        <DrawerFoot>
+          {plan && <Button variant="danger" onClick={remove}>{preset ? "重置" : "删除"}</Button>}
+          <span role="status" className={s.statusBad} style={{ flex: 1, minWidth: 0, whiteSpace: "normal", fontSize: 13 }}>{message && !message.ok ? message.text : ""}</span>
+          <Button onClick={close}>取消</Button>
+          <Button variant="primary" onClick={submit} disabled={busy}>保存计划</Button>
+        </DrawerFoot>
+      </>
+    );
+  }
+
   return (
     <>
       <Breadcrumb items={[["账号与计划", paths.accounts], [account.name, paths.account(account.id)], [plan?.name ?? preset?.name ?? "新建计划", null]]} />
-      <PageHeader
-        title={plan ? plan.name : preset ? preset.name : "新建计划"}
-        aside={plan ? <Button small onClick={() => orAlert(() => api(`/api/plans/${enc(plan.id)}/run`, { method: "POST", body: {} }))}>立即运行</Button> : undefined}
-      />
-      {last && (
-        <p className={ui.tiny} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          上次：{shortTime(last.updatedAt)}{last.deviceName ? ` · ${last.deviceName}` : ""} <Pill tone={jobStatus(last)[1]}>{jobStatus(last)[0]}</Pill>
-        </p>
-      )}
+      <PageHeader title={title} aside={runNow} />
+      {lastLine}
 
       <Card flush as="section">
         <CardHead title="时间与周期" />
@@ -206,63 +302,23 @@ function PlanEditor({ account, game, plan, preset }: { account: GameAccount; gam
           <input type="time" required aria-label="时间" value={at} onChange={(e) => setAt(e.target.value)} className={ui.mono} />
           <Stepper label="浮动" unit="±分" min={0} max={60} value={jitter} onChange={setJitter} />
         </Row>
-        <div className={s.daysRow} role="group" aria-label="星期">
-          {WEEK.map((label, i) => (
-            <button key={label} type="button" role="checkbox" aria-checked={days.has(i + 1)} aria-label={`周${label}`}
-              className={days.has(i + 1) ? `${s.dayPick} ${s.dayOn}` : s.dayPick} onClick={() => setDays(flip(days, i + 1, !days.has(i + 1)))}>{label}</button>
-          ))}
-        </div>
+        {dayPicks}
         <Row>
           <span style={{ flex: 1 }}>补跑窗口</span>
           <Stepper label="补跑窗口" unit="分" min={1} max={1440} step={5} value={late} onChange={setLate} />
         </Row>
       </Card>
 
-      <Card flush as="section">
-        <CardHead title="执行任务" aside={<span className={ui.tiny}>{selectedTasks.length} 项</span>} />
-        {selectedTasks.map((tid, idx) => {
-          const task = taskMap.get(tid);
-          if (!task) return null;
-          const cfgSource = plan?.taskConfigs?.[tid] ?? draftConfigs[tid] ?? preset?.taskConfigs?.[tid] ?? {};
-          const chips = summarizeWebTaskConfig(task, cfgSource, 3);
-          return (
-            <Row key={tid}>
-              <span className={`${ui.tiny} ${ui.mono}`}>#{idx + 1}</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: "block", fontWeight: 500 }}>{task.name}</span>
-                <span className={ui.tiny}>{chips.length ? chips.join(" · ") : "默认"}</span>
-              </span>
-              {plan
-                ? <Link to={paths.planTaskConfig(account.id, plan.id, tid)} className={s.configLink}>配置 ›</Link>
-                : <button type="button" className={s.configLink} onClick={() => setDraftTaskId(tid)}>配置 ›</button>}
-              <Switch label={task.name} checked onChange={() => setSelectedTasks((prev) => prev.filter((id) => id !== tid))} />
-            </Row>
-          );
-        })}
-        {unpicked.length > 0 && (
-          adding ? unpicked.map((task) => (
-            <Row key={task.taskId}>
-              <span style={{ flex: 1 }} className={ui.tiny}>{task.name}</span>
-              <Button small onClick={() => setSelectedTasks((prev) => [...prev, task.taskId])}>＋ 加入</Button>
-            </Row>
-          )).concat(<Row key="__done"><Button variant="link" onClick={() => setAdding(false)}>收起</Button></Row>)
-          : <Row><Button variant="link" onClick={() => setAdding(true)}>＋ 添加任务</Button></Row>
-        )}
-      </Card>
+      {tasksCard}
 
       {(data.devices.length > 0 || peerAccounts.length > 0) && (
         <Card flush as="section">
           <CardHead title="设备与协战" />
           {data.devices.length > 0 && (
-            <PickRow label="设备" text={deviceText}>
-              {data.devices.map((device) => <Check key={device.id} label={device.name} checked={where.has(device.id)} onChange={(on) => setWhere(flip(where, device.id, on))} />)}
-            </PickRow>
+            <PickRow label="设备" text={deviceText}>{deviceChecks}</PickRow>
           )}
           {peerAccounts.length > 0 && (
-            <PickRow label="协战（最多 2 个）" text={partnerText}>
-              {peerAccounts.map((peer) => <Check key={peer.id} label={peer.nickname ? `${peer.name} · ${peer.nickname}` : peer.name} checked={partners.has(peer.id)}
-                onChange={(on) => { if (!on || partners.size < 2) setPartners(flip(partners, peer.id, on)); }} />)}
-            </PickRow>
+            <PickRow label="协战（最多 2 个）" text={partnerText}>{partnerChecks}</PickRow>
           )}
         </Card>
       )}
@@ -317,7 +373,7 @@ function UnsavedPlanTaskSubPage({
 }
 
 /** Level-3 (`/accounts/:id/plans/:planId/tasks/:taskId`): this plan's own copy of a task's settings. */
-export function PlanTaskConfigPage({ accountId, planId, taskId }: { accountId: string; planId: string; taskId: string }) {
+export function PlanTaskConfigPage({ accountId, planId, taskId, drawer }: { accountId: string; planId: string; taskId: string; drawer?: boolean }) {
   const { data } = useConsole();
   const account = data.accounts.find((a) => a.id === accountId);
   const plan = data.plans.find((p) => p.id === planId && p.accountId === accountId);
@@ -325,10 +381,11 @@ export function PlanTaskConfigPage({ accountId, planId, taskId }: { accountId: s
   const game = data.games.find((g) => g.id === account.gameId);
   const detail = game?.tasks.find((t) => t.taskId === taskId);
   if (!detail) return <NotFound text="没有这个任务" back={paths.planEdit(account.id, plan.id)} backText="回到计划" />;
-  return <PlanTaskConfig account={account} plan={plan} detail={detail} preset={game?.presetPlans?.find((p) => p.name === plan.name)} />;
+  return <PlanTaskConfig account={account} plan={plan} detail={detail} preset={game?.presetPlans?.find((p) => p.name === plan.name)} drawer={drawer} />;
 }
 
-function PlanTaskConfig({ account, plan, detail, preset }: { account: GameAccount; plan: Plan; detail: GameTask; preset?: PresetPlan }) {
+/** [drawer]: pushed into the plan's drawer, the plan's name a step back in the breadcrumb. */
+function PlanTaskConfig({ account, plan, detail, preset, drawer }: { account: GameAccount; plan: Plan; detail: GameTask; preset?: PresetPlan; drawer?: boolean }) {
   const taskId = detail.taskId;
   const fields = detail.fieldsSchema ?? [];
   const defaults = resolveTaskDefaults(detail, preset?.taskConfigs?.[taskId] ?? {});
@@ -351,10 +408,11 @@ function PlanTaskConfig({ account, plan, detail, preset }: { account: GameAccoun
 
   const stepUrl = (stepId: string) => paths.taskStep(detail.targetId, detail.taskId, stepId, { accountId: account.id, planId: plan.id });
 
-  return (
+  const content = (
     <>
-      <Breadcrumb items={[["账号与计划", paths.accounts], [plan.name, paths.planEdit(account.id, plan.id)], [detail.name, null]]} />
-      <PageHeader title={detail.name} subtitle={plan.name} />
+      <Breadcrumb items={drawer ? [[plan.name, paths.planEdit(account.id, plan.id)], [detail.name, null]]
+        : [["账号与计划", paths.accounts], [plan.name, paths.planEdit(account.id, plan.id)], [detail.name, null]]} />
+      {!drawer && <PageHeader title={detail.name} subtitle={plan.name} />}
       <SegmentTabs label="任务内容" value={tab} onChange={setTab}
         items={[["config", `参数（${fields.length}）`], ["steps", `步骤（${detail.stepDetails?.length ?? detail.steps.length}）`]]} />
       {tab === "steps" ? <TaskStepsList detail={detail} values={values} stepHref={stepUrl} />
@@ -370,4 +428,6 @@ function PlanTaskConfig({ account, plan, detail, preset }: { account: GameAccoun
       </FootBar>
     </>
   );
+  if (!drawer) return content;
+  return <><DrawerHead title={detail.name} onClose={() => navigate(paths.accounts)} /><DrawerBody>{content}</DrawerBody></>;
 }

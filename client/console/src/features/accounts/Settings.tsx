@@ -144,20 +144,12 @@ export function TaskStepsList({
   );
 }
 
-/** The 参数 tab: one card per step (grey heading「步骤 1 · 进突破 … 2 项 · 动作 ›」), each setting a row. */
-export function StepGroupedFieldsets({
-  detail, fields, values, change, stepHref,
-}: {
-  detail?: GameTask;
-  fields: SettingField[];
-  values: Record<string, unknown>;
-  change: (id: string, val: unknown) => void;
-  stepHref?: (stepId: string) => string;
-}) {
+/** A task's visible settings grouped as the 参数 cards show them: by step, else by section, else one plain group. */
+export interface FieldGroup { key: string; step?: TaskStepDetail; heading: string | null; fields: SettingField[] }
+export function groupFields(detail: GameTask | undefined, fields: SettingField[], values: Record<string, unknown>): FieldGroup[] {
   const visible = fields.filter((def) => settingVisible(def, values));
   const stepById = new Map((detail?.stepDetails ?? []).map((st) => [st.id, st]));
   const metaById = new Map((detail?.fields ?? []).map((f) => [f.id, f]));
-
   const groups = new Map<string, SettingField[]>();
   for (const def of visible) {
     const sid = def.stepId ?? metaById.get(def.id)?.stepId ?? undefined;
@@ -165,21 +157,36 @@ export function StepGroupedFieldsets({
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(def);
   }
+  return [...groups.entries()].map(([key, list]) => {
+    const step = key.startsWith("step:") ? stepById.get(key.slice(5)) : undefined;
+    return { key, step, heading: step ? `步骤 ${step.index} · ${step.name}` : key.startsWith("sec:") ? key.slice(4) : null, fields: list };
+  });
+}
 
+/** The 参数 tab: one card per step (grey heading「步骤 1 · 进突破 … 2 项 · 动作 ›」), each setting a row. [idOf] names each card for a jump list. */
+export function StepGroupedFieldsets({
+  detail, fields, values, change, stepHref, idOf,
+}: {
+  detail?: GameTask;
+  fields: SettingField[];
+  values: Record<string, unknown>;
+  change: (id: string, val: unknown) => void;
+  stepHref?: (stepId: string) => string;
+  idOf?: (index: number) => string;
+}) {
+  const metaById = new Map((detail?.fields ?? []).map((f) => [f.id, f]));
   return (
     <>
-      {[...groups.entries()].map(([groupKey, groupFields]) => {
-        const step = groupKey.startsWith("step:") ? stepById.get(groupKey.slice(5)) : undefined;
-        const heading = step ? `步骤 ${step.index} · ${step.name}` : groupKey.startsWith("sec:") ? groupKey.slice(4) : null;
-        const count = `${groupFields.length} 项`;
+      {groupFields(detail, fields, values).map(({ key: groupKey, step, heading, fields: list }, index) => {
+        const count = `${list.length} 项`;
         return (
-          <Card key={groupKey} flush as="section">
+          <Card key={groupKey} flush as="section" id={idOf?.(index)} className={idOf ? s.anchored : undefined}>
             {heading && (
               <CardHead soft title={heading} aside={step && stepHref
                 ? <Link to={stepHref(step.id)} className={ui.tiny} style={{ textDecoration: "none", whiteSpace: "nowrap" }}>{count} · 动作 ›</Link>
                 : <span className={ui.tiny}>{count}</span>} />
             )}
-            {groupFields.map((def) => {
+            {list.map((def) => {
               const meta = metaById.get(def.id);
               const defLabel = meta?.defaultLabel ?? formatSettingValue(def, def.recommended);
               const hasRecommended = def.recommended !== undefined && def.recommended !== null;
@@ -213,9 +220,11 @@ export function StepGroupedFieldsets({
 /**
  * The account's own copy of [task]'s settings, as group cards with the bar fixed at the bottom:
  * 默认 / 保存 / ▶ 保存并开跑 ([onRun] runs it after saving).
+ * [desk] is the wide layout: the bar fixed at the top after [head], a jump list of the steps on the left, and every card,
+ * the steps last, on one page.
  */
 export function SettingsForm({
-  account, task, stepHref, onRun, runBusy, replace,
+  account, task, stepHref, onRun, runBusy, replace, desk, head,
 }: {
   account: GameAccount;
   task: CloudTask;
@@ -224,6 +233,8 @@ export function SettingsForm({
   runBusy?: boolean;
   /** Shown instead of the settings (the 步骤 tab), keeping the unsaved edits and the bar. */
   replace?: ReactNode;
+  desk?: boolean;
+  head?: ReactNode;
 }) {
   const { data } = useConsole();
   const detail = data.games.find((g) => g.id === task.targetId)?.tasks.find((t) => t.taskId === task.taskId);
@@ -277,22 +288,87 @@ export function SettingsForm({
 
   const change = (id: string, value: unknown) => { setValues((now) => ({ ...now, [id]: value })); setDirty(true); };
 
-  if (loadError) return <Card><Empty>{loadError}</Empty></Card>;
-  if (!view) return <Card><Empty>读取中…</Empty></Card>;
+  if (loadError) return <>{desk && <div className={s.deskBar}>{head}</div>}<Card><Empty>{loadError}</Empty></Card></>;
+  if (!view) return <>{desk && <div className={s.deskBar}>{head}</div>}<Card><Empty>读取中…</Empty></Card></>;
+  const status = (
+    <span role="status" className={message && !message.ok ? s.statusBad : ui.tiny} style={desk ? { whiteSpace: "normal" } : { flex: 1, minWidth: 0, whiteSpace: "normal" }}>
+      {message && !message.ok ? message.text : dirty ? "未保存" : ""}
+    </span>
+  );
+  const buttons = (
+    <>
+      <Button small={desk} onClick={resetDefaults} disabled={busy || (!hasAccountOverrides && !dirty)}>默认</Button>
+      <Button small={desk} onClick={save} disabled={busy || !dirty}>保存</Button>
+    </>
+  );
+  if (desk) {
+    const groups = groupFields(detail, view.fields, values);
+    const jumps: [string, string][] = [
+      ...groups.map((group, i): [string, string] => [`set-${i}`, group.step ? `${group.step.index} ${group.step.name}` : group.heading ?? "参数"]),
+      ...(detail ? [["set-steps", "全部步骤"] as [string, string]] : []),
+    ];
+    return (
+      <>
+        <div className={s.deskBar}>
+          {head}{status}{buttons}
+          {onRun && <Button small variant="primary" onClick={saveAndRun} disabled={busy || runBusy}>▶ 保存并开跑</Button>}
+        </div>
+        <div className={s.deskBody}>
+          <JumpList items={jumps} />
+          <div className={s.stack}>
+            {view.fields.length === 0
+              ? <Card><Empty>没有参数</Empty></Card>
+              : <StepGroupedFieldsets detail={detail} fields={view.fields} values={values} change={change} stepHref={stepHref} idOf={(i) => `set-${i}`} />}
+            {detail && (
+              <section id="set-steps" className={`${s.anchored} ${s.stack}`} aria-labelledby="set-steps-h">
+                <h3 id="set-steps-h" className={ui.tiny} style={{ fontWeight: 600, padding: "4px 2px 0" }}>全部步骤</h3>
+                <TaskStepsList detail={detail} values={values} stepHref={stepHref ?? (() => "")} />
+              </section>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       {replace ?? (view.fields.length === 0
         ? <Card><Empty>没有参数</Empty></Card>
         : <StepGroupedFieldsets detail={detail} fields={view.fields} values={values} change={change} stepHref={stepHref} />)}
       <FootBar>
-        <Button onClick={resetDefaults} disabled={busy || (!hasAccountOverrides && !dirty)}>默认</Button>
-        <Button onClick={save} disabled={busy || !dirty}>保存</Button>
-        <span role="status" className={message && !message.ok ? s.statusBad : ui.tiny} style={{ flex: 1, minWidth: 0, whiteSpace: "normal" }}>
-          {message && !message.ok ? message.text : dirty ? "未保存" : ""}
-        </span>
+        {buttons}
+        {status}
         {onRun && <Button variant="primary" onClick={saveAndRun} disabled={busy || runBusy} style={{ flex: "1 1 160px" }}>▶ 保存并开跑</Button>}
       </FootBar>
     </>
+  );
+}
+
+/**
+ * Jumps within the page (锚点跳转，不切页): each item scrolls its card into view; the one at the top of the window is marked.
+ */
+export function JumpList({ items }: { items: [string, string][] }) {
+  const [current, setCurrent] = useState(items[0]?.[0] ?? "");
+  const ids = items.map(([id]) => id).join(" ");
+  useEffect(() => {
+    const spy = () => {
+      let at = ids.split(" ")[0] ?? "";
+      for (const id of ids.split(" ")) { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top < 140) at = id; }
+      setCurrent(at);
+    };
+    spy();
+    window.addEventListener("scroll", spy, { passive: true });
+    return () => window.removeEventListener("scroll", spy);
+  }, [ids]);
+  if (items.length < 2) return <span />;
+  return (
+    <nav className={s.jumps} aria-label="步骤跳转">
+      {items.map(([id, text]) => (
+        <a key={id} href={`#${id}`} aria-current={id === current ? "true" : undefined} onClick={(event) => {
+          event.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}>{text}</a>
+      ))}
+    </nav>
   );
 }
 

@@ -13,7 +13,7 @@ import s from "./Library.module.css";
 /** 常用: starred tasks, kept in this browser (the App keeps its own). */
 const FAVORITES = "hgb.tasks.favorites";
 const readFavorites = (): Set<string> => { try { return new Set(JSON.parse(localStorage.getItem(FAVORITES) ?? "[]") as string[]); } catch { return new Set(); } };
-function useFavorites(): [Set<string>, (key: string) => void] {
+export function useFavorites(): [Set<string>, (key: string) => void] {
   const [items, setItems] = useState(readFavorites);
   useEffect(() => {
     const sync = (event: StorageEvent) => { if (event.key === FAVORITES) setItems(readFavorites()); };
@@ -27,14 +27,14 @@ function useFavorites(): [Set<string>, (key: string) => void] {
   };
   return [items, toggle];
 }
-const favKey = (targetId: string, taskId: string) => `${targetId}:${taskId}`;
+export const favKey = (targetId: string, taskId: string) => `${targetId}:${taskId}`;
 
-function StarButton({ on, toggle }: { on: boolean; toggle: () => void }) {
+export function StarButton({ on, toggle }: { on: boolean; toggle: () => void }) {
   return <button type="button" className={s.star} aria-pressed={on} aria-label={on ? "移出常用" : "加入常用"} title={on ? "移出常用" : "加入常用"} onClick={toggle}>★</button>;
 }
 
 /** A task's live state for an account, as the row's pill: running, or waiting in a queue. */
-function taskState(jobs: Job[] | undefined, task: CloudTask, accountId: string | undefined): [string, Tone] | null {
+export function taskState(jobs: Job[] | undefined, task: CloudTask, accountId: string | undefined): [string, Tone] | null {
   if (!jobs || !accountId) return null;
   const job = jobs.find((item) => item.accountId === accountId && item.targetId === task.targetId && item.taskId === task.taskId && ACTIVE.has(item.state));
   if (!job) return null;

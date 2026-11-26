@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, enc } from "../../api/client";
 import type { Device, Game, GameAccount } from "../../api/types";
 import { Button, ButtonLink, Card, CardHead, Chips, Empty, Field, Form, Message, MoreMenu, Muted, PageHeader, Pill, Row, RowLink, Segments, ui } from "../../components/ui";
 import { orAlert, useAction } from "../../components/useAction";
 import { jobStatus, shortTime, type Tone } from "../../format";
-import { Link, paths } from "../../router";
+import { Link, navigate, paths } from "../../router";
 import type { ConsoleData } from "../../state/console";
 import { useConsole } from "../../state/context";
+import { Drawer } from "../../components/Drawer";
+import { useWide } from "../../shell/useWidth";
 import { PlanList } from "./Plans";
+import { PlanTable } from "./PlansDesk";
+import d from "../../shell/Desk.module.css";
 import s from "./Accounts.module.css";
 
 export function onlineGameDevices(devices: Device[], gameId: string, requireApp = false): Device[] {
@@ -80,9 +84,14 @@ export function accountNow(account: GameAccount, data: ConsoleData): [string, To
   return ["空闲", ""];
 }
 
-/** Level-1 账号与计划: account chips; the plans on the left, the account's summary and latest runs on the right. */
-export function GameAccountsPage() {
+/**
+ * Level-1 账号与计划: account chips; the plans on the left, the account's summary and latest runs on the right.
+ * On a wide window the plans are a table (or the week), and [drawer] (a plan being edited, at its own address) slides in
+ * over the page for [accountId], which stays in view.
+ */
+export function GameAccountsPage({ accountId, drawer }: { accountId?: string; drawer?: ReactNode } = {}) {
   const { data } = useConsole();
+  const wide = useWide();
   const [adding, setAdding] = useState(false);
   const [managing, setManaging] = useState(false);
   const [chosen, setChosen] = useState(data.games[0]?.id ?? "");
@@ -91,7 +100,10 @@ export function GameAccountsPage() {
   const accounts = data.accounts.filter((account) => account.gameId === gameId);
   const [selectedId, setSelectedId] = useState(accounts[0]?.id ?? "");
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
-  const activeAccount = accounts.find((a) => a.id === selectedId) ?? accounts[0];
+  // Opening a plan of another account (its address) shows that account behind the drawer, and keeps it after closing.
+  const routed = accountId ? data.accounts.find((a) => a.id === accountId) : undefined;
+  useEffect(() => { if (routed) { setSelectedId(routed.id); setChosen(routed.gameId); } }, [routed]);
+  const activeAccount = accounts.find((a) => a.id === (routed?.id ?? selectedId)) ?? accounts[0];
   const isOnmyoji = !gameId || gameId === "onmyoji";
 
   return (
@@ -131,10 +143,12 @@ export function GameAccountsPage() {
             </Card>
           ) : activeAccount && (
             <>
-              <Chips label="切换账号" value={activeAccount.id} onChange={setSelectedId}
+              <Chips label="切换账号" value={activeAccount.id} onChange={(id) => { setSelectedId(id); if (accountId) navigate(paths.accounts); }}
                 items={accounts.map((a): [string, string] => [a.id, a.name])} />
-              <div className={s.columns}>
-                <PlanList account={activeAccount} game={game} plans={data.plans} jobs={data.jobs} />
+              <div className={wide ? d.colsMain : s.columns}>
+                {wide
+                  ? <PlanTable account={activeAccount} game={game} plans={data.plans} jobs={data.jobs} />
+                  : <PlanList account={activeAccount} game={game} plans={data.plans} jobs={data.jobs} />}
                 <div className={s.stack}>
                   <AccountSummary account={activeAccount} accounts={accounts} game={game} />
                   <Card flush as="section" aria-label="最近战报">
@@ -158,6 +172,7 @@ export function GameAccountsPage() {
           )}
         </>
       )}
+      {wide && drawer && <Drawer label="编辑计划" onClose={() => navigate(paths.accounts)}>{drawer}</Drawer>}
     </>
   );
 }

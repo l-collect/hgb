@@ -1,0 +1,33 @@
+/* Desktop only, after the design (AdmCodes / AdmUsers / AdmGate); narrow windows scroll sideways inside the page. */
+.shell { min-height: 100vh; display: flex; background: var(--color-bg); }
+.nav {
+  flex: 0 0 220px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-4) var(--space-3); background: var(--color-surface); border-right: 1px solid var(--color-line);
+}
+.brand { display: flex; align-items: center; gap: 8px; padding: 0 var(--space-2) 14px; font-size: 17px; }
+.link {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 var(--space-3); border-radius: var(--radius-md);
+  color: var(--color-nav); text-decoration: none; font-weight: 600; white-space: nowrap;
+}
+.link:hover { color: var(--color-ink); background: var(--color-bg); }
+.link[aria-current="page"] { background: var(--color-nav-current-bg); color: var(--color-nav-current); }
+.me { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding: var(--space-2); font-size: var(--text-xs); color: var(--color-muted); min-width: 0; }
+.meName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me a { text-decoration: none; font-weight: 600; }
+.main { flex: 1; min-width: 0; padding: 22px 28px 40px; display: flex; flex-direction: column; gap: 14px; overflow-x: auto; }
+
+.gate { min-height: 100vh; display: grid; place-items: center; padding: var(--space-4); background: var(--color-bg); }
+.gateCard {
+  width: min(360px, 100%); padding: 24px; display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center;
+  background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-xl);
+}
+.gateTitle { font-size: 16px; }
+.gateActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+
+@media (max-width: 767px) {
+  .shell { flex-direction: column; }
+  .nav { position: static; height: auto; flex: none; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--color-line); }
+  .brand { padding: 0 var(--space-2); }
+  .me { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
+  .main { padding: var(--space-4); }
+}

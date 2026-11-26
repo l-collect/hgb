@@ -1,0 +1,34 @@
+.scrim { position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, var(--color-bg) 45%, transparent); }
+.drawer {
+  position: fixed; z-index: 41; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--color-surface); border-left: 1px solid var(--color-line); box-shadow: -12px 0 32px rgb(0 0 0 / .08);
+  animation: slideIn .18s ease-out;
+}
+.drawer:focus { outline: none; }
+@keyframes slideIn { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .drawer { animation: none; } }
+.head {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2); min-height: 60px; padding: 0 var(--space-3) 0 20px;
+  background: var(--color-surface); border-bottom: 1px solid var(--color-line-soft);
+}
+.title { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.close { flex: none; width: 36px; height: 36px; border: 0; border-radius: var(--radius-md); background: none; color: var(--color-muted); font-size: 18px; padding: 0; }
+.close:hover { background: var(--color-bg); color: var(--color-ink); }
+.body { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: var(--space-4) 20px; }
+.foot {
+  position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 14px 20px;
+  background: var(--color-surface); border-top: 1px solid var(--color-line);
+}
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fieldWide { grid-column: 1 / -1; }
+.label { font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
+.field input:not([type="checkbox"]) { min-height: var(--control-height); width: 100%; }
+/* A pick that opens a menu, drawn as a field with ▾. */
+.select {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); width: 100%; min-height: var(--control-height); padding: 0 12px;
+  border: 1px solid var(--color-control); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-ink); font-size: var(--text-md);
+}
+.select span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick > span, .pick > span > button { display: flex; width: 100%; }
+.field > [role="group"] { padding: 0; border-bottom: 0; }

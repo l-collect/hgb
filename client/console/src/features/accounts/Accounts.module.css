@@ -98,3 +98,16 @@
 @media (max-width: 900px) { .columns { grid-template-columns: minmax(0, 1fr); } }
 .dangerWide { width: 100%; border-color: var(--color-danger-bg); }
 .tabsLine { margin-top: -4px; }
+
+/* Wide (≥1024): a task's settings on one page, the bar at the top and a jump list of the steps beside the cards. */
+.deskBar {
+  position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: 56px;
+  margin: calc(-1 * var(--space-2)) 0 0; padding: var(--space-2) 0; background: var(--color-bg);
+}
+.deskBar > :first-child { flex: 1 1 200px; min-width: 0; }
+.deskBody { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.jumps { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 2px; }
+.jumps a { padding: 8px 10px; border-radius: 8px; font-size: var(--text-sm); color: var(--color-muted); text-decoration: none; overflow-wrap: anywhere; }
+.jumps a:hover { color: var(--color-ink); background: var(--color-surface); }
+.jumps a[aria-current="true"] { background: var(--color-nav-current-bg); color: var(--color-nav-current); font-weight: 600; }
+.anchored { scroll-margin-top: 72px; }

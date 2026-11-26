@@ -1,6 +1,6 @@
 /*
- * Three widths, as in design/tokens.json (breakpoint.medium 600, breakpoint.wide 1024): media queries cannot read CSS
- * variables, so the numbers are repeated here.
+ * The widths of the design (网页桌面 · 断点): the full sidebar from 1280 (DESK in useWidth.ts), the rail from 600
+ * (breakpoint.medium), the bottom bar below. Media queries cannot read CSS variables, so the numbers are repeated here.
  */
 .shell { min-height: 100vh; display: flex; background: var(--color-bg); }
 
@@ -30,8 +30,8 @@
 .main { flex: 1 1 auto; min-width: 0; max-width: 1200px; padding: var(--space-6) var(--space-8) 40px; display: flex; flex-direction: column; gap: var(--space-4); }
 .main:focus { outline: none; }
 
-/* Medium: a rail of icons with short labels. */
-@media (max-width: 1023px) {
+/* Medium: a rail of icons with short labels, until the columns need the room of the full sidebar. */
+@media (max-width: 1279px) {
   .nav { flex-basis: 80px; padding: var(--space-4) 0; align-items: center; }
   .navBrand { padding: 0 0 var(--space-3); }
   .brandName, .liveText { display: none; }

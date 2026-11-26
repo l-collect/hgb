@@ -74,3 +74,7 @@
 .stat span { font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
 .statOk { color: var(--color-ok); }
 .statBad { color: var(--color-danger); }
+.stats4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.stats4 .stat { padding: 14px var(--space-4); }
+.stats4 .stat b { font-size: 26px; }
+.statRun { color: var(--color-run); }

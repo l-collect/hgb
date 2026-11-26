@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { Channel, ChannelKind, Device, EventRule, GameAccount, Job } from "../../api/types";
-import { Card, Empty, Muted, PageHeader, Pill, RowLink, SegmentTabs, ui } from "../../components/ui";
+import { ButtonLink, Card, Empty, Muted, PageHeader, Pill, RowLink, SegmentTabs, ui } from "../../components/ui";
 import { ACTIVE, JOB_STATES, platformName, shortTime, type Tone } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { lastFinished, RunRows } from "../jobs/runs";
+import { useWide } from "../../shell/useWidth";
+import { RunsDesk } from "./RunsDesk";
 import s from "./Devices.module.css";
 
 type RunFilter = "all" | "active" | "done" | "bad";
@@ -18,40 +20,47 @@ const FILTERS: Record<RunFilter, (job: Job) => boolean> = {
 const isToday = (at: number) => new Date(at).toDateString() === new Date().toDateString();
 const CHANNEL_NAMES: Record<ChannelKind, string> = { DINGTALK: "钉钉", WECOM: "企业微信", BARK: "Bark", EMAIL: "邮件", WEBHOOK: "Webhook", LOCAL: "本机" };
 
-/** 设备与战报: three numbers, the 通知 entry, the devices, and the runs filtered by state. */
+/**
+ * 设备与战报: three numbers, the 通知 entry, the devices, and the runs filtered by state. On a wide window a fourth number
+ * (排队中), 通知 as a button at the top, and the runs as a table (RunsDesk).
+ */
 export function DevicesPage() {
   const { data } = useConsole();
+  const wide = useWide();
   const [filter, setFilter] = useState<RunFilter>("all");
   const today = data.jobs.filter((job) => isToday(job.updatedAt));
   const runs = data.jobs.filter(FILTERS[filter]);
   return (
     <>
-      <PageHeader title="设备与战报" />
-      <div className={s.stats}>
+      <PageHeader title="设备与战报" aside={wide ? <NoticeButton /> : undefined} />
+      <div className={wide ? `${s.stats} ${s.stats4}` : s.stats}>
         <div className={s.stat}><b>{data.devices.filter((device) => device.online).length}</b><span>在线设备</span></div>
         <div className={s.stat}><b className={s.statOk}>{today.filter(FILTERS.done).length}</b><span>今日完成</span></div>
         <div className={s.stat}><b className={s.statBad}>{today.filter(FILTERS.bad).length}</b><span>异常待查</span></div>
+        {wide && <div className={s.stat}><b className={s.statRun}>{data.jobs.filter((job) => job.state === "QUEUED" || job.state === "WAITING").length}</b><span>排队中</span></div>}
       </div>
-      <NoticeEntry />
+      {!wide && <NoticeEntry />}
       <section aria-labelledby="devices" className={s.section}>
         <h2 id="devices" className={s.h2}>我的设备</h2>
         {data.devices.length === 0
           ? <Card><Empty>在 App 登录同一账号即可添加</Empty></Card>
           : <div className={s.grid}>{data.devices.map((device) => <DeviceCard key={device.id} device={device} accounts={data.accounts} jobs={data.jobs} />)}</div>}
       </section>
-      <section aria-labelledby="recent" className={s.section}>
-        <h2 id="recent" className={s.h2}>战报</h2>
-        <SegmentTabs label="按状态筛选" value={filter} onChange={setFilter} items={[["all", "全部"], ["active", "运行中"], ["done", "完成"], ["bad", "异常"]]} />
-        <Card flush>
-          {runs.length ? <RunRows jobs={runs} devices={data.devices} columns={["place", "source"]} limit={15} /> : <Empty>没有战报</Empty>}
-        </Card>
-      </section>
+      {wide ? <RunsDesk /> : (
+        <section aria-labelledby="recent" className={s.section}>
+          <h2 id="recent" className={s.h2}>战报</h2>
+          <SegmentTabs label="按状态筛选" value={filter} onChange={setFilter} items={[["all", "全部"], ["active", "运行中"], ["done", "完成"], ["bad", "异常"]]} />
+          <Card flush>
+            {runs.length ? <RunRows jobs={runs} devices={data.devices} columns={["place", "source"]} limit={15} /> : <Empty>没有战报</Empty>}
+          </Card>
+        </section>
+      )}
     </>
   );
 }
 
-/** 通知 · 邮件 · 本机 · N 条规则 · 设置 ›: the channels in use and how many rules are on. */
-function NoticeEntry() {
+/** The channels in use and how many rules are on, as 邮件 · 本机 · N 条规则; null until read. */
+function useNoticeSummary(): string | null {
   const { data } = useConsole();
   const [summary, setSummary] = useState<string | null>(null);
   useEffect(() => {
@@ -64,6 +73,17 @@ function NoticeEntry() {
     }).catch(() => { if (current) setSummary(null); });
     return () => { current = false; };
   }, [data.noticeVersion]);
+  return summary;
+}
+/** 通知 at the top right of a wide page. */
+function NoticeButton() {
+  const summary = useNoticeSummary();
+  const rules = summary?.split(" · ").pop();
+  return <ButtonLink small to={paths.notices}>{rules ? `通知 · ${rules}` : "通知"}</ButtonLink>;
+}
+/** 通知 · 邮件 · 本机 · N 条规则 · 设置 ›: the channels in use and how many rules are on. */
+function NoticeEntry() {
+  const summary = useNoticeSummary();
   return (
     <Card flush>
       <RowLink to={paths.notices}>

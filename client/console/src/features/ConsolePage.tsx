@@ -17,11 +17,15 @@ import { LibraryPage, TaskDetailPage, TaskStepDetailPage } from "./library/Libra
 import { MeAccountPage, MePage } from "./me/MePage";
 import { NoticesPage } from "./notices/NoticesPage";
 import { DevWorkbench } from "./dev/DevWorkbench";
+import { TasksDesk } from "./library/TasksDesk";
+import { MeDesk } from "./me/MeDesk";
+import { useWide } from "../shell/useWidth";
 
 export function ConsolePage({ account, signedOut }: { account: Account; signedOut: () => void }) {
   const { data, connection, loaded } = useConsoleStream(signedOut);
   const path = usePath();
-  const [section, page] = route(path);
+  const wide = useWide();
+  const [section, page, full] = (wide && deskRoute(path)) || [...route(path), false] as const;
   const [linkFailed] = useState(() => {
     const failed = new URLSearchParams(location.search).get("error") === "github";
     if (failed) history.replaceState(null, "", location.pathname);
@@ -34,13 +38,37 @@ export function ConsolePage({ account, signedOut }: { account: Account; signedOu
   });
   return (
     <ConsoleContext.Provider value={{ data, account, signedOut }}>
-      <Shell section={section} connection={connection}>
+      <Shell section={section} connection={connection} full={full}>
         {linkFailed && <Message text="GitHub 绑定失败，请重试" />}
         {merge && <MergeCard token={merge} settled={(merged) => { setMerge(null); if (merged) location.reload(); }} />}
         {loaded ? page : <Empty>正在加载…</Empty>}
       </Shell>
     </ConsoleContext.Provider>
   );
+}
+
+/**
+ * On a wide window (≥1024) some addresses open the side-by-side layouts of the design instead of one page at a time:
+ * a task opens beside the task list. The third value lets the page use the whole width.
+ */
+function deskRoute(path: string): readonly [Section, ReactNode, boolean] | null {
+  let p: Record<string, string> | null;
+  if (path === "/" || path === paths.tasks || path === "/library") return ["tasks", <TasksDesk />, true];
+  if ((p = match("/tasks/:gameId/:taskId", path))) return ["tasks", <TasksDesk gameId={p.gameId} taskId={p.taskId} />, true];
+  // A plan opens in a drawer over 账号与计划, and its task settings push into the same drawer.
+  if (path === paths.accounts) return ["accounts", <GameAccountsPage />, true];
+  const plan = (accountId: string, editor: ReactNode) => ["accounts", <GameAccountsPage accountId={accountId} drawer={editor} />, true] as const;
+  if ((p = match("/accounts/:id/plans/new", path))) return plan(p.id, <PlanDetailPage key={`${p.id}:new`} accountId={p.id} drawer />);
+  if ((p = match("/accounts/:id/presets/:presetId", path))) return plan(p.id, <PlanDetailPage key={`${p.id}:preset:${p.presetId}`} accountId={p.id} presetId={p.presetId} drawer />);
+  if ((p = match("/accounts/:id/plans/:planId/tasks/:taskId", path))) {
+    return plan(p.id, <PlanTaskConfigPage key={`${p.id}:${p.planId}:${p.taskId}`} accountId={p.id} planId={p.planId} taskId={p.taskId} drawer />);
+  }
+  if ((p = match("/accounts/:id/plans/:planId", path))) return plan(p.id, <PlanDetailPage key={`${p.id}:${p.planId}`} accountId={p.id} planId={p.planId} drawer />);
+  // The runs table and its detail beside it.
+  if (path === paths.devices) return ["devices", <DevicesPage />, true];
+  // 我的 and 会员与账号 are groups of one settings page.
+  if (path === paths.me || path === paths.meAccount) return ["me", <MeDesk />, false];
+  return null;
 }
 
 function route(path: string): [Section, ReactNode] {

@@ -56,26 +56,21 @@ export function MePage() {
   );
 }
 
-/** 会员与账号: the tier when Pro and the activation code, how this account signs in, its devices, and signing out. */
-export function MeAccountPage() {
-  const { data, account: initial, signedOut } = useConsole();
+/** What 会员与账号 does, shared by the phone page and the wide settings page: redeem a code, unlink GitHub, unbind a device, sign out. */
+export function useMeActions() {
+  const { account: initial, signedOut } = useConsole();
   const [account, setAccount] = useState(initial);
-  const [binding, setBinding] = useState(false);
-  const [offer, setOffer] = useState<MergeOffer | null>(null);
-  const [redeeming, setRedeeming] = useState(false);
-  const [showDevices, setShowDevices] = useState(false);
   const [codeInput, setCodeInput] = useState("");
-  const redeem = () => {
+  const redeem = (done?: () => void) => {
     const trimmed = codeInput.trim();
     if (!trimmed) return;
     orAlert(async () => {
       const updated = await api<Account>("/api/me/redeem", { method: "POST", body: { code: trimmed } });
       setAccount(updated);
       setCodeInput("");
-      setRedeeming(false);
+      done?.();
     });
   };
-  const isPro = account.tier === "PRO";
   const unlink = () => {
     if (!confirm("解绑 GitHub？之后只能用邮箱登录。")) return;
     orAlert(async () => { await api("/api/auth/github", { method: "DELETE" }); setAccount(await api<Account>("/api/me")); });
@@ -86,6 +81,18 @@ export function MeAccountPage() {
   };
   const logout = () => orAlert(async () => { await api("/api/auth/logout", { method: "POST", body: {} }); signedOut(); });
   const expires = account.proExpiresAt ? new Date(account.proExpiresAt).toLocaleDateString("sv-SE") : null;
+  return { account, setAccount, codeInput, setCodeInput, redeem, unlink, unbind, logout, expires, isPro: account.tier === "PRO", signedOut };
+}
+
+/** 会员与账号: the tier when Pro and the activation code, how this account signs in, its devices, and signing out. */
+export function MeAccountPage() {
+  const { data } = useConsole();
+  const { account, setAccount, codeInput, setCodeInput, redeem: redeemCode, unlink, unbind, logout, expires, isPro, signedOut } = useMeActions();
+  const [binding, setBinding] = useState(false);
+  const [offer, setOffer] = useState<MergeOffer | null>(null);
+  const [redeeming, setRedeeming] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
+  const redeem = () => redeemCode(() => setRedeeming(false));
   return (
     <div className={s.page}>
       <Breadcrumb items={[["我的", paths.me], ["会员与账号", null]]} />
@@ -133,7 +140,7 @@ export function MeAccountPage() {
 }
 
 /** The plan time zone, saved as soon as it is picked; every plan runs by it. */
-function TimeZone({ zone }: { zone: string }) {
+export function TimeZone({ zone }: { zone: string }) {
   const zones = useMemo(() => {
     const all = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
     return all.includes(zone) ? all : [zone, ...all];

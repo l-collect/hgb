@@ -19,14 +19,15 @@ const LIVE: Record<Connection, string> = { live: "实时连接中", connecting: 
 const LIVE_SHORT: Record<Connection, string> = { live: "已连接", connecting: "连接中", lost: "已断开" };
 
 /**
- * The frame every console page sits in, in the three widths of the design: from 1024 a 240 sidebar with full names, from
- * 600 a rail of icons with short labels, and below that a top bar with the section's name and four tabs at the bottom.
+ * The frame every console page sits in, in the widths of the design: from 1280 a 240 sidebar with full names, from 600 a
+ * rail of icons with short labels, and below that a top bar with the section's name and four tabs at the bottom.
+ * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1200.
  */
-export function Shell({ section, connection, children }: { section: Section; connection: Connection; children: ReactNode }) {
+export function Shell({ section, connection, full, children }: { section: Section; connection: Connection; full?: boolean; children: ReactNode }) {
   // The workbench lives under 我的.
   const current = section === "dev" ? "me" : section;
   return (
-    <div className={s.shell} data-wide={section === "dev"}>
+    <div className={s.shell} data-wide={section === "dev" || full === true}>
       <header className={s.top}>
         <Mark size={26} /><b className={s.topTitle}>{TITLES[section]}</b>
         <span className={s.liveShort} role="status"><span className={s.liveDot} data-state={connection} aria-hidden="true" />{LIVE_SHORT[connection]}</span>

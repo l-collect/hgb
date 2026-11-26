@@ -151,7 +151,7 @@ export function JobPage({ id }: { id: string }) {
 }
 
 /** The screen the job stopped on, as its device sent it; nothing when there is none. */
-function StoppedOn({ id, version }: { id: string; version: string }) {
+export function StoppedOn({ id, version }: { id: string; version: string }) {
   const [shown, setShown] = useState(true);
   useEffect(() => setShown(true), [version]);
   if (!shown) return null;
