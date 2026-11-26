@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { ask } from "../../components/Confirm";
 import { Stepper } from "../../components/ui";
 import { Link } from "../../router";
 import { dev, type Sample, type Template } from "./api";
 import { colorAt, colorLine, pixelsOf, validSetName, type ColorPick } from "./colors";
 import { devPaths, failure, useDev } from "./context";
 import { isObj, nodeDigest, resources, target } from "./model";
+import { ConditionOut, type InsertTarget } from "./sentence";
 import w from "./Wb.module.css";
 import s from "./Workspace.module.css";
 
@@ -21,18 +23,18 @@ const padded = (rect: number[], sm: { width: number; height: number }) => {
 /**
  * 框区域 / 裁模板 / 取色 / 存样本 on a picture of the phone (where a trial stopped, or the live screen). The picture is
  * kept as a sample first (made height 1080, bars cut, as every sample), so the numbers are the ones 素材 gives; the
- * condition made goes 插到 the line, or is copied.
+ * condition made becomes a whole line (等 / 点 / 如果看到) that replaces the line's condition or goes after it, or is copied.
  */
-export function FrameTools({ picture, makeSample, line, onInsert, assets }: {
+export function FrameTools({ picture, makeSample, target: into, assets }: {
   /** What is shown until a tool is picked. */
   picture: ReactNode;
   makeSample: () => Promise<Sample>;
-  /** The line a condition goes after (the failed line or the cursor's); null: only 复制. */
-  line: number | null; onInsert: (text: string, after: number) => void;
+  /** The line a condition is for (the failed line or the cursor's); null: only 复制. */
+  target: InsertTarget | null;
   /** 素材 with this line to come back to. */
   assets: string;
 }) {
-  const { game, apply, me } = useDev();
+  const { game, apply, me, draft } = useDev();
   const [sample, setSample] = useState<Sample | null>(null);
   const [tool, setTool] = useState<Tool | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -45,6 +47,8 @@ export function FrameTools({ picture, makeSample, line, onInsert, assets }: {
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [reason, setReason] = useState("");
   const [made, setMade] = useState<Template | null>(null);
+  // The words a region waits for: what was read in the box, or typed when nothing was.
+  const [word, setWord] = useState("");
   const box = useRef<HTMLDivElement>(null);
   const start = useRef<[number, number] | null>(null);
   useEffect(() => { setRect(null); setPicks([]); setMade(null); setConfirmed([]); setGroupName(null); }, [tool]);
@@ -99,6 +103,8 @@ export function FrameTools({ picture, makeSample, line, onInsert, assets }: {
   const up = () => { start.current = null; setRect((r) => r && (r[2] < 4 || r[3] < 4) ? null : r); };
 
   const inside = sample && rect ? [...new Set(sample.texts.filter((t) => overlaps(t.box, rect)).map((t) => t.text))] : [];
+  const read = inside[0] ?? "";
+  useEffect(() => { setWord(read); }, [read, rect?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   const cut = async () => {
     if (!sample || !rect || !name.trim()) return;
     setBusy("cut"); setSaid(null);
@@ -119,12 +125,13 @@ export function FrameTools({ picture, makeSample, line, onInsert, assets }: {
   const saveSet = async (named: string) => {
     if (!validSetName(named)) { setSaid(["组名不能有空格、@、#、逗号或引号", false]); return; }
     const x0 = Math.min(...picks.map((p) => p.x)), y0 = Math.min(...picks.map((p) => p.y));
+    const lib = draft ? target(draft.body, game)?.library : undefined;
+    if (isObj(lib) && isObj(lib.colors) && named in lib.colors && !await ask({ title: `替换取色组 ${named}？`, body: "已有同名的组", ok: "替换", danger: true })) return;
     let kept = false;
     const problem = await apply(async (b) => {
-      const now = target(b, game); if (!now) return [];
+      const now = target(b, game); if (!now) { kept = true; return []; }
       const library = isObj(now.library) ? now.library : {};
       const old = isObj(library.colors) ? library.colors : {};
-      if (named in old && !confirm(`已有取色组 ${named}，替换它？`)) { kept = true; return []; }
       const colors = { ...old, [named]: picks.map((p) => `${p.x - x0},${p.y - y0}#${p.hex}`) };
       return [{ op: "put", path: `targets:${game}`, expect: await nodeDigest(now), value: { ...now, library: { ...library, colors } } }];
     });
@@ -133,11 +140,12 @@ export function FrameTools({ picture, makeSample, line, onInsert, assets }: {
     setSaid(problem ? [problem, false] : [`已存为 ${named} · 写 色 ${named}@${x0},${y0} 容差 ${tolerance}`, true]);
   };
 
-  const result: { head: string; text: string } | null = !sample || !tool ? null
-    : tool === "color" ? (picks.length ? { head: `取色 · ${picks.length} 点 · 容差 ${tolerance}`, text: colorLine(picks, tolerance) } : null)
+  const typed = word.trim().replace(/["“”]/g, "");
+  const result: { head: string; text: string | null; kind: "text" | "image" | "color" } | null = !sample || !tool ? null
+    : tool === "color" ? (picks.length ? { head: `取色 · ${picks.length} 点 · 容差 ${tolerance}`, text: colorLine(picks, tolerance), kind: "color" } : null)
     : !rect ? null
-    : tool === "region" ? { head: inside.length ? `框区域 · 读到「${inside.join("」「")}」` : "框区域", text: `"${inside[0] ?? "文字"}"@${rect.join(",")}` }
-    : made ? { head: `模板 ${made.id} · ${made.width}×${made.height}`, text: `图 ${made.id.split("@")[0]}@${padded(rect, sample).join(",")}` } : null;
+    : tool === "region" ? { head: inside.length ? `框区域 · 读到「${inside.join("」「")}」` : sample.recognized ? "框区域 · 框里没读到字" : "框区域 · 还没识别", text: typed ? `"${typed}"@${rect.join(",")}` : null, kind: "text" }
+    : made ? { head: `模板 ${made.id} · ${made.width}×${made.height}`, text: `图 ${made.id.split("@")[0]}@${padded(rect, sample).join(",")}`, kind: "image" } : null;
 
   return (
     <div className={s.tools}>
@@ -167,12 +175,11 @@ export function FrameTools({ picture, makeSample, line, onInsert, assets }: {
       {result && (
         <div className={s.result}>
           <span className={w.muted}>{result.head}</span>
-          <code className={s.code}>{result.text}</code>
-          <div className={s.toolRow}>
-            {line !== null && <button type="button" className={`${w.btn} ${w.primary} ${w.sm} ${s.grow}`} onClick={() => onInsert(result.text, line)}>插到 L{line + 1}</button>}
-            {tool === "color" && <button type="button" className={`${w.btn} ${w.sm}`} onClick={() => setGroupName(groupName === null ? "" : null)}>存为组</button>}
-            <button type="button" className={`${w.btn} ${w.sm}`} onClick={() => copy(result.text)}>复制</button>
-          </div>
+          {result.kind === "text" && <input aria-label="要等的字" className={w.input} value={word} onChange={(e) => setWord(e.target.value)} placeholder="框里要等的字" />}
+          <ConditionOut className={s.toolCol} cond={result.text} kind={result.kind} target={into} copy={copy} missing="框里没读到字：填上要等的字才能插入" />
+          {tool === "color" && <div className={s.toolRow}>
+            <button type="button" className={`${w.btn} ${w.sm}`} onClick={() => setGroupName(groupName === null ? "" : null)}>存为组</button>
+          </div>}
           {groupName !== null && <div className={s.toolRow}>
             <input autoFocus aria-label="组名" className={`${w.input} ${s.grow}`} value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="组名，如 破字印章" />
             <button type="button" className={`${w.btn} ${w.sm}`} disabled={!groupName.trim()} onClick={() => void saveSet(groupName.trim())}>存</button>

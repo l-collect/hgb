@@ -2,7 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Chips, MoreMenu, Pill, SegmentTabs } from "../../components/ui";
 import { Link, navigate, usePath, useQuery } from "../../router";
 import { dev, follow, type DevRun, type DevTrace, type Obj, type Sample } from "./api";
-import { devPaths, failure, useDev, type Edit } from "./context";
+import { devPaths, EDIT_CONFLICT, failure, useDev, type Edit } from "./context";
+import { startedHere, useDevRun } from "./events";
 import { FrameTools } from "./FrameTools";
 import { FrameView, useFrames } from "./FrameReplay";
 import { uniqueId } from "./HomePage";
@@ -10,6 +11,10 @@ import { isObj, nodeDigest, objs, snippets, str, target, tasks, usedSnippets, ty
 import { NameButton } from "./NameButton";
 import { openDirect, type DirectScreen } from "./direct";
 import { completed, failedAt, failReason, insertAfter, missBoxes, ok, ownerOfStep, placeOf, running, snippetKey, testValues, type OwnerKey } from "./runs";
+import type { InsertTarget } from "./sentence";
+import { lineDiff, useDevice } from "./wb";
+import { Located } from "./where";
+import pub from "./Publish.module.css";
 import type { LineFailure, LineMark, ScriptNames, TemplateView } from "./ScriptEditor";
 import w from "./Wb.module.css";
 import s from "./Workspace.module.css";
@@ -48,7 +53,7 @@ const HELP: [string, string][] = [
 ];
 
 type Tab = "run" | "problems" | "screen" | "help";
-type Issue = { line: number | null; reason: string };
+type Issue = { line: number | null; reason: string; location: string };
 
 /**
  * 工作区: a task (or, with no task, the snippet library) as one page — steps on the left, the script in the middle,
@@ -56,7 +61,8 @@ type Issue = { line: number | null; reason: string };
  * condition there, and every line it ran. The loop write → check → run → fix → run again stays on this page.
  */
 export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { task?: string; step?: string; snippet?: string }) {
-  const { draft, game, apply, reloadTrials, edits: allEdits, setEdits: setAllEdits, device } = useDev();
+  const { draft, game, apply, reloadTrials, edits: allEdits, setEdit: putEdit, saveScript, conflicts, device } = useDev();
+  const phone = useDevice();
   const path = usePath();
   const query = useQuery();
   const body = draft?.body;
@@ -76,8 +82,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const scoped = useCallback((k: OwnerKey) => k.startsWith("step:") ? `step:${taskId}/${k.slice(5)}` : k, [taskId]);
   const edits = useMemo(() => Object.fromEntries(Object.entries(allEdits).flatMap(([k, v]) =>
     k.startsWith(`step:${taskId}/`) ? [[`step:${k.slice(6 + String(taskId).length)}`, v]] : k.startsWith("snippet:") ? [[k, v]] : [])), [allEdits, taskId]);
-  const setEdit = useCallback((k: OwnerKey, v: string | undefined) => setAllEdits((all) => {
-    const next = { ...all }; if (v === undefined) delete next[scoped(k)]; else next[scoped(k)] = v; return next; }), [setAllEdits, scoped]);
+  const setEdit = useCallback((k: OwnerKey, v: string | undefined) => putEdit(scoped(k), v, savedOf(k)), [putEdit, scoped, savedOf]);
   const [message, setMessage] = useState<[string, boolean] | null>(null);
   const say = (text: string | null) => setMessage(text ? [text, false] : null);
   const [tab, setTab] = useState<Tab>(taskId ? "run" : "problems");
@@ -99,9 +104,20 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     setGoTo({ key, line: after + 1, at: Date.now() });
     setMessage([`已插到 L${after + 1}`, true]);
   }, [key, setEdit]);
+  /** Puts [line] in place of line [at] of the open script, unsaved, and goes to it. */
+  const replaceAt = useCallback((at: number, line: string) => {
+    if (!key) return;
+    const lines = textNow.current.split("\n");
+    if (at < 1 || at > lines.length) return;
+    lines[at - 1] = line;
+    setEdit(key, lines.join("\n"));
+    setGoTo({ key, line: at, at: Date.now() });
+    setMessage([`已替换 L${at} 的条件`, true]);
+  }, [key, setEdit]);
 
   // From other parts: ?insert=<text>&line=N (素材's 插到) puts the text after line N; ?line=N alone opens there;
-  // ?values=<json> (配置项's 用这组值试跑) becomes the 自定义 test values. Each is taken once and dropped from the address.
+  // ?values=<json> (配置项's 带回试跑) becomes the 自定义 test values. Each is taken once and dropped from the address.
+  const [scope, setScope] = useState<"step" | "task">("step");
   const [custom, setCustom] = useState<Obj | null>(null);
   const [preset, setPreset] = useState(0);
   const qs = query.toString();
@@ -115,8 +131,13 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       catch { say("测试值读不懂"); }
       q.delete("values"); drop = true;
     }
+    // ?scope=task (发布's 整任务试跑) opens the trial on the whole task.
+    if (q.get("scope") === "task") { setScope("task"); setTab("run"); q.delete("scope"); drop = true; }
     const insert = q.get("insert"); const line = q.get("line");
-    if (insert !== null && key && isScript) { insertAt(insert, Math.max(0, Number(line) || 0)); q.delete("insert"); q.delete("line"); drop = true; }
+    if (insert !== null && key && isScript) {
+      if (q.get("replace") === "1") replaceAt(Math.max(1, Number(line) || 1), insert); else insertAt(insert, Math.max(0, Number(line) || 0));
+      q.delete("insert"); q.delete("line"); q.delete("replace"); drop = true;
+    }
     else if (insert === null && line && key && linked.current !== `${key}#${line}`) { linked.current = `${key}#${line}`; setGoTo({ key, line: Number(line), at: Date.now() }); }
     if (drop) navigate(path + (q.toString() ? `?${q}` : ""), { replace: true });
   }, [qs, key, isScript]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -126,29 +147,26 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const savingRef = useRef(false);
   const startingRef = useRef(false);
 
-  const save = useCallback(async (k: OwnerKey) => {
-    const raw = edits[k]; if (raw === undefined) return true;
+  const save = useCallback(async (k: OwnerKey, force = false) => {
+    if (edits[k] === undefined) return true;
     if (savingRef.current) return false;
     savingRef.current = true; setSaving(true);
-    const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n+$/, "");
     try {
-      const problem = await apply(async (b) => {
-        const now = ownerIn(b, k); if (!now) return [];
-        return [{ op: "put", path: k.startsWith("step:") ? `tasks:${taskId}/steps:${k.slice(5)}` : `snippets:${k.slice(8)}`, expect: await nodeDigest(now), value: { ...now, script: normalized } }];
-      });
-      if (problem) { say(problem); return false; }
-      setAllEdits((all) => { const next = { ...all }; if (next[scoped(k)] === raw || next[scoped(k)] === normalized) delete next[scoped(k)]; return next; });
+      const problem = await saveScript(scoped(k), force);
+      if (problem) { say(problem); if (problem === EDIT_CONFLICT && k !== key) openKeyRef.current(k); return false; }
       return true;
     } finally {
       savingRef.current = false; setSaving(false);
     }
-  }, [edits, apply, ownerIn, taskId, setAllEdits, scoped]);
+  }, [edits, saveScript, scoped, key]);
+  const openKeyRef = useRef<(k: OwnerKey) => void>(() => undefined);
 
   // ---- checking: the draft as it would be with this text, a moment after typing stops
   const [issues, setIssues] = useState<Issue[] | null>(null);
+  const [others, setOthers] = useState<Issue[]>([]);
   const prefix = !key ? "" : key.startsWith("snippet:") ? `snippet/${key.slice(8)}` : `target/${String(task?.raw.targetId ?? "")}/task/${taskId}/step/${key.slice(5)}`;
   useEffect(() => {
-    if (!body || !key || !isScript) { setIssues([]); return; }
+    if (!body || !key || !isScript) { setIssues([]); setOthers([]); return; }
     let live = true; setIssues(null);
     const timer = setTimeout(async () => {
       const copy = JSON.parse(JSON.stringify(body)) as Obj;
@@ -157,11 +175,17 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       try {
         const result = await dev.check(copy);
         if (!live) return;
-        setIssues(result.issues.filter((x) => x.location === prefix || x.location.startsWith(`${prefix}/`)).map((x) => {
+        // This script's, then the rest of the task's: its other steps and the snippets it uses.
+        const used = task ? usedSnippets(copy, task.raw).map((id) => `snippet/${id}`) : [];
+        const taskAt = task ? `target/${String(task.raw.targetId ?? "")}/task/${taskId}` : null;
+        const within = (loc: string, at: string) => loc === at || loc.startsWith(`${at}/`);
+        setIssues(result.issues.filter((x) => within(x.location, prefix)).map((x) => {
           const line = /\/script\/line\/(\d+)$/.exec(x.location);
-          return { line: line ? Number(line[1]) : null, reason: x.reason };
+          return { line: line ? Number(line[1]) : null, reason: x.reason, location: x.location };
         }));
-      } catch (error) { if (live) setIssues([{ line: null, reason: `检查没做成：${failure(error)}` }]); }
+        setOthers(result.issues.filter((x) => !within(x.location, prefix) && ((taskAt && within(x.location, taskAt)) || used.some((at) => within(x.location, at))))
+          .map((x) => ({ line: null, reason: x.reason, location: x.location })));
+      } catch (error) { if (live) { setIssues([{ line: null, reason: `检查没做成：${failure(error)}`, location: "" }]); setOthers([]); } }
     }, 600);
     return () => { live = false; clearTimeout(timer); };
   }, [text, body, key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -196,8 +220,12 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const template = useCallback((name: string): TemplateView | null => names.templates.includes(name) ? { src: dev.templateImage(game, name), meta: sizes[name] ?? "模板" } : null, [names, game, sizes]);
 
   // ---- trials: the task's newest one, followed while it goes on
-  const [scope, setScope] = useState<"step" | "task">("step");
   const [run, setRun] = useState<DevRun | null>(null);
+  // Starting: the server compiles the draft first (about half a minute), then the phone takes it.
+  const [preparing, setPreparing] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+  // The trial shown was started on the phone (or another window), not here.
+  const [fromPhone, setFromPhone] = useState(false);
   const shown = useRef<string | null>(null);
   const show = (x: DevRun) => { if (shown.current === x.id) setRun(x); };
   useEffect(() => () => { shown.current = null; }, []);
@@ -208,21 +236,32 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     dev.runs().then(async (all) => {
       const mine = all.find((x) => x.kind === "trial" && x.task === taskId && (!wanted || x.id === wanted));
       if (!mine || shown.current !== null) return;
-      shown.current = mine.id; setRun(mine);
+      shown.current = mine.id; setRun(mine); setFromPhone(!startedHere.has(mine.id));
       if (running(mine)) { await follow(mine.id, show); await reloadTrials(); }
     }).catch(() => undefined);
   }, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Pushed by the server: the trial shown as it goes, and a trial of this task started on the phone, shown at once.
+  useDevRun((x) => {
+    if (x.kind !== "trial" || x.target !== game || x.task !== taskId) return;
+    if (shown.current === x.id) { setRun((was) => was && was.updatedAt > x.updatedAt ? was : x); return; }
+    if (!running(x) || startingRef.current || startedHere.has(x.id) || shown.current === "") return;
+    shown.current = x.id; setRun(x); setFromPhone(true); setRunError(null);
+  }, [game, taskId]);
   const presets = task ? testValues(task.fields) : [];
   const values = preset === -1 && custom ? custom : presets[preset]?.[1] ?? presets[0]?.[1] ?? {};
   const start = async () => {
     if (!task || !device || startingRef.current) return;
     startingRef.current = true; setStarting(true);
-    setMessage(null); setTab("run");
+    setMessage(null); setTab("run"); setRunError(null);
+    // The old result goes at once: what shows now is this trial's.
+    shown.current = ""; setRun(null); setFromPhone(false);
     try {
-      for (const k of dirtyKeys) if (!await save(k)) return;
+      for (const k of dirtyKeys) if (!await save(k)) { setRunError("有脚本没保存成，没开始试跑"); return; }
       const only = scope === "step" && step && !snippetId ? String(step.id) : undefined;
-      shown.current = "";
+      setPreparing(true);
       const started = await dev.startRun({ kind: "trial", target: game, device, task: task.id, step: only, configuration: values });
+      startedHere.add(started.id);
+      setPreparing(false);
       shown.current = started.id; setRun(started);
       const done = await follow(started.id, show);
       await reloadTrials();
@@ -230,8 +269,8 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
         show(x); return (completed(done) || !!x.screen) && !!x.framesUploaded;
       }).catch(() => false)); i++)
         await new Promise((resolve) => setTimeout(resolve, 1500));
-    } catch (error) { say(failure(error)); }
-    finally { startingRef.current = false; setStarting(false); }
+    } catch (error) { setRunError(failure(error)); }
+    finally { startingRef.current = false; setStarting(false); setPreparing(false); }
   };
 
   // ---- the run read against the scripts it ran
@@ -266,6 +305,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     const st = task.steps.find((x) => ownerOfStep(x) === k);
     navigate(st ? devPaths.step(task.id, String(st.id)) : devPaths.taskSnippet(task.id, k.slice(8)));
   };
+  openKeyRef.current = (k) => openKey(k);
   const lines = (k: OwnerKey) => (savedOf(k) ?? "").split("\n").length;
   const uses = (id: string) => tasks(body).filter((t) => usedSnippets(body, t.raw).includes(id)).length;
   const label = !key ? "" : step && !snippetId ? str(step.name) ?? String(step.id) : key.startsWith("snippet:") ? key.slice(8) : key.slice(5);
@@ -274,8 +314,12 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const insertLine = isScript ? failed?.line ?? cursor : null;
   const backHere = task && step && !snippetId && insertLine !== null
     ? `?task=${encodeURIComponent(task.id)}&step=${encodeURIComponent(String(step.id))}&line=${insertLine}` : "";
+  const insertTarget: InsertTarget | null = insertLine === null ? null
+    : { line: insertLine, lineText: text.split("\n")[insertLine - 1] ?? null, insert: insertAt, replace: replaceAt };
+  const conflicted = !!key && conflicts.includes(scoped(key));
+  const offline = !!device && phone !== undefined && !phone.online;
   const category = task ? str(objs(target(body, String(task.raw.targetId))?.categories).find((c) => c.id === task.raw.category)?.name) ?? CATEGORY[str(task.raw.category) ?? ""] ?? "任务" : "";
-  const tabs: [Tab, string][] = [...(task ? [["run", "试跑"] as [Tab, string]] : []), ["problems", issues?.length ? `问题 ${issues.length}` : "问题"], ["screen", "画面"], ["help", "写法"]];
+  const tabs: [Tab, string][] = [...(task ? [["run", "试跑"] as [Tab, string]] : []), ["problems", issues?.length || others.length ? `问题 ${(issues?.length ?? 0) + others.length}` : "问题"], ["screen", "画面"], ["help", "写法"]];
 
   return (
     <div className={s.layout}>
@@ -305,14 +349,17 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
             {key.startsWith("snippet:") && <Pill>片段 · 用在 {uses(key.slice(8))} 处</Pill>}
             <span className={s.grow} />
             {isScript && <span className={w.muted}>{issues === null ? "检查中…" : issues.length ? <button type="button" className={s.linkish} onClick={() => setTab("problems")}>{issues.length} 处问题</button> : "没问题"}</span>}
-            {dirty && <span className={s.unsaved}>未保存</span>}
-            {isScript && <button type="button" className={`${w.btn} ${w.sm} ${dirty ? w.primary : ""}`} disabled={saving || !dirty} onClick={() => void save(key)}>
+            {dirty && <span className={s.unsaved}>{conflicted ? "冲突" : "未保存"}</span>}
+            {isScript && <button type="button" className={`${w.btn} ${w.sm} ${dirty ? w.primary : ""}`} disabled={saving || !dirty || conflicted} onClick={() => void save(key)}>
               {saving ? "保存中…" : <>保存 <kbd className={s.kbd}>⌘S</kbd></>}</button>}
           </div>
+          {conflicted && isScript && <Conflict theirs={saved ?? ""} mine={text} busy={saving}
+            onMine={async () => { if (await save(key, true)) say(null); }}
+            onTheirs={() => { setEdit(key, undefined); setMessage(["已换成别处的版本", true]); }} />}
           {isScript ? (
             <div className={`${w.card} ${s.script}`}>
               <Suspense fallback={<div className={w.empty}>正在打开编辑器…</div>}>
-                <ScriptEditor key={key} value={text} onChange={(v) => setEdit(key, v === saved ? undefined : v)} onSave={() => void save(key)} onCursor={setCursor}
+                <ScriptEditor key={key} value={text} onChange={(v) => setEdit(key, v === saved ? undefined : v)} onSave={() => { if (!conflicted) void save(key); }} onCursor={setCursor}
                   problems={problems} names={names} goTo={goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)} marks={marks} failure={failed} template={template} />
               </Suspense>
             </div>
@@ -331,16 +378,24 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
         </div>
         <div className={s.panel}>
           {task && tab === "run" && (
-            <RunPanel task={task} step={step} snippetOpen={!!snippetId} run={run} busy={busy} device={device} failIndex={failIndex} places={places} savedOf={savedOf}
+            <RunPanel task={task} step={step} snippetOpen={!!snippetId} run={run} busy={busy} device={device} offline={offline} failIndex={failIndex} places={places} savedOf={savedOf}
               why={why} scope={scope} setScope={setScope} presets={presets} custom={custom} preset={preset} setPreset={setPreset}
-              onStart={() => void start()} onOpen={openKey} onMessage={say} insertLine={insertLine} onInsert={insertAt} backHere={backHere} />
+              preparing={preparing} error={runError} fromPhone={fromPhone} body={body} onRefresh={(x) => { if (shown.current === x.id) setRun(x); }}
+              onStart={() => void start()} onOpen={openKey} onMessage={(t) => setRunError(t)} target={insertTarget} backHere={backHere} />
           )}
-          {tab === "problems" && (issues === null ? <span className={w.muted}>检查中…</span>
-            : issues.length === 0 ? <span className={w.muted}>没问题</span>
-            : issues.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && x.line !== null && setGoTo({ key, line: x.line, at: Date.now() })}>
-              {x.line !== null && <span className={s.ln}>L{x.line}</span>}{x.reason}</button>))}
+          {tab === "problems" && (issues === null ? <span className={w.muted}>检查中…</span> : <>
+            <div className={s.group}>本脚本</div>
+            {issues.length === 0 ? <span className={w.muted}>没问题</span>
+              : issues.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && x.line !== null && setGoTo({ key, line: x.line, at: Date.now() })}>
+                {x.line !== null && <span className={s.ln}>L{x.line}</span>}{x.reason}</button>)}
+            {task && <>
+              <div className={s.group}>这个任务用到的</div>
+              {others.length === 0 ? <span className={w.muted}>没问题</span>
+                : others.map((x, i) => <div key={i} className={s.problem}><Located text={x.location} body={body} />：{x.reason}</div>)}
+            </>}
+          </>)}
           {tab === "screen" && (device
-            ? <FrameTools key={device} picture={<Peek device={device} />} line={insertLine} onInsert={insertAt} assets={backHere}
+            ? <FrameTools key={device} picture={<Peek device={device} />} target={insertTarget} assets={backHere}
                 makeSample={() => sampleNow(game, device)} />
             : <span className={w.muted}>顶栏选一台手机</span>)}
           {tab === "help" && <div className={s.help}>
@@ -462,11 +517,12 @@ function StepTools({ task, step, apply, onMessage, onRemoved }: { task: TaskDef;
 }
 
 /** 试跑: scope, test values, run; where it stopped and why, the screen it stopped on with the tools, and every line it ran. */
-function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolean; run: DevRun | null; busy: boolean; device: string | null; failIndex: number;
+function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolean; run: DevRun | null; busy: boolean; device: string | null; offline: boolean; failIndex: number;
   places: { key: OwnerKey; line: number }[][]; savedOf: (k: OwnerKey) => string | undefined; why: string;
   scope: "step" | "task"; setScope: (v: "step" | "task") => void; presets: [string, Obj][]; custom: Obj | null; preset: number; setPreset: (i: number) => void;
+  preparing: boolean; error: string | null; fromPhone: boolean; body: Obj; onRefresh: (run: DevRun) => void;
   onStart: () => void; onOpen: (k: OwnerKey, line?: number) => void; onMessage: (text: string | null) => void;
-  insertLine: number | null; onInsert: (text: string, after: number) => void; backHere: string }) {
+  target: InsertTarget | null; backHere: string }) {
   const { task, step, run, busy, failIndex, places } = p;
   const canStep = !!step && !p.snippetOpen;
   const scope = canStep ? p.scope : "task";
@@ -497,10 +553,28 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
   const failRow = rows.find((r) => r.bad);
   const stopped = run && !busy && !completed(run);
   const halted = run && (run.facts.some((f) => f.type === "stopped") || run.detail === "在控制台停止");
-  const [pill, tone]: [string, "ok" | "bad" | "info" | ""] = busy ? [run?.state === "SENT" ? "等手机…" : "试跑中", "info"]
+  const now = busy && run?.state === "RUNNING" ? rows.at(-1) : undefined;
+  const [pill, tone]: [string, "ok" | "bad" | "info" | ""] = p.preparing ? ["服务器准备中（约 30 秒）", "info"]
+    : busy ? [!run ? "开始中…" : run.state === "SENT" ? "等手机…" : `试跑中${now ? ` · ${where(now)}` : ""}`, "info"]
     : !run ? ["还没试跑", ""] : completed(run) ? ["通过", "ok"] : halted ? ["已停止", ""]
     : failRow ? [`停在 ${where(failRow)}`, "bad"] : ["没通过", "bad"];
   const secs = run ? Math.max(0, Math.round((run.updatedAt - run.createdAt) / 1000)) : 0;
+  // The screen a failed trial stopped on comes a moment after the result: wait for it a while, then offer to ask again.
+  const [late, setLate] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const waitingScreen = !!run && !busy && !completed(run) && !run.screen;
+  useEffect(() => {
+    setLate(false);
+    if (!waitingScreen) return;
+    const t = setTimeout(() => setLate(true), 15_000);
+    return () => clearTimeout(t);
+  }, [run?.id, waitingScreen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const askAgain = async () => {
+    if (!run) return;
+    setAsking(true);
+    try { const x = await dev.run(run.id); p.onRefresh(x); if (!x.screen) setLate(true); } catch (error) { p.onMessage(failure(error)); }
+    setAsking(false);
+  };
   // A 7×4 lineup alone makes 28 variants: show a few, the chosen one always among them, the rest behind ＋N.
   const [allValues, setAllValues] = useState(false);
   const every: [number, string][] = [...p.presets.map(([name], i) => [i, name] as [number, string]), ...(p.custom ? [[-1, "自定义"] as [number, string]] : [])];
@@ -532,15 +606,18 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
       <Link className={s.plus} to={devPaths.config(task.id)} title="在配置项页调一组值带回来">＋</Link>
     </div>}
     <div className={s.line}>
-      <button type="button" className={`${w.btn} ${w.primary} ${s.grow}`} disabled={busy || !p.device} title={scope === "step" && task.steps.indexOf(step!) > 0 ? "会先跑第 1 步" : undefined}
-        onClick={p.onStart}>{busy ? "试跑中…" : !p.device ? "顶栏选手机" : scope === "step" ? "▶ 试跑本步" : "▶ 试跑整个任务"}</button>
+      <button type="button" className={`${w.btn} ${w.primary} ${s.grow}`} disabled={busy || !p.device || p.offline}
+        onClick={p.onStart}>{busy ? "试跑中…" : !p.device ? "顶栏选手机" : p.offline ? "手机离线" : scope === "step" ? "▶ 试跑本步" : "▶ 试跑整个任务"}</button>
       {busy && run && <button type="button" className={w.btn} disabled={run.stopping}
         onClick={async () => { try { await dev.stopRun(run.id); } catch (error) { p.onMessage(failure(error)); } }}>{run.stopping ? "正在停…" : "停止"}</button>}
     </div>
-    {run && <div className={s.line}>
+    {scope === "step" && step && task.steps.indexOf(step) > 0 && !busy && <span className={w.muted}>本步会先跑第 1 步</span>}
+    {p.error && <div role="alert" className={w.message}><Located text={p.error} body={p.body} /></div>}
+    {(run || p.preparing || busy) && <div className={s.line}>
+      {p.fromPhone && run && <Pill tone="soft">{busy ? "来自手机 · 进行中" : "来自手机"}</Pill>}
       {failRow?.key && !busy ? <button type="button" className={s.linkish} onClick={() => p.onOpen(failRow.key!, failRow.line)}><Pill tone={tone || undefined}>{pill}</Pill></button>
         : <Pill tone={tone || undefined}>{pill}</Pill>}
-      <span className={w.muted}>{secs} 秒{run.frameCount ? ` · ${run.frameCount} 帧` : ""}</span>
+      {run && <span className={w.muted}>{secs} 秒{run.frameCount ? ` · ${run.frameCount} 帧` : ""}</span>}
       <span className={s.grow} />
       {frames.length > 0 && <>
         <button type="button" className={`${w.btn} ${w.sm}`} aria-label="上一帧" disabled={view === 0} onClick={() => setView(view === null ? frames.length - 1 : Math.max(0, view - 1))}>◀</button>
@@ -552,8 +629,11 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
       <FrameView frame={frame} />
       <span className={w.muted}>帧 {view! + 1}/{frames.length}{frame.lookMs > 0 ? ` · ${frame.lookMs}ms` : ""}{frame.matched.length ? ` · 命中 ${frame.matched.join("、")}` : ""}</span>
     </> : stopped && (stopPicture
-      ? <FrameTools key={run!.id} picture={stopPicture} line={p.insertLine} onInsert={p.onInsert} assets={p.backHere} makeSample={() => dev.keepRunScreen(run!.id)} />
-      : !halted && <span className={w.muted}>停下画面：等手机传上来…</span>)}
+      ? <FrameTools key={run!.id} picture={stopPicture} target={p.target} assets={p.backHere} makeSample={() => dev.keepRunScreen(run!.id)} />
+      : !halted && (late
+        ? <div className={s.line}><span className={w.muted}>停下画面没传上来</span>
+            <button type="button" className={`${w.btn} ${w.sm}`} disabled={asking} onClick={() => void askAgain()}>{asking ? "获取中…" : "重新获取"}</button></div>
+        : <span className={w.muted}>停下画面：等手机传上来…</span>))}
     {rows.length > 0 && (
       <div className={`${w.card} ${s.rows}`}>
         {rows.map((r) => {
@@ -574,6 +654,25 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
       </div>
     )}
   </>;
+}
+
+/** A script changed elsewhere while it was edited here: both sides, line by line, and which to keep. */
+function Conflict({ theirs, mine, busy, onMine, onTheirs }: { theirs: string; mine: string; busy: boolean; onMine: () => void; onTheirs: () => void }) {
+  const lines = lineDiff(theirs, mine);
+  const shown = lines.filter((l, i, all) => l.kind !== "same" || all.slice(Math.max(0, i - 2), i + 3).some((x) => x.kind !== "same"));
+  return (
+    <div className={`${w.card} ${s.conflict}`} role="alert">
+      <b>别处改过这段脚本（你开始编辑之后）</b>
+      <span className={w.muted}>− 别处的 · + 你的</span>
+      <div className={pub.diff}>
+        {shown.map((l, i) => <div key={i} className={pub.diffLine} data-kind={l.kind}><span className={pub.ln}>{l.kind === "add" ? l.b : l.a}</span><span>{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "} {l.text}</span></div>)}
+      </div>
+      <div className={s.toolRow}>
+        <button type="button" className={`${w.btn} ${w.sm} ${w.primary}`} disabled={busy} onClick={onMine}>用我的</button>
+        <button type="button" className={`${w.btn} ${w.sm}`} disabled={busy} onClick={onTheirs}>用别处的</button>
+      </div>
+    </div>
+  );
 }
 
 /** The best score a look reached ("0.97"), or a colour's difference. */

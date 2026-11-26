@@ -2,7 +2,9 @@ import type { Device } from "../../api/types";
 import { navigate, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { useDev } from "./context";
-import { tasks } from "./model";
+import { snippets, str, tasks } from "./model";
+import { ownerOfStep } from "./runs";
+import type { InsertTarget } from "./sentence";
 
 /** Shared by the 素材 / 页面 / 配置项 / 发布 sections of the v7 workbench: addresses, the current phone, 「插到」, a line diff. */
 
@@ -21,15 +23,25 @@ export function useDevice(): Device | undefined {
   return device ? data.devices.find((d) => d.id === device) : undefined;
 }
 
-/** The line the workspace sent us from (`?task=&step=&line=`), and how to go back there with a condition to insert. */
-export function useInsert(): { label: string; keep: string; go: (text: string) => void } | null {
+/**
+ * The line the workspace sent us from (`?task=&step=&line=`), with what it says now (unsaved text first), and how to go
+ * back there with a line to put after it or in its place.
+ */
+export function useInsert(): { name: string; keep: string; target: InsertTarget } | null {
   const q = useQuery();
-  const { draft } = useDev();
+  const { draft, edits } = useDev();
   const task = q.get("task"), step = q.get("step"), line = q.get("line");
-  if (!task || !step || !line) return null;
-  const name = (draft && tasks(draft.body).find((t) => t.id === task)?.name) || task;
+  if (!task || !step || !line || !(Number(line) > 0)) return null;
+  const def = draft ? tasks(draft.body).find((t) => t.id === task) : undefined;
+  const name = def?.name || task;
+  const st = def?.steps.find((x) => String(x.id) === step);
+  const owner = st ? ownerOfStep(st) : `step:${step}`;
+  const scoped = owner.startsWith("step:") ? `step:${task}/${owner.slice(5)}` : owner;
+  const script = edits[scoped] ?? (owner.startsWith("snippet:") ? str(snippets(draft?.body ?? {}).find((x) => String(x.id) === owner.slice(8))?.script) : str(st?.script)) ?? "";
+  const n = Number(line);
   const keep = `?task=${enc(task)}&step=${enc(step)}&line=${enc(line)}`;
-  return { label: `插到 ${name} L${Number(line) + 1}`, keep, go: (text) => navigate(`${wbPaths.step(task, step)}?insert=${enc(text)}&line=${enc(line)}`) };
+  const back = (text: string, at: number, replace: boolean) => navigate(`${wbPaths.step(task, step)}?insert=${enc(text)}&line=${at}${replace ? "&replace=1" : ""}`);
+  return { name, keep, target: { line: n, lineText: script.split("\n")[n - 1] ?? null, insert: (text, after) => back(text, after, false), replace: (at, text) => back(text, at, true) } };
 }
 
 export type DiffLine = { kind: "same" | "add" | "del"; text: string; a?: number; b?: number };

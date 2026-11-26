@@ -14,6 +14,14 @@ export interface DevContextValue {
   syncRepo: () => Promise<string | null>;
   /** Scripts typed but not saved, by script ("step:<task>/<id>" or "snippet:<id>"): kept while moving around the workbench. */
   edits: Record<string, string>; setEdits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  /** Puts (or, undefined, drops) the unsaved text of a script; the first edit remembers the saved text it started from. */
+  setEdit: (key: string, text: string | undefined, saved: string | undefined) => void;
+  /** The saved text each unsaved script started from: when the draft's differs, someone changed it meanwhile. */
+  editBases: Record<string, string>;
+  /** Scripts changed elsewhere while being edited here ([editBases] against the draft). */
+  conflicts: string[];
+  /** Saves one script's unsaved text; [force] saves it over a change made elsewhere. A problem in words, or null. */
+  saveScript: (key: string, force?: boolean) => Promise<string | null>;
   /** The phone every page uses (trials, samples, judging, the live screen), chosen once in the top bar; null when there is none. */
   device: string | null; setDevice: (id: string) => void;
 }
@@ -35,4 +43,12 @@ export const devPaths = {
 };
 /** What a refused patch batch says: 409 is the server's "a node changed since you read it". */
 export const CONFLICT = "别处改过了，已重新读取";
+/** A script save held back: it changed elsewhere since editing began here. */
+export const EDIT_CONFLICT = "别处改过这段脚本，先选用哪边";
+/** The address of an unsaved script's key ("step:<task>/<step>" or "snippet:<id>"). */
+export function scriptPath(key: string): string {
+  if (key.startsWith("snippet:")) return devPaths.snippet(key.slice(8));
+  const [task, step] = key.slice(5).split("/");
+  return devPaths.step(task, step ?? "");
+}
 export const failure = (error: unknown) => error instanceof ApiFailure ? error.message : "操作失败，请稍后再试";

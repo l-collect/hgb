@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ApiFailure } from "../../api/client";
+import { ask } from "../../components/Confirm";
 import { Mark, Popover } from "../../components/ui";
-import { Link, match, navigate, paths, usePath } from "../../router";
+import { href, leave, Link, match, navigate, paths, usePath } from "../../router";
 import { useConsole } from "../../state/context";
-import { dev, type Capability, type DevMe, type DraftSummary, type DraftView, type TrialRecord } from "./api";
-import { CONFLICT, DevContext, devPaths, failure, useDev, type Edit } from "./context";
+import { dev, type Capability, type DevMe, type DraftPatch, type DraftSummary, type DraftView, type Obj, type TrialRecord } from "./api";
+import { CONFLICT, DevContext, devPaths, EDIT_CONFLICT, failure, scriptPath, useDev, type Edit } from "./context";
+import { onDevRun, useDevRunStream } from "./events";
 import { ConfigPage } from "./ConfigPage";
 import { HomePage, standing } from "./HomePage";
 import { nodeDigest, snippets, str, target, tasks, trialDigest } from "./model";
@@ -37,16 +39,52 @@ export function DevWorkbench() {
   const [problem, setProblem] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [editBases, setEditBases] = useState<Record<string, string>>({});
+  const editsNow = useRef(edits); editsNow.current = edits;
+  const basesNow = useRef(editBases); basesNow.current = editBases;
   const [pending, setPending] = useState(0);
   const [conflict, setConflict] = useState(false);
-  // Leaving the page with typed scripts unsaved asks first.
+  // Leaving the workbench with typed scripts unsaved asks first: closing the tab, a link out of /dev (the top bar's
+  // 「← 控制台」 among them) and the back button; moving around inside keeps the text and asks nothing.
   const unsaved = Object.keys(edits).length > 0;
+  const unsavedNow = useRef(unsaved); unsavedNow.current = unsaved;
+  const here = useRef(location.pathname + location.search); here.current = location.pathname + location.search;
   useEffect(() => {
     if (!unsaved) return;
-    const ask = (e: BeforeUnloadEvent) => { e.preventDefault(); };
-    window.addEventListener("beforeunload", ask);
-    return () => window.removeEventListener("beforeunload", ask);
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
   }, [unsaved]);
+  useEffect(() => {
+    const base = href("/dev");
+    const inDev = (pathname: string) => pathname === base || pathname.startsWith(`${base}/`);
+    const out = () => `有 ${Object.keys(editsNow.current).length} 处脚本没保存，离开会丢掉`;
+    const click = (event: MouseEvent) => {
+      if (!unsavedNow.current || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const a = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.origin !== location.origin || inDev(a.pathname)) return;
+      event.preventDefault(); event.stopPropagation();
+      const to = a.pathname.slice(import.meta.env.BASE_URL.replace(/\/$/, "").length) + a.search;
+      void ask({ title: "离开开发工作台？", body: out(), ok: "离开", cancel: "留下", danger: true }).then((yes) => { if (yes) leave(() => navigate(to)); });
+    };
+    const back = (event: PopStateEvent) => {
+      if (!unsavedNow.current || inDev(location.pathname)) return;
+      event.stopImmediatePropagation();
+      const to = location.pathname.slice(import.meta.env.BASE_URL.replace(/\/$/, "").length) + location.search;
+      history.pushState(null, "", here.current);
+      void ask({ title: "离开开发工作台？", body: out(), ok: "离开", cancel: "留下", danger: true }).then((yes) => { if (yes) leave(() => navigate(to)); });
+    };
+    document.addEventListener("click", click, true);
+    window.addEventListener("popstate", back);
+    return () => { document.removeEventListener("click", click, true); window.removeEventListener("popstate", back); };
+  }, []);
+  const setEdit = useCallback((key: string, text: string | undefined, saved: string | undefined) => {
+    setEdits((all) => { const next = { ...all }; if (text === undefined) delete next[key]; else next[key] = text; return next; });
+    setEditBases((all) => {
+      if (text === undefined) { if (!(key in all)) return all; const next = { ...all }; delete next[key]; return next; }
+      return key in all ? all : { ...all, [key]: saved ?? "" };
+    });
+  }, []);
 
   // The phone: the one chosen (remembered), else the first online Android one.
   const phones = data.devices.filter((d) => d.platform === "android");
@@ -85,10 +123,10 @@ export function DevWorkbench() {
   }, [load, loadTrials, gameIds]);
   const switchGame = async (id: string) => {
     if (id === game) return;
-    if (unsaved && !confirm(`有 ${Object.keys(edits).length} 处脚本没保存，切换会丢掉。继续？`)) return;
+    if (unsaved && !await ask({ title: "切换游戏？", body: `有 ${Object.keys(edits).length} 处脚本没保存，切换会丢掉`, ok: "切换", cancel: "留下", danger: true })) return;
     // Edits already queued belong to this game: let them finish (and read back) before the game changes.
     await queue.current;
-    setEdits({}); remember(GAME_KEY, id);
+    setEdits({}); setEditBases({}); remember(GAME_KEY, id);
     current.current = id; reads.current++; latest.current = null; setDraft(null); setTrials([]); setDigests({}); setConflict(false);
     setGame(id); navigate(devPaths.home);
     await Promise.all([load(id), loadTrials(id)]);
@@ -141,12 +179,47 @@ export function DevWorkbench() {
     const run = queue.current.then(async (): Promise<string | null> => {
       if (!game) return "没有选中游戏";
       if (current.current !== game) return "已切换游戏，没有同步";
-      try { await dev.importLatest(game); setEdits({}); setConflict(false); await load(game); return null; }
+      try { await dev.importLatest(game); setEdits({}); setEditBases({}); setConflict(false); await load(game); return null; }
       catch (error) { return failure(error); }
     }).finally(() => setPending((n) => n - 1));
     queue.current = run.catch(() => null);
     return run;
   }, [game, load]);
+
+  /**
+   * Saves one script: held back when the draft's text is no longer the one editing began from (someone changed it
+   * elsewhere), unless [force]; the workspace then shows both sides.
+   */
+  const saveScript = useCallback(async (key: string, force = false): Promise<string | null> => {
+    const raw = editsNow.current[key];
+    if (raw === undefined) return null;
+    const normalized = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n+$/, "");
+    let held = false;
+    const problem = await apply(async (b): Promise<DraftPatch[]> => {
+      const now = scriptNode(b, key); if (!now) return [];
+      const base = basesNow.current[key];
+      const theirs = str(now.script) ?? "";
+      if (!force && base !== undefined && theirs !== base && theirs !== normalized) { held = true; return []; }
+      return [{ op: "put", path: scriptPatchPath(key), expect: await nodeDigest(now), value: { ...now, script: normalized } }];
+    });
+    if (held) return EDIT_CONFLICT;
+    if (problem) return problem;
+    const gone = editsNow.current[key] === raw || editsNow.current[key] === normalized;
+    setEdits((all) => { if (!gone) return all; const next = { ...all }; delete next[key]; return next; });
+    setEditBases((all) => { const next = { ...all }; if (gone) delete next[key]; else next[key] = normalized; return next; });
+    return null;
+  }, [apply]);
+  const conflicts = useMemo(() => !draft ? [] : Object.keys(edits).filter((k) => {
+    const base = editBases[k]; if (base === undefined) return false;
+    const theirs = str(scriptNode(draft.body, k)?.script);
+    return theirs !== undefined && theirs !== base && theirs !== edits[k];
+  }), [draft, edits, editBases]);
+
+  // Trials end on the phone too (started there, or from another window): the task list follows.
+  useDevRunStream();
+  useEffect(() => onDevRun((run) => {
+    if (run.kind === "trial" && run.target === current.current && run.state !== "SENT" && run.state !== "RUNNING") void loadTrials(run.target);
+  }), [loadTrials]);
 
   const changed = useMemo(() => draft ? tasks(draft.body).filter((t) =>
     standing(t, draft.body, draft.bases, digests, trials.find((x) => x.task === t.id), data.devices).changed).length : 0,
@@ -159,7 +232,7 @@ export function DevWorkbench() {
   const gameName = (draft && game && str(target(draft.body, game)?.name)) || data.games.find((g) => g.id === game)?.name || game || "";
   const games: [string, string][] = [...new Set([...drafts.map((d) => d.target), ...data.games.map((g) => g.id), ...(game ? [game] : [])])]
     .map((id) => [id, data.games.find((g) => g.id === id)?.name ?? (id === game ? gameName : id)]);
-  const sync = conflict ? ["冲突", "bad"] : pending > 0 ? ["保存中", "go"] : ["已同步", "ok"];
+  const sync = conflicts.length || conflict ? ["冲突", "bad"] : pending > 0 ? ["保存中", "go"] : ["已同步", "ok"];
   const top = (
     <header className={w.top}>
       <Link to={paths.tasks} className={w.topBack}>← 控制台</Link>
@@ -177,7 +250,9 @@ export function DevWorkbench() {
           .map(([label, to, on]) => <Link key={label} to={to} className={w.topTab} aria-current={on ? "page" : undefined}>{label}</Link>)}
       </nav>
       <span className={w.topGrow} />
-      {draft && <span className={w.topSync}>修订 {draft.revision} · <span data-tone={sync[1]}>{sync[0]}</span></span>}
+      {draft && <span className={w.topSync}>修订 {draft.revision} · {conflicts.length
+        ? <Link to={scriptPath(conflicts[0])} title="别处改过你正在编辑的脚本：去选用哪边" data-tone="bad">冲突{conflicts.length > 1 ? ` ${conflicts.length}` : ""} ›</Link>
+        : <span data-tone={sync[1]}>{sync[0]}</span>}</span>}
       <Popover label="当前手机" plain align="end" trigger={<span className={w.topChip}>
         <span className={w.dotOnline} data-on={phones.find((d) => d.id === device)?.online ? "true" : undefined} />{phones.find((d) => d.id === device)?.name ?? "没有手机"} ▾</span>}>
         {(close) => <div role="listbox" aria-label="手机" className={w.menu}>
@@ -194,7 +269,7 @@ export function DevWorkbench() {
   if (!loaded) body = <div className={w.empty}>正在加载…</div>;
   else if (!game) body = <div className={w.card}><div className={w.empty}>{problem}</div></div>;
   else body = <>{problem && <div className={w.message}>{problem}</div>}{draft ? route(path) : <NoDraft />}</>;
-  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, edits, setEdits, device, setDevice } : null;
+  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, edits, setEdits, setEdit, editBases, conflicts, saveScript, device, setDevice } : null;
   return (
     <div className={w.shell}>
       {top}
@@ -207,6 +282,18 @@ export function DevWorkbench() {
 
 /** A workspace fills the window below the top bar; the other parts scroll as pages. */
 const workspaceAt = (path: string) => (path.startsWith("/dev/tasks/") || path.startsWith("/dev/snippets/")) && !path.endsWith("/config") && !path.endsWith("/blocks");
+
+/** The step or snippet an unsaved script's key names ("step:<task>/<step>", "snippet:<id>"), in [body]. */
+function scriptNode(body: Obj, key: string): Obj | undefined {
+  if (key.startsWith("snippet:")) return snippets(body).find((sn) => String(sn.id) === key.slice(8));
+  const [task, step] = key.slice(5).split("/");
+  return tasks(body).find((t) => t.id === task)?.steps.find((st) => String(st.id) === step);
+}
+const scriptPatchPath = (key: string) => {
+  if (key.startsWith("snippet:")) return `snippets:${key.slice(8)}`;
+  const [task, step] = key.slice(5).split("/");
+  return `tasks:${task}/steps:${step}`;
+};
 
 function redirect(path: string): string | null {
   let p: Record<string, string> | null;

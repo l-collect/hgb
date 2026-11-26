@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { ask } from "../../components/Confirm";
 import { Chips, SegmentTabs, Stepper } from "../../components/ui";
 import { navigate } from "../../router";
 import { dev, follow, type Sample, type Template } from "./api";
@@ -7,6 +8,8 @@ import { clock } from "./HomePage";
 import { isObj, nodeDigest, resources, snippets, str, target, tasks } from "./model";
 import { pixelsOf, colorAt, colorLine, validSetName, worstOf, type ColorAnchor, type ColorPick } from "./colors";
 import { useDevice, useInsert, wbPaths } from "./wb";
+import { useDevRun } from "./events";
+import { ConditionOut, type CondKind } from "./sentence";
 import w from "./Wb.module.css";
 import m from "./Samples.module.css";
 
@@ -74,6 +77,10 @@ export function SamplesPage({ id }: { id?: string }) {
   const start = useRef<[number, number] | null>(null);
   const load = () => Promise.all([dev.samples(game).then(setList), dev.templates(game).then(setTemplates)]).catch((e) => setText([failure(e), false]));
   useEffect(() => { void load(); }, [game]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A sample taken (or read) on the phone shows up here as soon as it is stored.
+  useDevRun((run) => {
+    if ((run.kind === "sample" || run.kind === "recognize") && run.target === game && run.state === "FINISHED") void load();
+  }, [game]);
   // Verifications are numbered: one still running when the sample, tool, box or points change is dropped when it ends.
   const verifies = useRef(0);
   const dropVerify = () => { verifies.current++; setTried(null); setBusy((b) => (b === "verify" ? null : b)); };
@@ -132,7 +139,7 @@ export function SamplesPage({ id }: { id?: string }) {
     setText(problem ? [problem, false] : [`已存模板 ${t.id}`, true]);
   };
   const deleteTemplate = async (t: Template) => {
-    if (!confirm(`删除模板 ${t.id}？`)) return;
+    if (!await ask({ title: `删除模板 ${t.id}？`, ok: "删除", danger: true })) return;
     try {
       await dev.deleteTemplate(game, t.id);
       const problem = await apply(async (body) => {
@@ -210,7 +217,7 @@ export function SamplesPage({ id }: { id?: string }) {
             <h2 className={m.h2}>模板</h2>
             <img className={m.made} src={dev.templateImage(game, t.id)} alt="" />
             {t.sameAs.length > 0 && <div className={w.muted}>同图：{t.sameAs.join("、")}</div>}
-            <Result text={cond} insert={insert} copy={copy} />
+            <Result text={cond} kind="image" insert={insert} copy={copy} />
             <div className={m.actions}>
               {!inDraft(t) && <button type="button" className={w.btn} onClick={() => void addToDraft(t)}>入草稿</button>}
               <button type="button" className={`${w.btn} ${m.danger}`} onClick={() => void deleteTemplate(t)}>删除</button>
@@ -237,7 +244,7 @@ export function SamplesPage({ id }: { id?: string }) {
               return problem;
             }}
             onDelete={async () => {
-              if (!confirm(`删除取色组 ${name}？`)) return null;
+              if (!await ask({ title: `删除取色组 ${name}？`, ok: "删除", danger: true })) return null;
               const problem = await changeSets((old) => { if (!(name in old)) return null; const { [name]: _, ...rest } = old; return rest; });
               if (!problem) setPickedSet(null);
               return problem;
@@ -303,7 +310,7 @@ export function SamplesPage({ id }: { id?: string }) {
           {picks.length > 0 && <>
             <button type="button" className={w.btn} disabled={busy === "verify"} onClick={verify}>{busy === "verify" ? "验证中…" : `在 ${list.length} 张样本上验`}</button>
             {verdict}
-            <Result text={line} insert={insert} copy={copy} />
+            <Result text={line} kind="color" insert={insert} copy={copy} />
             {draft && <div className={m.actions}>
               <input className={m.input} aria-label="组名" value={setName} onChange={(e) => setSetName(e.target.value)} placeholder="组名" />
               <button type="button" className={w.btn} disabled={!setName.trim()} onClick={() => void saveSet(setName.trim())}>存为组</button>
@@ -332,7 +339,6 @@ export function SamplesPage({ id }: { id?: string }) {
         <button type="button" className={`${w.btn} ${w.primary}`} onClick={markPrivate}>打码</button></div>
     );
     if (tool === "region") {
-      const cond = `"${inside[0] ?? "文字"}"@${pfx}${rect.join(",")}`;
       return (
         <div className={`${w.card} ${m.panel}`}>
           <h2 className={m.h2}>框区域</h2>
@@ -340,7 +346,7 @@ export function SamplesPage({ id }: { id?: string }) {
           <div className={m.line}><span className={m.grow}>锚点</span><Chips label="锚点" items={ANCHORS} value={anchor} onChange={setAnchor} /></div>
           <button type="button" className={w.btn} disabled={busy === "verify"} onClick={verify}>{busy === "verify" ? "验证中…" : `在 ${list.length} 张样本上验`}</button>
           {verdict}
-          <Result text={cond} insert={insert} copy={copy} />
+          <RegionOut key={`${sample.id}/${rect.join(",")}`} read={inside[0] ?? ""} region={`@${pfx}${rect.join(",")}`} insert={insert} copy={copy} />
           <div className={m.actions}>
             <button type="button" className={w.btn} onClick={() => copy(`@${pfx}${rect.join(",")}`)}>复制 @区域</button>
             <button type="button" className={w.btn} onClick={() => setTool("template")}>裁成模板</button>
@@ -364,7 +370,7 @@ export function SamplesPage({ id }: { id?: string }) {
   async function saveSet(name: string) {
     if (!validSetName(name)) { setText(["组名不能有空格、@、#、逗号或引号", false]); return; }
     const x0 = Math.min(...picks.map((p) => p.x)), y0 = Math.min(...picks.map((p) => p.y));
-    if (colorSets[name] && !confirm(`已有取色组 ${name}，替换它？`)) return;
+    if (colorSets[name] && !await ask({ title: `替换取色组 ${name}？`, body: "已有同名的组", ok: "替换", danger: true })) return;
     const problem = await changeSets((old) => ({ ...old, [name]: picks.map((p) => `${p.x - x0},${p.y - y0}#${p.hex}`) }));
     setText(problem ? [problem, false] : [`已存为 ${name} · 写 色 ${name}@${pfx}${x0},${y0} 容差 ${tolerance}`, true]);
   }
@@ -416,7 +422,7 @@ export function SamplesPage({ id }: { id?: string }) {
             <label className={m.toggle}><input type="checkbox" checked={showTexts} onChange={(e) => setShowTexts(e.target.checked)} />显示文字</label>
             <span className={m.grow} />
             <button type="button" className={m.delete} onClick={async () => {
-              if (!confirm("删除这张样本？模板会保留")) return;
+              if (!await ask({ title: "删除这张样本？", body: "模板会保留", ok: "删除", danger: true })) return;
               try { await dev.deleteSample(sample.id); await load(); navigate(wbPaths.assets + keep); } catch (error) { setText([failure(error), false]); }
             }}>删除样本</button>
           </div>
@@ -449,17 +455,22 @@ function setUses(body: Record<string, unknown>, name: string): number {
   return scripts.reduce((n, sc) => n + sc.split("\n").filter((l) => pattern.test(l)).length, 0);
 }
 
-/** The condition made, and where it goes: 插到 the workspace line we came from, or 复制. */
-function Result({ text, insert, copy }: { text: string; insert: ReturnType<typeof useInsert>; copy: (v: string) => void }) {
-  return (
-    <>
-      <div className={`${m.block} ${m.mono}`}>{text}</div>
-      {insert ? <div className={m.actions}>
-        <button type="button" className={`${w.btn} ${w.primary} ${m.wide}`} onClick={() => insert.go(text)}>{insert.label}</button>
-        <button type="button" className={w.btn} onClick={() => copy(text)}>复制</button>
-      </div> : <button type="button" className={`${w.btn} ${w.primary}`} onClick={() => copy(text)}>复制</button>}
-    </>
-  );
+/** The condition made as a whole line, and where it goes: the workspace line we came from (in its place or after it), or 复制. */
+function Result({ text, kind, insert, copy, missing }: { text: string | null; kind: CondKind; insert: ReturnType<typeof useInsert>; copy: (v: string) => void; missing?: string }) {
+  return <>
+    {insert && <span className={w.muted}>回到 {insert.name} L{insert.target.line}</span>}
+    <ConditionOut className={m.out} cond={text} kind={kind} target={insert?.target ?? null} copy={copy} missing={missing} />
+  </>;
+}
+
+/** 框区域's condition: the words read in the box, or typed when none were read (no placeholder goes into a script). */
+function RegionOut({ read, region, insert, copy }: { read: string; region: string; insert: ReturnType<typeof useInsert>; copy: (v: string) => void }) {
+  const [word, setWord] = useState(read);
+  const typed = word.trim().replace(/["“”]/g, "");
+  return <>
+    <div className={m.f}><label htmlFor="rw">要等的字</label><input id="rw" value={word} onChange={(e) => setWord(e.target.value)} placeholder="框里的字" /></div>
+    <Result text={typed ? `"${typed}"${region}` : null} kind="text" insert={insert} copy={copy} missing="框里没读到字：填上要等的字才能插入" />
+  </>;
 }
 
 /** What checking the condition on every sample found. */
@@ -504,7 +515,7 @@ function CutPanel({ rect, inside, made, game, sample, pfx, known, insert, copy, 
         <div className={m.checks}>{inside.map((t) => <label key={t}><input type="checkbox" checked={confirmed.includes(t)} onChange={(e) => setConfirmed(e.target.checked ? [...confirmed, t] : confirmed.filter((x) => x !== t))} />{t}</label>)}</div></div>}
       {made ? <>
         <div className={m.text}><img src={dev.templateImage(game, made.id)} alt={made.id} className={m.made} /><span className={w.muted}>{made.width}×{made.height} · {made.bytes} 字节</span></div>
-        <Result text={cond} insert={insert} copy={copy} />
+        <Result text={cond} kind="image" insert={insert} copy={copy} />
       </> : <button type="button" className={`${w.btn} ${w.primary}`} disabled={!id || busy} onClick={async () => {
         setBusy(true); await onCut({ id, confirmedTexts: confirmed, reason: reason.trim() || undefined, maskBackground: mask, maskTolerance: maskTol }); setBusy(false);
       }}>{busy ? "裁剪中…" : "存为模板"}</button>}
@@ -519,6 +530,9 @@ function ColorSetView({ name, points, used, insert, copy, onRename, onDelete }: 
 }) {
   const [next, setNext] = useState(name);
   const [text, setText] = useState<string | null>(null);
+  // Where the set's top-left goes on the screen: a set is written 色 名@x,y.
+  const [x, setX] = useState(""); const [y, setY] = useState("");
+  const placed = /^\d+$/.test(x.trim()) && /^\d+$/.test(y.trim());
   return (
     <div className={m.setLayout}>
       <div className={`${w.card} ${m.panel} ${m.grow}`}>
@@ -528,7 +542,11 @@ function ColorSetView({ name, points, used, insert, copy, onRename, onDelete }: 
       </div>
       <div className={`${w.card} ${m.panel} ${m.setSide}`}>
         <h2 className={m.h2}>取色组</h2>
-        <Result text={`色 ${name}@x,y 容差 24`} insert={insert} copy={copy} />
+        <div className={m.rect}>
+          <label className={m.f}><span>左上 x</span><input type="number" min={0} value={x} onChange={(e) => setX(e.target.value)} /></label>
+          <label className={m.f}><span>左上 y</span><input type="number" min={0} value={y} onChange={(e) => setY(e.target.value)} /></label>
+        </div>
+        <Result text={placed ? `色 ${name}@${x.trim()},${y.trim()} 容差 24` : null} kind="color" insert={insert} copy={copy} missing="填上组左上角在画面上的位置" />
         <div className={m.f}><label htmlFor="sn">改名</label>
           <div className={m.actions}><input id="sn" className={m.input} value={next} onChange={(e) => setNext(e.target.value)} />
             <button type="button" className={w.btn} disabled={!next.trim() || next.trim() === name} onClick={async () => setText(await onRename(next.trim()))}>改名</button></div></div>

@@ -134,7 +134,7 @@ export function ConfigPage({ id }: { id: string }) {
             ))}
             {!fields.length && <div className={w.muted}>没有设置</div>}
           </div>
-          <button type="button" className={`${w.btn} ${w.primary} ${c.center}`} onClick={() => navigate(`${wbPaths.task(id)}?values=${encodeURIComponent(JSON.stringify(tryValues))}`)}>用这组值试跑</button>
+          <button type="button" className={`${w.btn} ${w.primary} ${c.center}`} onClick={() => navigate(`${wbPaths.task(id)}?values=${encodeURIComponent(JSON.stringify(tryValues))}`)}>带回试跑</button>
         </aside>
       </div>
     </>

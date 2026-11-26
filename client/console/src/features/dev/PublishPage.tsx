@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "../../router";
 import { useConsole } from "../../state/context";
 import { dev, draftBase, type CheckResult, type Obj, type PublishResult } from "./api";
-import { failure, useDev } from "./context";
+import { failure, scriptPath, useDev } from "./context";
+import { Located, locate } from "./where";
 import { standing } from "./HomePage";
 import { isObj, objs, requiredMinApp, snippets, str, target, tasks } from "./model";
 import { changedLines, lineDiff, wbPaths, type DiffLine } from "./wb";
@@ -14,12 +15,16 @@ interface Change { key: string; name: string; summary: string; diffs: { label: s
 
 /** 发布 (v7 V7WbPublish): checks and what changed on the left; version, notes and the automatic preview on the right. */
 export function PublishPage() {
-  const { draft, game, me, trials, digests, edits, reload } = useDev();
+  const { draft, game, me, trials, digests, edits, reload, saveScript, conflicts } = useDev();
   const { data } = useConsole();
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [checkText, setCheckText] = useState<string | null>(null);
   const [base, setBase] = useState<Obj | null | undefined>(undefined);
   const [version, setVersion] = useState("");
+  // The preview runs on the version once typing it is done (the field left), not on every key.
+  const [settled, setSettled] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveText, setSaveText] = useState<string | null>(null);
   const [changelog, setChangelog] = useState("");
   const [plan, setPlan] = useState<PublishResult | string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -41,34 +46,51 @@ export function PublishPage() {
   const list = draft ? tasks(draft.body) : [];
   const anyNew = draft ? list.some((t) => draft.bases[`tasks/${t.id}`] === undefined) : false;
   const suggested = draft ? suggest(draft.baseVersion, anyNew) : null;
-  useEffect(() => { if (suggested && !version) setVersion(suggested); }, [suggested]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (suggested && !version) { setVersion(suggested); setSettled(suggested); } }, [suggested]); // eslint-disable-line react-hooks/exhaustive-deps
   const minApp = draft ? requiredMinApp(draft.body) : "0.4.0";
   // The preview runs by itself (a dry run of the publish), again when the version or the draft changes.
-  const validVersion = /^v?[0-9]+(\.[0-9]+){1,3}$/.test(version.trim());
+  const isVersion = (v: string) => /^v?[0-9]+(\.[0-9]+){1,3}$/.test(v.trim());
+  const validVersion = isVersion(version);
+  const previewed = isVersion(settled);
   useEffect(() => {
-    if (!draft || !maintainer || !validVersion) { setPlan(null); return; }
+    if (!draft || !maintainer || !previewed) { setPlan(null); return; }
     let live = true;
     const t = setTimeout(() => {
       setPlan(null);
-      dev.publish(game, { version: version.trim(), changelog: changelog.trim() || "预演", minApp, dryRun: true })
+      dev.publish(game, { version: settled.trim(), changelog: changelog.trim() || "预演", minApp, dryRun: true })
         .then((r) => { if (live) setPlan(r); }, (e) => { if (live) setPlan(failure(e)); });
-    }, 600);
+    }, 300);
     return () => { live = false; clearTimeout(t); };
-  }, [draft?.revision, version, maintainer, minApp, game]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [draft?.revision, settled, maintainer, minApp, game]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!draft) return null;
 
   const rows = list.map((t) => standing(t, draft.body, draft.bases, digests, trials.find((x) => x.task === t.id), data.devices));
   const untried = rows.filter((s) => s.changed && s.tone !== "pass");
-  const unsaved = Object.keys(edits).length;
+  const unsavedKeys = Object.keys(edits);
+  const unsaved = unsavedKeys.length;
+  const scriptName = (k: string) => {
+    if (k.startsWith("snippet:")) return `片段 ${k.slice(8)}`;
+    const [tid, sid] = k.slice(5).split("/");
+    return locate(`target/${game}/task/${tid}/step/${sid}`, draft.body)?.label ?? k;
+  };
+  const saveAll = async () => {
+    setSaving(true); setSaveText(null);
+    const problems: string[] = [];
+    for (const k of unsavedKeys) {
+      if (conflicts.includes(k)) { problems.push(`${scriptName(k)}：别处改过，去那里选用哪边`); continue; }
+      const problem = await saveScript(k);
+      if (problem) problems.push(`${scriptName(k)}：${problem}`);
+    }
+    setSaving(false);
+    setSaveText(problems.length ? problems.join("；") : "已保存");
+    if (!problems.length) setTimeout(() => setSaveText((t) => (t === "已保存" ? null : t)), 2000);
+  };
   const why = minApp === "0.7.0" ? "用了步骤配置" : minApp === "0.4.2" ? "有预设计划" : "工作台基础";
   const checks: Check[] = [
     { ok: unsaved === 0, title: unsaved ? `全部保存 · ${unsaved} 处没保存` : "全部保存" },
     check ? { ok: check.ok, title: check.ok ? "结构与类型" : `结构与类型 · ${check.issues.length} 个问题` }
       : { ok: checkText ? false : null, title: checkText ? `结构与类型 · ${checkText}` : "结构与类型 · 检查中…" },
-    untried.length
-      ? { ok: false, title: `改过的任务都试跑通过 · ${untried.length} 个没过：${untried.slice(0, 3).map((s) => s.task.name).join("、")}${untried.length > 3 ? " 等" : ""}`,
-          link: [wbPaths.task(untried[0].task.id), "去试跑 ›"] }
-      : { ok: true, title: "改过的任务都试跑通过" },
+    untried.length ? { ok: false, title: `改过的任务都试跑通过 · ${untried.length} 个没过` } : { ok: true, title: "改过的任务都试跑通过" },
     { ok: true, title: `最低 App ${minApp}（${why}）` },
   ];
   const failed = checks.filter((c) => c.ok === false).length;
@@ -84,6 +106,7 @@ export function PublishPage() {
     } catch (error) { setText([failure(error), false]); }
     setBusy(false);
   };
+  const stale = version.trim() !== settled.trim();
   const label = !maintainer ? "只有维护者能发布" : failed ? `发布（${failed} 项没过）` : !check ? "检查中…" : busy ? "发布中…" : !changelog.trim() ? "先写更新说明" : armed ? `确认发布 ${version.trim()}` : "发布";
   return (
     <>
@@ -92,14 +115,20 @@ export function PublishPage() {
         <div className={p.left}>
           <section className={w.card} aria-labelledby="ck">
             <div className={p.head}><b id="ck">检查</b></div>
-            {checks.map((c, i) => (
-              <div key={i} className={p.row}>
+            {checks.map((c, i) => <div key={i}>
+              <div className={p.row}>
                 <span className={p.mark} data-ok={c.ok === null ? "wait" : String(c.ok)} aria-hidden="true">{c.ok === null ? "…" : c.ok ? "✓" : "✗"}</span>
                 <span className={p.grow}>{c.title}</span>
                 {c.link && <Link to={c.link[0]} className={p.link}>{c.link[1]}</Link>}
+                {i === 0 && unsaved > 0 && <button type="button" className={`${w.btn} ${w.sm}`} disabled={saving} onClick={() => void saveAll()}>{saving ? "保存中…" : "全部保存"}</button>}
               </div>
-            ))}
-            {check && !check.ok && check.issues.slice(0, 5).map((i, k) => <div key={`i${k}`} className={`${p.row} ${p.issue}`}><span className={p.mark} /><span className={p.grow}>{i.location}：{i.reason}</span></div>)}
+              {i === 0 && unsavedKeys.map((k) => <div key={k} className={`${p.row} ${p.issue}`}><span className={p.mark} />
+                <span className={p.grow}>{scriptName(k)}{conflicts.includes(k) ? " · 冲突" : ""}</span><Link to={scriptPath(k)} className={p.link}>去看 ›</Link></div>)}
+              {i === 0 && saveText && <div className={`${p.row} ${saveText === "已保存" ? w.muted : w.message}`}>{saveText}</div>}
+              {i === 2 && untried.map((r) => <div key={r.task.id} className={`${p.row} ${p.issue}`}><span className={p.mark} />
+                <span className={p.grow}>{r.task.name} · {r.label}</span><Link to={`${wbPaths.task(r.task.id)}?scope=task`} className={p.link}>整任务试跑 ›</Link></div>)}
+            </div>)}
+            {check && !check.ok && check.issues.slice(0, 5).map((i, k) => <div key={`i${k}`} className={`${p.row} ${p.issue}`}><span className={p.mark} /><span className={p.grow}><Located text={i.location} body={draft.body} />：{i.reason}</span></div>)}
           </section>
           <section className={w.card} aria-labelledby="ch">
             <div className={p.head}><b id="ch" className={p.grow}>改动</b><span className={w.muted}>对比 {draft.baseVersion || "上个版本"}</span></div>
@@ -125,19 +154,20 @@ export function PublishPage() {
         </div>
         <section className={`${w.card} ${p.right}`} aria-label="版本">
           <label className={p.lbl} htmlFor="v">版本</label>
-          <input id="v" className={`${p.input} ${p.mono}`} value={version} placeholder="v1.2.0" onChange={(e) => setVersion(e.target.value)} />
+          <input id="v" className={`${p.input} ${p.mono}`} value={version} placeholder="v1.2.0" onChange={(e) => setVersion(e.target.value)}
+            onBlur={() => setSettled(version)} onKeyDown={(e) => { if (e.key === "Enter") setSettled(version); }} />
           {suggested && <span className={w.muted}>建议 {suggested}：{anyNew ? "有新任务，升次版本" : "没有新任务，升补丁"}</span>}
           <label className={p.lbl} htmlFor="n">更新说明</label>
           <textarea id="n" className={p.input} rows={4} value={changelog} onChange={(e) => setChangelog(e.target.value)} />
-          <div className={p.plan}>{!maintainer ? "需要任务仓库的写权限" : !validVersion ? "版本号形如 v1.2.0" : plan === null ? "预演中…"
-            : typeof plan === "string" ? <span className={w.message}>预演：{plan}</span>
+          <div className={p.plan}>{!maintainer ? "需要任务仓库的写权限" : !validVersion ? "版本号形如 v1.2.0" : version.trim() !== settled.trim() ? "填好版本号后预演" : plan === null ? "预演中…"
+            : typeof plan === "string" ? <span className={w.message}>预演：<Located text={plan} body={draft.body} /></span>
             : `预演：包 ${kb(plan.bundleBytes)} · 上传 ${plan.uploads.length} 张图 ${kb(plan.uploadBytes)} · 复用 ${plan.reused.length}`}</div>
           <div className={p.confirm}>
             <button type="button" className={`${w.btn} ${w.primary} ${p.center}`} onBlur={() => setArmed(false)}
-              disabled={!maintainer || failed > 0 || !check || busy || !validVersion || !changelog.trim() || typeof plan === "string"} onClick={publish}>{label}</button>
+              disabled={!maintainer || failed > 0 || !check || busy || !validVersion || stale || !changelog.trim() || typeof plan === "string"} onClick={publish}>{label}</button>
             {armed && <button type="button" className={`${w.btn} ${w.sm}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setArmed(false)}>取消</button>}
           </div>
-          {text && <div role="status" className={text[1] ? p.done : w.message}>{text[0]}</div>}
+          {text && <div role="status" className={text[1] ? p.done : w.message}>{text[1] ? text[0] : <Located text={text[0]} body={draft.body} />}</div>}
         </section>
       </div>
     </>
