@@ -1,0 +1,255 @@
+.gitignore
+  s_fae32e7f0efe76::t_4da8fd7c1682d6 1-6
+.vercelignore
+  s_fae32e7f0efe76::t_8301af9584de5f 1-6
+client/console/index.html
+  s_fae32e7f0efe76::t_e41c9f765e3a54 1-24
+client/console/package.json
+  s_fae32e7f0efe76::t_0a68970b7e4abf 1-32
+client/console/pnpm-lock.yaml
+  s_fae32e7f0efe76::t_b67aa9ae0ed8c4 1-936
+client/console/public/logo.svg
+  s_fae32e7f0efe76::t_3ef744767bc563 1
+client/console/src/App.tsx
+  s_fae32e7f0efe76::t_dfe4d5f635e8f5 1-27
+client/console/src/api/client.ts
+  s_fae32e7f0efe76::t_aa88563aef9cba 1-36
+client/console/src/api/types.ts
+  s_fae32e7f0efe76::t_94790a39502d14 1-148
+client/console/src/components/ui.module.css
+  s_fae32e7f0efe76::t_810ed7ec9fdaae 1-139
+client/console/src/components/ui.tsx
+  s_fae32e7f0efe76::t_8e83ade608038d 1-249
+client/console/src/components/useAction.ts
+  s_fae32e7f0efe76::t_ac5f283173ba8c 1-22
+client/console/src/features/ConsolePage.tsx
+  s_fae32e7f0efe76::t_667d49c508428c 1-74
+client/console/src/features/accounts/AccountDetailPage.tsx
+  s_fae32e7f0efe76::t_1325d0a30936fd 1-181
+client/console/src/features/accounts/Accounts.module.css
+  s_fae32e7f0efe76::t_19216d78c2e532 1-100
+client/console/src/features/accounts/GameAccountsPage.tsx
+  s_fae32e7f0efe76::t_9587abf31930f2 1-249
+client/console/src/features/accounts/Plans.tsx
+  s_fae32e7f0efe76::t_399306502eca5d 1-373
+client/console/src/features/accounts/Settings.tsx
+  s_fae32e7f0efe76::t_951a71cd7057dd 1-380
+client/console/src/features/auth/AuthPage.module.css
+  s_fae32e7f0efe76::t_e78a1dcb76779e 1-37
+client/console/src/features/auth/AuthPage.tsx
+  s_fae32e7f0efe76::t_a55f8944028339 1-119
+client/console/src/features/dev/Config.module.css
+  s_fae32e7f0efe76::t_f1c8faab56ac47 1-35
+client/console/src/features/dev/ConfigPage.tsx
+  s_fae32e7f0efe76::t_03c7193c2fc7cd 1-217
+client/console/src/features/dev/DevWorkbench.tsx
+  s_fae32e7f0efe76::t_14da9db809dbbb 1-253
+client/console/src/features/dev/FrameReplay.tsx
+  s_fae32e7f0efe76::t_82c28da26be768 1-59
+client/console/src/features/dev/FrameTools.tsx
+  s_fae32e7f0efe76::t_ae230ab78f08c9 1-185
+client/console/src/features/dev/Game.module.css
+  s_fae32e7f0efe76::t_393306b1f5e670 1-22
+client/console/src/features/dev/GamePage.tsx
+  s_fae32e7f0efe76::t_bc93beca2b216d 1-83
+client/console/src/features/dev/HomePage.tsx
+  s_fae32e7f0efe76::t_b1ed4d38183100 1-271
+client/console/src/features/dev/Interruptions.tsx
+  s_fae32e7f0efe76::t_db978242c66703 1-116
+client/console/src/features/dev/NameButton.tsx
+  s_fae32e7f0efe76::t_d410ae576b24b6 1-46
+client/console/src/features/dev/PageGraph.tsx
+  s_fae32e7f0efe76::t_a1a1f7f7a58bfa 1-275
+client/console/src/features/dev/PagesPage.tsx
+  s_fae32e7f0efe76::t_801edc7e905839 1-336
+client/console/src/features/dev/Program.module.css
+  s_fae32e7f0efe76::t_a8d2966e3f5aee 1-47
+client/console/src/features/dev/ProgramPage.tsx
+  s_fae32e7f0efe76::t_1ce9534e425de8 1-423
+client/console/src/features/dev/Publish.module.css
+  s_fae32e7f0efe76::t_0042658b0aa378 1-29
+client/console/src/features/dev/PublishPage.tsx
+  s_fae32e7f0efe76::t_5ff9892aa642b6 1-213
+client/console/src/features/dev/Samples.module.css
+  s_fae32e7f0efe76::t_9a73347b47405a 1-68
+client/console/src/features/dev/SamplesPage.tsx
+  s_fae32e7f0efe76::t_0def5e79828509 1-564
+client/console/src/features/dev/ScriptEditor.tsx
+  s_fae32e7f0efe76::t_f66c6d428267e9 1-228
+client/console/src/features/dev/States.module.css
+  s_fae32e7f0efe76::t_1dad5acea46199 1-36
+client/console/src/features/dev/StatesPage.tsx
+  s_fae32e7f0efe76::t_e30251d6a14189 1-55
+client/console/src/features/dev/Wb.module.css
+  s_fae32e7f0efe76::t_e8082158eb0f93 1-117
+client/console/src/features/dev/Workspace.module.css
+  s_fae32e7f0efe76::t_cd455dde940e81 1-100
+client/console/src/features/dev/Workspace.tsx
+  s_fae32e7f0efe76::t_35a8d8ec4bc649 1-701
+client/console/src/features/dev/api.ts
+  s_fae32e7f0efe76::t_622d4c650765de 1-130
+client/console/src/features/dev/colors.ts
+  s_fae32e7f0efe76::t_8276d76c94d505 1-73
+client/console/src/features/dev/context.ts
+  s_fae32e7f0efe76::t_e8c682c546e6fa 1-38
+client/console/src/features/dev/direct.ts
+  s_fae32e7f0efe76::t_58f4e9d4e786e1 1-59
+client/console/src/features/dev/model.ts
+  s_fae32e7f0efe76::t_f173c86aee0a7c 1-181
+client/console/src/features/dev/runs.ts
+  s_fae32e7f0efe76::t_550c0b50a816a8 1-128
+client/console/src/features/dev/wb.ts
+  s_fae32e7f0efe76::t_6b80f8ae3eba5b 1-58
+client/console/src/features/devices/AppPage.tsx
+  s_fae32e7f0efe76::t_f342a322adcbef 1-119
+client/console/src/features/devices/DevicePage.tsx
+  s_fae32e7f0efe76::t_e855bdf4cf908e 1-143
+client/console/src/features/devices/Devices.module.css
+  s_fae32e7f0efe76::t_0f441f7af0f58a 1-76
+client/console/src/features/devices/DevicesPage.tsx
+  s_fae32e7f0efe76::t_227ecf435f66c2 1-110
+client/console/src/features/devices/appAccounts.tsx
+  s_fae32e7f0efe76::t_a25ff1f2dcab78 1-94
+client/console/src/features/jobs/JobPage.tsx
+  s_fae32e7f0efe76::t_7d9ae3f870a1b2 1-163
+client/console/src/features/jobs/Jobs.module.css
+  s_fae32e7f0efe76::t_25775e9f5c8255 1-52
+client/console/src/features/jobs/runs.tsx
+  s_fae32e7f0efe76::t_6dd76381d582fc 1-98
+client/console/src/features/library/Library.module.css
+  s_fae32e7f0efe76::t_5140941d2ae9d9 1-31
+client/console/src/features/library/LibraryPage.tsx
+  s_fae32e7f0efe76::t_5347073d89c134 1-337
+client/console/src/features/me/AccountActions.tsx
+  s_fae32e7f0efe76::t_58dcefe3820b5d 1-80
+client/console/src/features/me/Me.module.css
+  s_fae32e7f0efe76::t_fa2230ab3dffb3 1-41
+client/console/src/features/me/MePage.tsx
+  s_fae32e7f0efe76::t_89d228ad05c1e9 1-148
+client/console/src/features/notices/Channels.tsx
+  s_fae32e7f0efe76::t_cbaac93bc9fd00 1-154
+client/console/src/features/notices/Notices.module.css
+  s_fae32e7f0efe76::t_06aa88b81b562e 1-48
+client/console/src/features/notices/NoticesPage.tsx
+  s_fae32e7f0efe76::t_1a631201cda3ab 1-233
+client/console/src/format.ts
+  s_fae32e7f0efe76::t_4da538a7587ea4 1-99
+client/console/src/main.tsx
+  s_fae32e7f0efe76::t_358627fbd344f1 1-16
+client/console/src/router.tsx
+  s_fae32e7f0efe76::t_0960b3f6dae118 1-79
+client/console/src/shell/Shell.module.css
+  s_fae32e7f0efe76::t_7c105154888abd 1-69
+client/console/src/shell/Shell.tsx
+  s_fae32e7f0efe76::t_2288f5329a8a87 1-50
+client/console/src/state/console.ts
+  s_fae32e7f0efe76::t_5dc112e68a96f0 1-94
+client/console/src/state/context.ts
+  s_fae32e7f0efe76::t_09723f3e7163ce 1-12
+client/console/src/theme/appearance.ts
+  s_fae32e7f0efe76::t_7e81ae61b391ae 1-15
+client/console/src/theme/base.css
+  s_fae32e7f0efe76::t_c0e7471aca74c2 1-16
+client/console/src/theme/tokens.css
+  s_f5ab14d38944b9::t_6a6eca2182599b 1-155
+client/console/src/theme/tokens.ts
+  s_f5ab14d38944b9::t_228cfd15a91655 1-4
+client/console/src/vite-env.d.ts
+  s_fae32e7f0efe76::t_aec12623dc7111 1-9
+client/console/tsconfig.json
+  s_fae32e7f0efe76::t_ee340a75fc87f3 1-17
+client/console/vite.config.ts
+  s_fae32e7f0efe76::t_8ad1e2aeac3604 1-24
+client/docs/astro.config.mjs
+  s_fae32e7f0efe76::t_5df21acb3b38a8 1-32
+client/docs/package.json
+  s_fae32e7f0efe76::t_6c1c414b6bbbb2 1-21
+client/docs/pnpm-lock.yaml
+  s_fae32e7f0efe76::t_f16b5e0c777193 1-5120
+client/docs/public/favicon.svg
+  s_fae32e7f0efe76::t_3e1848f3d93457 1
+client/docs/src/assets/logo-dark.svg
+  s_fae32e7f0efe76::t_695ddd133f1c78 1
+client/docs/src/assets/logo-light.svg
+  s_fae32e7f0efe76::t_7a377593e9ee14 1
+client/docs/src/components/DocsTitle.astro
+  s_fae32e7f0efe76::t_a155b9bbb8dab6 1-16
+client/docs/src/components/Logo.astro
+  s_fae32e7f0efe76::t_ba8e2926d13bc3 1-11
+client/docs/src/content.config.ts
+  s_fae32e7f0efe76::t_7ed578159e40c1 1-5
+client/docs/src/content/docs/docs/dev/making.md
+  s_fae32e7f0efe76::t_a6237182d9436a 1-13
+client/docs/src/content/docs/docs/dev/publishing.md
+  s_fae32e7f0efe76::t_c4c6181602f880 1-15
+client/docs/src/content/docs/docs/dev/task-bundles.md
+  s_fae32e7f0efe76::t_3278279945a8e9 1-29
+client/docs/src/content/docs/docs/games/onmyoji.md
+  s_fae32e7f0efe76::t_0ed3e8605ceeca 1-43
+client/docs/src/content/docs/docs/index.md
+  s_fae32e7f0efe76::t_42b9478089f2b8 1-10
+client/docs/src/content/docs/docs/start/android.md
+  s_fae32e7f0efe76::t_63fdb437bd3dde 1-39
+client/docs/src/content/docs/docs/start/quick-start.md
+  s_fae32e7f0efe76::t_1c58c050ac1e9c 1-33
+client/docs/src/content/docs/docs/start/what.md
+  s_fae32e7f0efe76::t_90984e187c8841 1-30
+client/docs/src/content/docs/docs/start/windows.md
+  s_fae32e7f0efe76::t_00215f51841356 1-15
+client/docs/src/content/docs/docs/use/accounts.md
+  s_fae32e7f0efe76::t_8f7f5650c38ad7 1-31
+client/docs/src/content/docs/docs/use/devices.md
+  s_fae32e7f0efe76::t_b457c8af7f562e 1-23
+client/docs/src/content/docs/docs/use/notices.md
+  s_fae32e7f0efe76::t_a0e04871031a81 1-37
+client/docs/src/content/docs/docs/use/plans.md
+  s_fae32e7f0efe76::t_215c55fb544501 1-27
+client/docs/src/content/docs/docs/use/runs.md
+  s_fae32e7f0efe76::t_81d48fbe2228ec 1-29
+client/docs/src/content/docs/privacy.mdx
+  s_fae32e7f0efe76::t_8f07a8ac3ba7a6 1-72
+client/docs/src/content/docs/terms.mdx
+  s_fae32e7f0efe76::t_5ddd4a8cfad31c 1-53
+client/docs/src/instance.mjs
+  s_fae32e7f0efe76::t_61ab0abede00e3 1-19
+client/docs/src/pages/index.astro
+  s_fae32e7f0efe76::t_1db33425defdc2 1-263
+client/docs/src/styles/starlight.css
+  s_fae32e7f0efe76::t_25962890c31532 1-25
+client/docs/src/styles/tokens.css
+  s_f5ab14d38944b9::t_6fdac99b3cf4a7 1-155
+client/docs/tsconfig.json
+  s_fae32e7f0efe76::t_0d0cf983b94b23 1-5
+config/instance.json
+  s_fae32e7f0efe76::t_2f02750fb62540 1-8
+design/tokens.json
+  s_fae32e7f0efe76::t_52a22f96c72c3c 1-212
+design/tokens.mjs
+  s_fae32e7f0efe76::t_66fbe58e56a957 1-44
+vercel.json
+  s_fae32e7f0efe76::t_0173e4010d9758 1-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "227c7932a5da1243140fcc932821d016e8b921c2",
+  "prompts": {},
+  "sessions": {
+    "s_f5ab14d38944b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "211975e1-6209-422c-a4b0-881714e8cc25",
+        "model": "unknown"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    },
+    "s_fae32e7f0efe76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e4ff622-41d3-4c0b-919b-3730481be66a",
+        "model": "unknown"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
