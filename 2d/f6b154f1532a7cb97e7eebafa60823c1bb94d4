@@ -1,0 +1,27 @@
+client/console/src/components/ui.tsx
+  s_75c1698e4ed8c2::t_417a1414d56b63 173-182,185
+client/console/src/features/dev/ConfigPage.tsx
+  s_75c1698e4ed8c2::t_34e349bf943c07 192
+client/console/src/features/jobs/runs.tsx
+  s_75c1698e4ed8c2::t_aa90f9fe936b30 192-206,208
+client/console/src/features/accounts/Plans.tsx
+  s_75c1698e4ed8c2::t_34e349bf943c07 15,245-247
+client/console/src/features/accounts/Settings.tsx
+  s_75c1698e4ed8c2::t_417a1414d56b63 4,39-41,46-61,64,284,313,512
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2df6b154f1532a7cb97e7eebafa60823c1bb94d4",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
