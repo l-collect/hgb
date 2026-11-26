@@ -1,0 +1,33 @@
+client/console/src/App.tsx
+  s_fae32e7f0efe76::t_3313aede858903 1,5,10,16-18,31-42,44-46,48-53,55-63,66-67,69
+client/console/src/features/ConsolePage.tsx
+  s_fae32e7f0efe76::t_dd249e87f604f0 24,41,56,76
+client/console/src/features/site/Home.module.css
+  s_fae32e7f0efe76::t_dc61bbbb60206c 121-129
+client/console/src/features/site/HomePage.tsx
+  s_fae32e7f0efe76::t_454746408baaf2 4,35-36,48,137,148,154,159
+client/console/src/features/site/LegalPage.tsx
+  s_fae32e7f0efe76::t_84dcbef60870e1 5,11,20,27
+client/console/src/features/site/SiteAccount.tsx
+  s_fae32e7f0efe76::t_b4ab7dd124af9f 1-40
+client/console/src/shell/Shell.module.css
+  s_fae32e7f0efe76::t_99fc38fcbf4d99 23-24,28,39,64-65
+client/console/src/shell/Shell.tsx
+  s_fae32e7f0efe76::t_3a0550ee2dc0af 17,25-26,28,35,47-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6fd88831eb67cbfab1f37aa8785709b7f42d8111",
+  "prompts": {},
+  "sessions": {
+    "s_fae32e7f0efe76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e4ff622-41d3-4c0b-919b-3730481be66a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
