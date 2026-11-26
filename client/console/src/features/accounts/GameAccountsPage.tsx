@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { api, enc } from "../../api/client";
+import { api, ApiFailure, enc } from "../../api/client";
+import { ask } from "../../components/Confirm";
 import type { Device, Game, GameAccount } from "../../api/types";
 import { Button, ButtonLink, Card, CardHead, Chips, Empty, Field, Form, Message, MoreMenu, Muted, PageHeader, Pill, Row, RowLink, Segments, ui } from "../../components/ui";
 import { orAlert, useAction } from "../../components/useAction";
 import { jobStatus, shortTime, type Tone } from "../../format";
-import { Link, navigate, paths } from "../../router";
+import { leave, Link, navigate, paths } from "../../router";
 import type { ConsoleData } from "../../state/console";
 import { useConsole } from "../../state/context";
 import { Drawer } from "../../components/Drawer";
@@ -53,10 +54,19 @@ export function ApplyAccountLoginAction({ account, label = "下发到设备", pr
 }) {
   const { data } = useConsole();
   const candidates = onlineGameDevices(data.devices, account.gameId, true);
-  const trigger = (dev: Device) => {
+  // Logging the game in as another account replaces whoever is signed in there: ask first, and again when the server
+  // says the device is running something (device_busy), then send it anyway.
+  const trigger = async (dev: Device) => {
     const appKey = dev.apps.find((a) => a.gameId === account.gameId)?.key ?? null;
+    if (!await ask({ title: `下发「${account.name}」到「${dev.name}」？`, body: "游戏会换成这个账号登录", ok: "下发" })) return;
+    const send = (force: boolean) => api(`/api/accounts/${enc(account.id)}/apply-login`, { method: "POST", body: { deviceId: dev.id, appKey, ...(force ? { force: true } : {}) } });
     orAlert(async () => {
-      await api(`/api/accounts/${enc(account.id)}/apply-login`, { method: "POST", body: { deviceId: dev.id, appKey } });
+      try { await send(false); }
+      catch (error) {
+        if (!(error instanceof ApiFailure && error.status === 409 && error.code === "device_busy")) throw error;
+        if (!await ask({ title: `${error.message || "设备正在运行"}，仍要下发？`, body: "正在跑的任务会被打断", ok: "仍要下发", danger: true })) return;
+        await send(true);
+      }
       onNotice?.(`已向「${dev.name}」下发「${account.name}」的登录信息`);
     });
   };
@@ -67,12 +77,12 @@ export function ApplyAccountLoginAction({ account, label = "下发到设备", pr
           alert("当前没有装有该游戏的在线设备");
           return;
         }
-        trigger(candidates[0]);
+        void trigger(candidates[0]);
       }}>{label}</Button>
     );
   }
   return (
-    <MoreMenu label={label} actions={candidates.map((dev): [string, () => void] => [`下发到「${dev.name}」`, () => trigger(dev)])} />
+    <MoreMenu label={label} actions={candidates.map((dev): [string, () => void] => [`下发到「${dev.name}」`, () => void trigger(dev)])} />
   );
 }
 
@@ -120,7 +130,7 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
       {!isOnmyoji && adding && <AddAccount games={data.games} gameId={gameId} done={() => setAdding(false)} />}
       {data.games.length === 0 ? <Card><Empty>先连一台设备</Empty></Card> : (
         <>
-          {data.games.length > 1 && <Segments label="游戏" value={gameId} onChange={setChosen}
+          {data.games.length > 1 && <Segments label="游戏" value={gameId} onChange={(id) => leave(() => { setChosen(id); if (accountId) navigate(paths.accounts, { force: true }); })}
             items={data.games.map((g) => [g.id, g.name])} />}
           {accounts.length === 0 ? (
             <Card>
@@ -143,7 +153,7 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
             </Card>
           ) : activeAccount && (
             <>
-              <Chips label="切换账号" value={activeAccount.id} onChange={(id) => { setSelectedId(id); if (accountId) navigate(paths.accounts); }}
+              <Chips label="切换账号" value={activeAccount.id} onChange={(id) => leave(() => { setSelectedId(id); if (accountId) navigate(paths.accounts, { force: true }); })}
                 items={accounts.map((a): [string, string] => [a.id, a.name])} />
               <div className={wide ? d.colsMain : s.columns}>
                 {wide
@@ -192,9 +202,8 @@ function AccountSummary({ account, accounts, game }: { account: GameAccount; acc
       <Row>
         <span style={{ flex: 1 }}>登录快照</span>
         <span className={ui.tiny}>{account.hasLoginSnapshot ? "已加密保存" : "未存"}</span>
-        {account.hasLoginSnapshot
-          ? <ApplyAccountLoginAction account={account} label="下发到设备" small />
-          : <ReportDeviceLoginAction gameId={account.gameId} label="读取上传" small />}
+        {/* 下发 replaces the game's login on a phone, so it lives in 设置, not on this card. */}
+        {!account.hasLoginSnapshot && <ReportDeviceLoginAction gameId={account.gameId} label="读取上传" small />}
       </Row>
       {popup && <Row><span style={{ flex: 1 }}>弹窗处理</span><span className={ui.tiny}>{popup.name}：{popupChoice ?? "—"}</span></Row>}
       <Row><span style={{ flex: 1 }}>暂停的任务</span>{paused.length ? paused.map((name) => <Pill key={name} tone="warn">{name}</Pill>) : <span className={ui.tiny}>无</span>}</Row>

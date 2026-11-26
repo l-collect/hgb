@@ -28,9 +28,13 @@ export interface EmailBindResult { account?: Account | null; merge?: MergeOffer 
 export interface CloudTask { targetId: string; taskId: string; name: string }
 /** The account the app last read on screen. */
 export interface ObservedAccount { uid: string; nickname: string; at: number }
+/** What the phone is waiting for before its next step; cleared once it is there. [text] is short (「等无障碍」). */
+export type WaitCode = "accessibility" | "unlock" | "game" | "capture" | "other";
+export interface AppWaiting { code: WaitCode | string; text: string; since: number }
 export interface App {
   key: string; gameId: string; name: string; phase: string; currentTask: string | null; queued: number;
   accountId: string | null; defaultAccountId: string | null; switchable: boolean; observed?: ObservedAccount | null;
+  waiting?: AppWaiting | null;
 }
 export interface Device {
   id: string; name: string; platform: string; online: boolean; lastSeenAt: number | null; phase: string | null;
@@ -44,6 +48,8 @@ export interface Job {
   state: JobState; detail: string; cancelRequested: boolean; createdAt: number; updatedAt: number;
   accountId: string | null; accountName: string | null; appKey: string | null; planId: string | null; planName: string | null;
   latestStartAt: number | null; pauseRequested: boolean; coopGroupId?: string | null;
+  /** While WAITING or QUEUED: what holds it, in a few words (「设备离线」「切号需 Pro」…). */
+  waitReason?: string | null;
 }
 export interface JobEvent { at: number; kind: string; step: string; stepName: string; action: string; detail: string; elapsedMs: number }
 export interface InterruptionChoice { id: string; name: string }
@@ -101,6 +107,7 @@ export interface Game { id: string; name: string; tasks: GameTask[]; interruptio
 export interface Plan {
   id: string; accountId: string; name: string; days: number[]; minuteOfDay: number; tasks: CloudTask[]; deviceIds: string[];
   latestStartMinutes: number; enabled: boolean; revision: number; updatedAt: number; jitterMinutes?: number; coopPartnerIds?: string[];
+  /** Only the values this plan changed, by task; a task with no entry follows the account's settings. */
   taskConfigs?: Record<string, Record<string, unknown>>;
 }
 export interface PlanSave {

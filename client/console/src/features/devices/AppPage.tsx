@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { App, Device } from "../../api/types";
 import { Breadcrumb, Card, Empty, Grow, Muted, PageTabs, Pill, Row, Segments, TextSelect } from "../../components/ui";
-import { appStatus, jobSource, jobStatus } from "../../format";
+import { appStatus, jobSource, jobStatus, waitNext, waitReason } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
@@ -28,7 +28,8 @@ export function AppDetail({ device, app, base }: { device: Device; app: App; bas
   const accounts = data.accounts.filter((account) => account.gameId === app.gameId);
   const { current, fallback, setCurrent, setDefault } = useAppAccounts(device, app);
   const { current: job } = appJobs(data.jobs, device.id, app.key);
-  const [status, tone] = job?.state === "RUNNING" && job.pauseRequested ? ["已暂停", "warn" as const] : appStatus(app.phase, device.online);
+  const [status, tone] = job?.state === "RUNNING" && job.pauseRequested ? ["已暂停", "warn" as const] : appStatus(app.phase, device.online, app.waiting);
+  const waiting = device.online ? app.waiting : null;
   return (
     <>
       <Breadcrumb items={[["设备", paths.devices], [device.name, phone ? null : paths.device(device.id)], [app.name, null]]} />
@@ -41,6 +42,7 @@ export function AppDetail({ device, app, base }: { device: Device; app: App; bas
         <AccountMenu app={app} accounts={accounts} current={current} fallback={fallback} setCurrent={setCurrent} setDefault={setDefault} />
         <span className={s.end}><Pill tone={tone} dot>{status}</Pill></span>
       </header>
+      {waiting && <p className={s.waitBanner} role="status"><b>{waiting.text}</b>{waitNext(waiting) && <span>{waitNext(waiting)}</span>}</p>}
       <Observed app={app} accounts={accounts} />
       <PageTabs label="应用内容" value={tab} tabs={[["run", "运行", base], ["runs", "运行记录", `${base}?tab=runs`]]} />
       {tab === "run" ? <RunTab device={device} app={app} /> : (
@@ -85,7 +87,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
             )}
           </div>
           {queued.map((item) => (
-            <Row key={item.id}><Muted as="span">接下来</Muted><Grow><Link to={paths.job(item.id)} className={s.plain}>{item.taskName} · {item.accountName ?? "—"}</Link></Grow><Muted as="span">{jobSource(item)}</Muted></Row>
+            <Row key={item.id}><Muted as="span">接下来</Muted><Grow><Link to={paths.job(item.id)} className={s.plain}>{item.taskName} · {item.accountName ?? "—"}</Link></Grow>{waitReason(item) && <span className={s.waitNext}>{waitReason(item)}</span>}<Muted as="span">{jobSource(item)}</Muted></Row>
           ))}
         </Card>
       )}

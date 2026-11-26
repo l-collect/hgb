@@ -2,8 +2,9 @@ import { useState } from "react";
 import { api, enc } from "../../api/client";
 import type { App, Device, GameAccount, Job } from "../../api/types";
 import { Button, Pill, RowLink } from "../../components/ui";
+import { ask } from "../../components/Confirm";
 import { orAlert } from "../../components/useAction";
-import { ACTIVE, jobSource, jobStatus, shortTime } from "../../format";
+import { ACTIVE, jobSource, jobStatus, shortTime, waitReason } from "../../format";
 import { paths } from "../../router";
 import s from "./Jobs.module.css";
 
@@ -25,16 +26,24 @@ export const lastFinished = (jobs: Job[], keep: (job: Job) => boolean) => jobs.f
 export function jobCommand(job: Job, command: "pause" | "resume" | "cancel") {
   return orAlert(() => api(`/api/jobs/${enc(job.id)}/${command}`, { method: "POST", body: {} }));
 }
+/** Stops a running job, or gives up an unconfirmed one, once the user agrees; a job still queued is cancelled at once. */
+export async function stopJob(job: Job) {
+  const question = job.state === "UNKNOWN" ? { title: "放弃本次？", body: "这一步按没做完算，手机腾出来", ok: "放弃" }
+    : job.state === "RUNNING" ? { title: `停止「${job.taskName}」？`, body: "任务会停在当前这一步", ok: "停止" }
+    : null;
+  if (question && !await ask({ ...question, danger: true })) return;
+  await jobCommand(job, "cancel");
+}
 /** Pause or resume, and stop (or cancel before it starts), for a job that is still going. */
 export function JobControls({ job, small }: { job: Job; small?: boolean }) {
   if (job.cancelRequested) return null;
   // A result left unconfirmed holds the phone: giving it up takes the step as not done and frees the phone.
-  if (job.state === "UNKNOWN") return <Button small={small} variant="danger" onClick={() => jobCommand(job, "cancel")}>放弃本次</Button>;
+  if (job.state === "UNKNOWN") return <Button small={small} variant="danger" onClick={() => void stopJob(job)}>放弃本次</Button>;
   if (!ACTIVE.has(job.state)) return null;
   return (
     <>
       {job.state === "RUNNING" && <Button small={small} onClick={() => jobCommand(job, job.pauseRequested ? "resume" : "pause")}>{job.pauseRequested ? "继续" : "暂停"}</Button>}
-      <Button small={small} variant="danger" onClick={() => jobCommand(job, "cancel")}>{job.state === "RUNNING" ? "停止" : "取消"}</Button>
+      <Button small={small} variant="danger" onClick={() => void stopJob(job)}>{job.state === "RUNNING" ? "停止" : "取消"}</Button>
     </>
   );
 }
@@ -55,7 +64,7 @@ export function RunRows({ jobs, devices, columns, limit }: { jobs: Job[]; device
             {columns.includes("place") && devices.length > 1 && <span className={`${s.cell} ${s.wide}`}>{jobPlace(job, devices)}</span>}
             {columns.includes("source") && <span className={s.cell}>{jobSource(job)}</span>}
             <span className={`${s.cell} ${s.time}`}>{shortTime(job.updatedAt)}</span>
-            <span className={s.state}><Pill tone={tone}>{label}</Pill></span>
+            <span className={s.state}><Pill tone={tone}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
           </RowLink>
         );
       })}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { Channel, ChannelKind, Device, EventRule, GameAccount, Job } from "../../api/types";
 import { ButtonLink, Card, Empty, Muted, PageHeader, Pill, RowLink, SegmentTabs, ui } from "../../components/ui";
-import { ACTIVE, JOB_STATES, platformName, shortTime, type Tone } from "../../format";
+import { ACTIVE, deviceWaiting, JOB_STATES, platformName, shortTime, waitNext, type Tone } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { lastFinished, RunRows } from "../jobs/runs";
@@ -97,6 +97,9 @@ function NoticeEntry() {
 export function deviceStatus(device: Device, jobs: Job[]): [string, Tone, number] {
   const running = device.apps.filter((app) => app.phase === "RUNNING" || jobs.some((job) => job.deviceId === device.id && job.appKey === app.key && job.state === "RUNNING")).length;
   if (!device.online) return ["离线", "", 0];
+  // Held on the phone (无障碍断开, 锁屏 …): say so instead of 运行中.
+  const waiting = deviceWaiting(device);
+  if (waiting) return [waiting.text, "warn", running];
   if (running > 1) return [`${running} 个应用运行中`, "info", running];
   if (running === 1 || device.phase === "RUNNING") return ["运行中", "info", Math.max(running, 1)];
   return ["在线", "ok", 0];
@@ -105,6 +108,7 @@ const accountName = (accounts: GameAccount[], id: string | null) => accounts.fin
 
 function DeviceCard({ device, accounts, jobs }: { device: Device; accounts: GameAccount[]; jobs: Job[] }) {
   const [status, tone, running] = deviceStatus(device, jobs);
+  const waiting = deviceWaiting(device);
   const active = jobs.filter((job) => job.deviceId === device.id && (job.state === "RUNNING" || job.state === "LEASED"));
   let now: string;
   if (!device.online) now = `离线 · 上次 ${shortTime(device.lastSeenAt)}`;
@@ -123,7 +127,10 @@ function DeviceCard({ device, accounts, jobs }: { device: Device; accounts: Game
         <span className={s.cardName}><b>{device.name}</b><span>{platformName(device.platform)}</span></span>
         <Pill tone={tone} dot>{status}</Pill>
       </div>
-      <div className={running && device.online ? `${s.now} ${s.nowBusy}` : s.now}><div className={s.nowText}>{now}</div></div>
+      <div className={running && device.online ? `${s.now} ${s.nowBusy}` : s.now}>
+        <div className={s.nowText}>{now}</div>
+        {waiting && waitNext(waiting) && <p className={s.waitNext}>{waitNext(waiting)}</p>}
+      </div>
       {after && <Muted>{after}</Muted>}
     </Link>
   );

@@ -3,7 +3,7 @@ import { api } from "../../api/client";
 import type { Job } from "../../api/types";
 import { Button, Card, Empty, Pill, SegmentTabs, TextSelect, join, ui } from "../../components/ui";
 import { useAction } from "../../components/useAction";
-import { ACTIVE, jobStatus, shortTime } from "../../format";
+import { ACTIVE, jobStatus, shortTime, waitReason } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { useDesk } from "../../shell/useWidth";
@@ -101,7 +101,7 @@ export function RunsDesk() {
               <span role="cell" className={ui.tiny}>{jobPlace(job, data.devices)}</span>
               <span role="cell" className={join(ui.mono, s.nowrap)}>{shortTime(job.createdAt)}</span>
               <span role="cell" className={ui.tiny}>{took(tookMs(job))}</span>
-              <span role="cell"><Pill tone={tone}>{label}</Pill></span>
+              <span role="cell"><Pill tone={tone}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
             </div>
           );
         })}
@@ -134,6 +134,7 @@ function JobSide({ job }: { job: Job }) {
       <div className={s.sideBody}>
         <span className={ui.tiny}>{[shortTime(job.createdAt), jobPlace(job, data.devices), job.planName].filter(Boolean).join(" · ")}</span>
         {job.detail && (failed || job.state === "SKIPPED" || job.state === "CANCELLED") && <p className={s.why}>{job.detail}</p>}
+        {waitReason(job) && <p className={s.wait}>{label}：{waitReason(job)}</p>}
         {failed && <StoppedOn id={job.id} version={version} />}
         <div className={s.sideActions}>
           {!ACTIVE.has(job.state) && job.accountId && accountExists && (

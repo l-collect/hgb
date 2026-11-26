@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { Account } from "../api/types";
 import { ButtonLink, Card, Empty, Message, ui } from "../components/ui";
+import { ConfirmHost } from "../components/Confirm";
 import { MergeCard } from "./me/AccountActions";
 import { match, paths, usePath } from "../router";
 import { Shell, type Section } from "../shell/Shell";
@@ -43,6 +44,7 @@ export function ConsolePage({ account, admin, signedOut }: { account: Account; a
         {merge && <MergeCard token={merge} settled={(merged) => { setMerge(null); if (merged) location.reload(); }} />}
         {loaded ? page : <Empty>正在加载…</Empty>}
       </Shell>
+      <ConfirmHost />
     </ConsoleContext.Provider>
   );
 }

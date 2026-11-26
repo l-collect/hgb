@@ -1,4 +1,4 @@
-import type { Job, JobEvent, JobState, Plan } from "./api/types";
+import type { AppWaiting, Device, Job, JobEvent, JobState, Plan } from "./api/types";
 
 export type Tone = "" | "ok" | "info" | "warn" | "bad";
 export const JOB_STATES: Record<JobState, [string, Tone]> = {
@@ -86,9 +86,19 @@ export function jobStatus(job: Job): [string, Tone] {
   if (job.state === "RUNNING" && job.pauseRequested) return ["已暂停", "warn"];
   return [label, tone];
 }
-/** How an app is doing, as a pill. */
-export function appStatus(phase: string, online: boolean): [string, Tone] {
+/** What to do about what the phone waits for, in one line. */
+const WAIT_NEXT: Record<string, string> = {
+  accessibility: "在手机上重新开启无障碍", unlock: "解锁手机", game: "打开游戏", capture: "在手机上允许截图",
+};
+export const waitNext = (waiting: AppWaiting) => WAIT_NEXT[waiting.code] ?? "";
+/** The first waiting app of an online device. */
+export const deviceWaiting = (device: Device): AppWaiting | null => device.online ? device.apps.find((app) => app.waiting)?.waiting ?? null : null;
+/** Why a job that has not started yet is held; empty when the server gave no reason. */
+export const waitReason = (job: Job) => (job.state === "WAITING" || job.state === "QUEUED") && job.waitReason ? job.waitReason : "";
+/** How an app is doing, as a pill; waiting for the phone (无障碍, 解锁 …) wins over its phase. */
+export function appStatus(phase: string, online: boolean, waiting?: AppWaiting | null): [string, Tone] {
   if (!online) return ["离线", ""];
+  if (waiting) return [waiting.text, "warn"];
   const label = PHASES[phase] ?? phase;
   if (phase === "RUNNING" || phase === "SWITCHING") return [label, "info"];
   if (phase === "IDLE") return [label, "ok"];

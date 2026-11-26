@@ -78,3 +78,9 @@
 .stats4 .stat { padding: 14px var(--space-4); }
 .stats4 .stat b { font-size: 26px; }
 .statRun { color: var(--color-run); }
+/* What the phone waits for and what to do about it (等无障碍 · 在手机上重新开启无障碍). */
+.waitNext { margin-top: 2px; color: var(--color-warn); font-size: var(--text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.waitBanner {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 10px 14px; border-radius: var(--radius-lg);
+  background: var(--color-warn-soft); border: 1px solid var(--color-warn-line); color: var(--color-warn-ink); font-size: var(--text-sm);
+}

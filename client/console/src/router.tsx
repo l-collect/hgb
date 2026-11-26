@@ -1,4 +1,5 @@
-import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from "react";
+import { useEffect, useRef, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from "react";
+import { ask } from "./components/Confirm";
 
 /**
  * A small history-API router: each page has its own address, links change it without reloading, and the back button
@@ -20,9 +21,51 @@ export function useQuery(): URLSearchParams {
   return new URLSearchParams(qs);
 }
 
-export function navigate(to: string, options: { replace?: boolean } = {}) {
+/**
+ * Unsaved edits: a form that has some registers itself with [useLeaveGuard]; then leaving it (a link, navigate, the back
+ * button, a switch of account done through [leave]) asks「放弃修改？」first, and closing or reloading the tab gets the
+ * browser's own warning.
+ */
+const guards = new Set<{ current: boolean }>();
+let passing = false;
+const unsaved = () => !passing && [...guards].some((guard) => guard.current);
+export function useLeaveGuard(dirty: boolean) {
+  const guard = useRef(dirty); guard.current = dirty;
+  useEffect(() => { guards.add(guard); return () => { guards.delete(guard); }; }, []);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+}
+/** Runs [proceed] now, or after the user agrees to drop the unsaved edits ([dirty] adds a reason of the caller's own). */
+export function leave(proceed: () => void, dirty = false) {
+  if (!dirty && !unsaved()) { proceed(); return; }
+  void ask({ title: "放弃修改？", body: "改动还没保存", ok: "放弃", cancel: "继续编辑", danger: true }).then((yes) => {
+    if (!yes) return;
+    passing = true;
+    try { proceed(); } finally { passing = false; }
+  });
+}
+
+/** The address on screen, to put back when the back button is held for an answer. */
+let shown = read();
+// Registered before any page subscribes, so a held back button never reaches them.
+window.addEventListener("popstate", (event) => {
+  if (!unsaved()) { shown = read(); return; }
+  event.stopImmediatePropagation();
+  const target = read();
+  history.pushState(null, "", href(shown));
+  leave(() => navigate(target));
+});
+
+/** [force]: leave even with unsaved edits (after saving them, or deleting what they were about). */
+export function navigate(to: string, options: { replace?: boolean; force?: boolean } = {}) {
   if (to === read()) return;
+  if (!options.force && unsaved()) { leave(() => navigate(to, options)); return; }
   if (options.replace) history.replaceState(null, "", href(to)); else history.pushState(null, "", href(to));
+  shown = read();
   window.dispatchEvent(new Event(CHANGE));
   if (!options.replace) window.scrollTo(0, 0);
 }

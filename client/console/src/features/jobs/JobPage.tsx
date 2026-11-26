@@ -3,7 +3,7 @@ import { api, apiUrl, enc } from "../../api/client";
 import type { Job, JobEvent } from "../../api/types";
 import { Breadcrumb, Button, Card, Empty, Muted, Pill } from "../../components/ui";
 import { useAction } from "../../components/useAction";
-import { ACTIVE, clock, eventDetail, eventKind, jobSource, jobStatus, seconds, shortDuration, shortTime } from "../../format";
+import { ACTIVE, clock, eventDetail, eventKind, jobSource, jobStatus, seconds, shortDuration, shortTime, waitReason } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
@@ -99,6 +99,7 @@ export function JobPage({ id }: { id: string }) {
         </div>
       </header>
       {again.message && <p role="status" className={again.message.ok ? s.noteOk : s.noteBad}>{again.message.text}</p>}
+      {waitReason(job) && <p role="status" className={s.waitNote}>{label}：{waitReason(job)}</p>}
       {(job.state === "FAILED" || job.state === "UNKNOWN" || job.state === "SKIPPED" || (job.state === "CANCELLED" && stopped)) && (
         <section aria-labelledby="why" className={s.why}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v6M12 17h.01" /></svg>

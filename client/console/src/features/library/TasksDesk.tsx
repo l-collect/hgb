@@ -4,7 +4,7 @@ import type { Device, App, Game, GameAccount, GameTask, Plan } from "../../api/t
 import { Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, Switch, TextSelect, join, ui } from "../../components/ui";
 import { orAlert } from "../../components/useAction";
 import { clockText, jobStatus, shortTime } from "../../format";
-import { Link, navigate, paths, useQuery } from "../../router";
+import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { useDesk } from "../../shell/useWidth";
 import { saveOf } from "../accounts/Plans";
@@ -45,10 +45,11 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
     );
   }
   const task = taskId ? game.tasks.find((item) => item.taskId === taskId) : game.tasks[0];
-  const pickAccount = (next: string) => {
+  // Another account shows its own settings: unsaved edits are asked about first.
+  const pickAccount = (next: string) => leave(() => {
     setAccountId(next); run.clear();
-    if (task) navigate(paths.taskDetail(game.id, task.taskId, next), { replace: true });
-  };
+    if (task) navigate(paths.taskDetail(game.id, task.taskId, next), { replace: true, force: true });
+  });
   const runTask = (target: GameTask) => {
     if (!account) { navigate(paths.accounts); return; }
     void run.run(target, account.id, place ? { deviceId: place.device.id, appKey: place.app.key } : null, place ? `已排进 ${place.label}` : "已提交");
@@ -65,7 +66,7 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
   return (
     <>
       <PageHeader title="任务与日常" />
-      {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => { setChosenGame(id); run.clear(); navigate(paths.tasks); }} items={data.games.map((item) => [item.id, item.name])} />}
+      {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => leave(() => { setChosenGame(id); run.clear(); navigate(paths.tasks, { force: true }); })} items={data.games.map((item) => [item.id, item.name])} />}
       <div className={join(d.cols, d.cols3)}>
         <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} />
         <div className={d.detail}>

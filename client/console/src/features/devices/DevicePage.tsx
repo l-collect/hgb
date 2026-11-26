@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { App, Device, GameAccount, Job } from "../../api/types";
 import { Breadcrumb, Card, CardTitle, Empty, Field, Grow, Muted, Pill, Row, Segments, TextSelect } from "../../components/ui";
-import { appStatus, clock, jobSource, platformName } from "../../format";
+import { appStatus, clock, jobSource, platformName, waitNext, waitReason } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
@@ -58,7 +58,8 @@ function DeviceDetail({ device }: { device: Device }) {
 function AppCard({ device, app, accounts, jobs }: { device: Device; app: App; accounts: GameAccount[]; jobs: Job[] }) {
   const { current, fallback, setCurrent, setDefault } = useAppAccounts(device, app);
   const { current: job } = appJobs(jobs, device.id, app.key);
-  const [status, tone] = appStatus(app.phase, device.online);
+  const [status, tone] = appStatus(app.phase, device.online, app.waiting);
+  const waiting = device.online ? app.waiting : null;
   return (
     <Card as="article" className={job ? `${s.appCard} ${s.appCardBusy}` : s.appCard}>
       <div className={s.cardHead}>
@@ -69,6 +70,7 @@ function AppCard({ device, app, accounts, jobs }: { device: Device; app: App; ac
       <div className={job ? `${s.now} ${s.nowBusy}` : s.now}>
         <div className={s.nowText}>{job?.taskName ?? app.currentTask ?? "空闲"}</div>
         <Muted>{job ? [job.accountName, jobSource(job)].filter(Boolean).join(" · ") : app.observed ? `游戏里登录着 ${app.observed.nickname}` : "没有正在运行的任务"}</Muted>
+        {waiting && waitNext(waiting) && <p className={s.waitNext}>{waiting.text} · {waitNext(waiting)}</p>}
       </div>
       <div className={s.actions}>{job && <JobControls job={job} small />}<Link to={paths.app(device.id, app.key)} className={`${s.end} ${s.semi}`}>进入应用</Link></div>
     </Card>
@@ -77,9 +79,9 @@ function AppCard({ device, app, accounts, jobs }: { device: Device; app: App; ac
 
 /** Jobs not running yet: those queued on this device's apps, and those still waiting for any app of this game. */
 function Waiting({ device, gameId, apps, jobs }: { device: Device; gameId: string; apps: App[]; jobs: Job[] }) {
-  const queued = apps.flatMap((app) => appJobs(jobs, device.id, app.key).queued.map((job) => ({ job, where: `排在${app.name}后面` })));
+  const queued = apps.flatMap((app) => appJobs(jobs, device.id, app.key).queued.map((job) => ({ job, where: waitReason(job) || `排在${app.name}后面` })));
   const waiting = jobs.filter((job) => job.state === "WAITING" && job.targetId === gameId)
-    .map((job) => ({ job, where: `等可用应用${job.latestStartAt ? `，最晚 ${clock(job.latestStartAt)} 前开始` : ""}` }));
+    .map((job) => ({ job, where: `${waitReason(job) || "等可用应用"}${job.latestStartAt ? `，最晚 ${clock(job.latestStartAt)} 前开始` : ""}` }));
   const rows = [...queued, ...waiting];
   if (!rows.length) return null;
   return (

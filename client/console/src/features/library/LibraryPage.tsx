@@ -3,7 +3,7 @@ import { api, enc } from "../../api/client";
 import type { CloudTask, ConfigView, Game, GameAccount, GameTask, Job } from "../../api/types";
 import { Breadcrumb, Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, ui } from "../../components/ui";
 import { actionKind, ACTIVE, jobStatus, type Tone } from "../../format";
-import { Link, navigate, paths, useQuery } from "../../router";
+import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
 import { formatSettingValue, resolveTaskDefaults, SettingsForm, stepWillRun, summarizeWebTaskConfig, TaskStepsList } from "../accounts/Settings";
@@ -220,7 +220,7 @@ function TaskDetail({ gameId, taskId, detail }: { gameId: string; taskId: string
         aside={
           <span className={s.pickers}>
             {gameAccounts.length > 1 && (
-              <TextSelect label="账号" value={activeAccount?.id ?? ""} onChange={setAccountId}
+              <TextSelect label="账号" value={activeAccount?.id ?? ""} onChange={(next) => leave(() => setAccountId(next))}
                 options={gameAccounts.map((a): [string, string] => [a.id, a.name])} />
             )}
             <StarButton on={favorites.has(key)} toggle={() => toggleFavorite(key)} />

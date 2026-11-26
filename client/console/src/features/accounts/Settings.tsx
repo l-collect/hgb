@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { api, enc } from "../../api/client";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { api, ApiFailure, enc } from "../../api/client";
 import { settingVisible, type CloudTask, type ConfigView, type GameAccount, type GameTask, type SettingField, type TaskStepDetail } from "../../api/types";
 import { Button, Card, CardHead, Check, Chips, Choices, Empty, FootBar, Pill, Row, Stepper, Switch, ui } from "../../components/ui";
+import { ask } from "../../components/Confirm";
 import { useAction } from "../../components/useAction";
-import { Link } from "../../router";
+import { Link, useLeaveGuard } from "../../router";
 import { useConsole } from "../../state/context";
 import s from "./Accounts.module.css";
 
@@ -242,30 +243,62 @@ export function SettingsForm({
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** A newer copy saved elsewhere (the App, another tab) while this one has edits; 载入 takes it. */
+  const [newer, setNewer] = useState<ConfigView | null>(null);
   const { busy, message, run } = useAction();
   const path = `/api/accounts/${enc(account.id)}/configs/${enc(task.targetId)}/${enc(task.taskId)}`;
+  useLeaveGuard(dirty);
+  const dirtyNow = useRef(dirty); dirtyNow.current = dirty;
+  const revision = useRef(-1);
+
+  const startOf = (loaded: ConfigView) => {
+    const start: Record<string, unknown> = {};
+    for (const def of loaded.fields) {
+      if (Object.prototype.hasOwnProperty.call(loaded.values, def.id)) start[def.id] = loaded.values[def.id];
+      else if (def.recommended != null) start[def.id] = def.recommended;
+    }
+    return start;
+  };
+  const take = (loaded: ConfigView) => { revision.current = loaded.revision; setView(loaded); setValues(startOf(loaded)); setDirty(false); setNewer(null); };
 
   useEffect(() => {
     let current = true;
-    setLoadError(null); setView(null); setDirty(false);
-    api<ConfigView>(path).then((loaded) => {
-      if (!current) return;
-      const start: Record<string, unknown> = {};
-      for (const def of loaded.fields) {
-        if (Object.prototype.hasOwnProperty.call(loaded.values, def.id)) start[def.id] = loaded.values[def.id];
-        else if (def.recommended != null) start[def.id] = def.recommended;
-      }
-      setView(loaded); setValues(start); setDirty(false);
-    }).catch((error: Error) => { if (current) setLoadError(error.message); });
+    setLoadError(null); setView(null); setDirty(false); setNewer(null); revision.current = -1;
+    api<ConfigView>(path).then((loaded) => { if (current) take(loaded); }).catch((error: Error) => { if (current) setLoadError(error.message); });
     return () => { current = false; };
-  }, [path]);
+  }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Read again when the page comes back into view or the stream reconnects: an untouched form takes a newer copy, an
+  // edited one keeps its edits and offers it.
+  useEffect(() => {
+    let current = true;
+    const check = () => {
+      if (document.visibilityState === "hidden" || revision.current < 0) return;
+      api<ConfigView>(path).then((loaded) => {
+        if (!current || loaded.revision === revision.current) return;
+        if (dirtyNow.current) setNewer(loaded); else take(loaded);
+      }).catch(() => {});
+    };
+    if (data.epoch > 1) check();
+    window.addEventListener("focus", check); document.addEventListener("visibilitychange", check);
+    return () => { current = false; window.removeEventListener("focus", check); document.removeEventListener("visibilitychange", check); };
+  }, [path, data.epoch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const persist = async () => {
     if (!view) return;
     const shown = new Set(view.fields.filter((def) => settingVisible(def, values)).map((def) => def.id));
     const body = Object.fromEntries(Object.entries(values).filter(([id, value]) => value !== undefined && shown.has(id)));
-    const saved = await api<ConfigView>(path, { method: "PUT", body: { values: body, revision: view.revision } });
-    setView(saved); setDirty(false);
+    try {
+      const saved = await api<ConfigView>(path, { method: "PUT", body: { values: body, revision: view.revision } });
+      revision.current = saved.revision; setView(saved); setDirty(false); setNewer(null);
+    } catch (error) {
+      // Saved elsewhere since this was read: keep the edits and offer the newer copy.
+      if (error instanceof ApiFailure && error.status === 409) {
+        const loaded = await api<ConfigView>(path).catch(() => null);
+        if (loaded) setNewer(loaded);
+        throw new Error("已在别处更新，先载入");
+      }
+      throw error;
+    }
   };
   const save = () => run(persist);
   const saveAndRun = () => run(async () => { if (dirty) await persist(); await onRun?.(); });
@@ -276,13 +309,16 @@ export function SettingsForm({
     return defaults;
   };
   const hasAccountOverrides = view != null && Object.keys(view.values).length > 0;
-  // 默认: with a saved copy, clear it on the server; otherwise just put the unsaved edits back.
+  // 默认: with a saved copy, clear it on the server (after asking); otherwise just put the unsaved edits back.
   const resetDefaults = () => {
     if (!view) return;
     if (!hasAccountOverrides) { setValues(recommended(view.fields)); setDirty(false); return; }
-    run(async () => {
-      const saved = await api<ConfigView>(path, { method: "PUT", body: { values: {}, revision: view.revision } });
-      setView(saved); setValues(recommended(saved.fields)); setDirty(false);
+    void ask({ title: "清掉已存参数？", body: "恢复任务默认，跟随账号的计划也会变", ok: "清掉", danger: true }).then((yes) => {
+      if (!yes) return;
+      run(async () => {
+        const saved = await api<ConfigView>(path, { method: "PUT", body: { values: {}, revision: view.revision } });
+        revision.current = saved.revision; setView(saved); setValues(recommended(saved.fields)); setDirty(false); setNewer(null);
+      });
     });
   };
 
@@ -291,8 +327,9 @@ export function SettingsForm({
   if (loadError) return <>{desk && <div className={s.deskBar}>{head}</div>}<Card><Empty>{loadError}</Empty></Card></>;
   if (!view) return <>{desk && <div className={s.deskBar}>{head}</div>}<Card><Empty>读取中…</Empty></Card></>;
   const status = (
-    <span role="status" className={message && !message.ok ? s.statusBad : ui.tiny} style={desk ? { whiteSpace: "normal" } : { flex: 1, minWidth: 0, whiteSpace: "normal" }}>
-      {message && !message.ok ? message.text : dirty ? "未保存" : ""}
+    <span role="status" className={newer ? s.statusWarn : message && !message.ok ? s.statusBad : ui.tiny} style={desk ? { whiteSpace: "normal" } : { flex: 1, minWidth: 0, whiteSpace: "normal" }}>
+      {newer ? <>已在别处更新 · <button type="button" className={s.configLink} onClick={() => take(newer)}>载入</button></>
+        : message && !message.ok ? message.text : dirty ? "未保存" : ""}
     </span>
   );
   const buttons = (
