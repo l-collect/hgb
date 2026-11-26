@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Game, GameAccount, Job, Plan } from "../../api/types";
-import { Button, Card, Empty, Pill, SegmentTabs, Switch, join, ui } from "../../components/ui";
+import { Button, Card, Empty, LiveSwitch, Pill, SegmentTabs, join, ui } from "../../components/ui";
 import { clockText, jobStatus, shortTime, WEEK, type Tone } from "../../format";
 import { Link, navigate, paths } from "../../router";
 import { planEntries, planHref, switchPlan, type PlanEntry } from "./Plans";
@@ -61,7 +61,7 @@ function PlanRows({ account, entries, jobs }: { account: GameAccount; entries: P
             <span role="cell" className={join(ui.tiny, s.taskCol)}>{taskLine(entry) || "未选任务"}</span>
             <span role="cell" className={ui.tiny}>{last ? <span className={s.last}>{shortTime(last.updatedAt)} <Pill tone={jobStatus(last)[1]}>{jobStatus(last)[0]}</Pill></span> : "—"}</span>
             <span role="cell" onClick={(e) => e.stopPropagation()}>
-              <Switch label={`启用${source.name}`} checked={entry.plan?.enabled ?? false} onChange={(on) => switchPlan(account, entry, on)} />
+              <LiveSwitch label={`启用${source.name}`} checked={entry.plan?.enabled ?? false} save={(on) => switchPlan(account, entry, on)} />
             </span>
           </div>
         );

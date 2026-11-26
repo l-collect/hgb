@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Account } from "../api/types";
-import { ButtonLink, Card, Empty, Message, ui } from "../components/ui";
+import { Button, ButtonLink, Card, Empty, Loading, Message, ui } from "../components/ui";
 import { ConfirmHost } from "../components/Confirm";
+import { ToastHost } from "../components/Toast";
 import { MergeCard } from "./me/AccountActions";
 import { match, paths, usePath } from "../router";
 import { Shell, type Section } from "../shell/Shell";
@@ -23,7 +24,14 @@ import { MeDesk } from "./me/MeDesk";
 import { useWide } from "../shell/useWidth";
 
 export function ConsolePage({ account, admin, signedOut }: { account: Account; admin: boolean; signedOut: () => void }) {
-  const { data, connection, loaded } = useConsoleStream(signedOut);
+  const { data, connection, loaded, retry } = useConsoleStream(signedOut);
+  // The first connection taking more than about five seconds: say so and offer 重试, instead of 读取中… for ever.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (loaded) return;
+    const timer = window.setTimeout(() => setSlow(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [loaded, slow]);
   const path = usePath();
   const wide = useWide();
   const [section, page, full] = (wide && deskRoute(path)) || [...route(path), false] as const;
@@ -39,12 +47,18 @@ export function ConsolePage({ account, admin, signedOut }: { account: Account; a
   });
   return (
     <ConsoleContext.Provider value={{ data, account, signedOut }}>
-      <Shell section={section} connection={connection} full={full} admin={admin}>
+      <Shell section={section} connection={connection} full={full} admin={admin} stale={loaded && connection === "lost"}>
+        {loaded && connection === "lost" && (
+          <p className={ui.lostBanner} role="status">已断开，数据可能不是最新 · 重连中…<Button variant="link" onClick={retry}>立即重连</Button></p>
+        )}
         {linkFailed && <Message text="GitHub 绑定失败，请重试" />}
         {merge && <MergeCard token={merge} settled={(merged) => { setMerge(null); if (merged) location.reload(); }} />}
-        {loaded ? page : <Empty>正在加载…</Empty>}
+        {loaded ? page : slow ? (
+          <Card className={ui.errorCard} role="alert"><span>连不上服务器</span><Button small onClick={() => { setSlow(false); retry(); }}>重试</Button></Card>
+        ) : <Loading />}
       </Shell>
       <ConfirmHost />
+      <ToastHost />
     </ConsoleContext.Provider>
   );
 }

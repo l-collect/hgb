@@ -1,27 +1,30 @@
 import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { AuthOptions, Channel, ChannelKind, ChannelSave, Delivery, EventRule } from "../../api/types";
-import { Button, Card, Empty, Message, Muted, Pill, Switch } from "../../components/ui";
-import { orAlert, useAction } from "../../components/useAction";
+import { Button, Card, Empty, LiveSwitch, Message, Muted, Pill } from "../../components/ui";
+import { orToast, useAction } from "../../components/useAction";
+import { toast } from "../../components/Toast";
+import { ask } from "../../components/Confirm";
 import { shortTime, type Tone } from "../../format";
 import { useConsole } from "../../state/context";
 import s from "./Notices.module.css";
 
-interface FieldSpec { id: string; label: string; hint: string; note: string; secret: boolean }
+/** [secret]: never sent back once saved. [masked]: typed as a password (a key), not a web address one reads to check. */
+interface FieldSpec { id: string; label: string; hint: string; note: string; secret: boolean; masked?: boolean }
 /** Each kind's settings, as the server checks them. */
 const KINDS: [ChannelKind, string, FieldSpec[]][] = [
   ["DINGTALK", "钉钉", [
     { id: "url", label: "机器人 Webhook 地址", hint: "https://oapi.dingtalk.com/robot/send?access_token=…", note: "群设置 → 机器人 → 自定义；安全设置选“加签”或关键词“护肝宝”", secret: true },
-    { id: "sign", label: "加签密钥（可不填）", hint: "SEC…", note: "保存后不再显示", secret: true }]],
+    { id: "sign", label: "加签密钥（可不填）", hint: "SEC…", note: "保存后不再显示", secret: true, masked: true }]],
   ["WECOM", "企业微信", [{ id: "url", label: "机器人 Webhook 地址", hint: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…", note: "群聊 → 添加群机器人", secret: true }]],
   ["BARK", "Bark", [
     { id: "server", label: "服务器（可不填）", hint: "https://api.day.app", note: "自建服务器填自己的地址", secret: false },
-    { id: "key", label: "设备密钥", hint: "在 Bark App 里复制", note: "保存后不再显示", secret: true }]],
+    { id: "key", label: "设备密钥", hint: "在 Bark App 里复制", note: "保存后不再显示", secret: true, masked: true }]],
   ["EMAIL", "邮件", []],
   ["LOCAL", "本机通知", [{ id: "device", label: "设备", hint: "", note: "设备在线时由服务端推给护肝宝 App 弹出；设备自己发现的事件断网也会先弹出", secret: false }]],
   ["WEBHOOK", "Webhook", [
     { id: "url", label: "地址", hint: "https://", note: "以 JSON 发送事件：source、rule、title、detail、at、jobId", secret: true },
-    { id: "header", label: "认证头（可不填）", hint: "Authorization: Bearer …", note: "保存后不再显示", secret: true }]],
+    { id: "header", label: "认证头（可不填）", hint: "Authorization: Bearer …", note: "保存后不再显示", secret: true, masked: true }]],
 ];
 const KIND_NAMES = Object.fromEntries(KINDS.map(([kind, name]) => [kind, name])) as Record<ChannelKind, string>;
 const DELIVERY: Record<Delivery["state"], Tone> = { SENT: "ok", PENDING: "warn", FAILED: "bad" };
@@ -41,12 +44,12 @@ export function DeliveryPill({ delivery }: { delivery: Delivery }) { return <Pil
 export function Channels({ channels, rules }: { channels: Channel[]; rules: EventRule[] }) {
   const [editing, setEditing] = useState<Channel | "new" | null>(null);
   const names = Object.fromEntries(rules.map((rule) => [rule.ruleId, rule.name]));
-  const remove = (channel: Channel) => {
-    if (!confirm(`删除“${channel.name}”？还没发出的通知不会再发到这里。`)) return;
-    orAlert(() => api(`/api/notifications/channels/${enc(channel.id)}`, { method: "DELETE" }));
+  const remove = async (channel: Channel) => {
+    if (!await ask({ title: `删除「${channel.name}」？`, body: "还没发出的通知不会再发到这里", ok: "删除", danger: true })) return;
+    await orToast(() => api(`/api/notifications/channels/${enc(channel.id)}`, { method: "DELETE" }), "已删除");
   };
-  const toggle = (channel: Channel, enabled: boolean) => orAlert(() => api(`/api/notifications/channels/${enc(channel.id)}`, { method: "PUT",
-    body: { kind: channel.kind, name: channel.name, enabled, rules: channel.rules, fields: channel.fields } }));
+  const toggle = (channel: Channel, enabled: boolean) => api(`/api/notifications/channels/${enc(channel.id)}`, { method: "PUT",
+    body: { kind: channel.kind, name: channel.name, enabled, rules: channel.rules, fields: channel.fields } });
   return (
     <>
       <div className={s.filter}>
@@ -60,7 +63,7 @@ export function Channels({ channels, rules }: { channels: Channel[]; rules: Even
             <Card key={channel.id} as="article" className={s.channel}>
               <div className={s.channelHead}>
                 <span className={s.grow}><b className={s.channelName}>{channel.name}</b><Muted as="span">{KIND_NAMES[channel.kind]} · {channel.target}</Muted></span>
-                <Switch checked={channel.enabled} label={`启用渠道：${channel.name}`} onChange={(on) => toggle(channel, on)} />
+                <LiveSwitch checked={channel.enabled} label={`启用渠道：${channel.name}`} save={(on) => toggle(channel, on)} />
               </div>
               <div className={s.chips}>
                 {channel.rules.length ? channel.rules.map((id) => <Pill key={id} tone="info">{names[id] ?? id}</Pill>) : <Muted as="span">还没有订阅规则</Muted>}
@@ -68,7 +71,7 @@ export function Channels({ channels, rules }: { channels: Channel[]; rules: Even
               <Muted as="span">{channel.last ? `${shortTime(channel.last.at)}${channel.last.test ? " 测试" : ""} · ${deliveryText(channel.last)}` : "还没有发过"}</Muted>
               <div className={s.channelActions}>
                 <Button onClick={() => setEditing(channel)}>编辑</Button>
-                <Button variant="danger" onClick={() => remove(channel)}>删除</Button>
+                <Button variant="danger" onClick={() => void remove(channel)}>删除</Button>
               </div>
             </Card>
           ))}
@@ -104,6 +107,7 @@ function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules:
   });
   const save = () => run(async () => {
     await api(channel ? `/api/notifications/channels/${enc(channel.id)}` : "/api/notifications/channels", { method: channel ? "PUT" : "POST", body: draft() });
+    toast("已保存", { tone: "ok" });
     done();
   });
   const visible = rules.filter((rule) => rule.enabled || subscribed.includes(rule.ruleId));
@@ -133,7 +137,7 @@ function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules:
                 {data.devices.map((device) => <option key={device.id} value={device.id}>{device.name}</option>)}
               </select>
             ) : (
-              <input type={field.secret ? "password" : "text"} autoComplete="off" value={values[field.id] ?? ""} placeholder={saved(field) ? "已填写，留空不改" : field.hint}
+              <input type={field.masked ? "password" : field.id === "url" || field.id === "server" ? "url" : "text"} autoComplete="off" spellCheck={false} value={values[field.id] ?? ""} placeholder={saved(field) ? "已填写，留空不改" : field.hint}
                 onChange={(e) => setValues((now) => ({ ...now, [field.id]: e.target.value }))} />
             )}
             <Muted as="span">{field.note}</Muted>

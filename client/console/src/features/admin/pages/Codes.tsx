@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Card, Empty, Message, MoreMenu, Pill, SegmentTabs, ui } from "../../../components/ui";
 import { navigate } from "../../../router";
+import { ask } from "../../../components/Confirm";
+import { toast } from "../../../components/Toast";
 import { admin, type Code, type CodeFilter, type CodePage } from "../api";
 import { failure } from "../failure";
 import { CODE_STATUS, duration, shortCode, time, who } from "../format";
@@ -31,12 +33,12 @@ export function CodesPage() {
   useEffect(() => { void load(); }, [load]);
 
   const revoke = async (code: Code) => {
-    if (!confirm(`作废 ${code.prefix ? `${code.prefix}…` : "这个码"}？作废后不能再兑换`)) return;
-    try { await admin.revoke(code.id); await load(); } catch (e) { alert(failure(e)); }
+    if (!await ask({ title: `作废 ${code.prefix ? `${code.prefix}…` : "这个码"}？`, body: "作废后不能再兑换", ok: "作废", danger: true })) return;
+    try { await admin.revoke(code.id); toast("已作废", { tone: "ok" }); await load(); } catch (e) { toast(failure(e), { tone: "bad" }); }
   };
   const exportCsv = async () => {
     setExporting(true);
-    try { await admin.exportCodes(filter); } catch (e) { alert(failure(e)); } finally { setExporting(false); }
+    try { await admin.exportCodes(filter); } catch (e) { toast(failure(e), { tone: "bad" }); } finally { setExporting(false); }
   };
 
   const counts = page?.counts; const stats = page?.stats;
@@ -87,7 +89,7 @@ export function CodesPage() {
           </tbody>
         </table></div>
         {page && page.items.length === 0 && <Empty>没有兑换码</Empty>}
-        {!page && !error && <Empty>正在加载…</Empty>}
+        {!page && !error && <Empty>读取中…</Empty>}
       </Card>
       {page && <Pager offset={offset} total={page.total} onChange={setOffset} />}
       <p className={ui.tiny}>码只存摘要，明文只在生成时显示一次</p>

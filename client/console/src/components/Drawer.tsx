@@ -18,6 +18,17 @@ export function Drawer({ label, onClose, children, width = 520, dirty = false }:
     const key = (event: KeyboardEvent) => {
       // A menu open inside the drawer, or a question over it, takes Escape first.
       if (event.key === "Escape" && !document.querySelector("[role=menu],[role=alertdialog]")) close.current();
+      // Tab stays inside the drawer: from the last control to the first, and back. A question over it keeps its own.
+      if (event.key === "Tab" && box.current && !document.querySelector("[role=alertdialog]")) {
+        const controls = [...box.current.querySelectorAll<HTMLElement>("a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])")]
+          .filter((item) => item.offsetParent !== null);
+        if (!controls.length) { event.preventDefault(); return; }
+        const first = controls[0], last = controls[controls.length - 1];
+        const at = document.activeElement;
+        const outside = !box.current.contains(at);
+        if (event.shiftKey && (at === first || at === box.current || outside)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (at === last || outside)) { event.preventDefault(); first.focus(); }
+      }
     };
     document.addEventListener("keydown", key);
     return () => { document.removeEventListener("keydown", key); opener?.focus?.({ preventScroll: true }); };

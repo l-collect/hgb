@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { api } from "../../api/client";
+import { useEffect, useState } from "react";
 import type { Job } from "../../api/types";
 import { Button, Card, Empty, Pill, SegmentTabs, TextSelect, join, ui } from "../../components/ui";
 import { useAction } from "../../components/useAction";
@@ -8,16 +7,18 @@ import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { useDesk } from "../../shell/useWidth";
 import { StoppedOn } from "../jobs/JobPage";
-import { jobPlace, JobControls } from "../jobs/runs";
+import { jobPlace, JobControls, rerun } from "../jobs/runs";
+import { NextSteps } from "../jobs/JobPage";
 import d from "../../shell/Desk.module.css";
 import s from "./RunsDesk.module.css";
 
-export type RunFilter = "all" | "active" | "done" | "bad";
+export type RunFilter = "all" | "active" | "done" | "bad" | "waiting";
 export const RUN_FILTERS: Record<RunFilter, (job: Job) => boolean> = {
   all: () => true,
   active: (job) => ACTIVE.has(job.state),
   done: (job) => job.state === "COMPLETED",
   bad: (job) => job.state === "FAILED" || job.state === "UNKNOWN",
+  waiting: (job) => job.state === "QUEUED" || job.state === "WAITING",
 };
 type Span = "today" | "week" | "all";
 const DAY = 86400000;
@@ -37,9 +38,17 @@ const COLUMNS: [Column, string][] = [["task", "任务"], ["account", "账号"], 
 export function RunsDesk() {
   const { data } = useConsole();
   const desk = useDesk();
-  const chosen = useQuery().get("job");
-  const [filter, setFilter] = useState<RunFilter>("all");
-  const [span, setSpan] = useState<Span>("all");
+  const query = useQuery();
+  const chosen = query.get("job");
+  // The numbers above the table open it filtered: ?runs=bad&span=today.
+  const askedFilter = query.get("runs") as RunFilter | null;
+  const askedSpan = query.get("span") as Span | null;
+  const [filter, setFilter] = useState<RunFilter>(askedFilter && askedFilter in RUN_FILTERS ? askedFilter : "all");
+  const [span, setSpan] = useState<Span>(askedSpan === "today" || askedSpan === "week" ? askedSpan : "all");
+  useEffect(() => {
+    if (askedFilter && askedFilter in RUN_FILTERS) setFilter(askedFilter);
+    if (askedSpan === "today" || askedSpan === "week") setSpan(askedSpan);
+  }, [askedFilter, askedSpan]);
   const [accountId, setAccountId] = useState("");
   const [sort, setSort] = useState<[Column, 1 | -1] | null>(null);
   const [limit, setLimit] = useState(50);
@@ -52,7 +61,7 @@ export function RunsDesk() {
       case "device": return job.deviceName ?? "";
       case "start": return job.createdAt;
       case "took": return tookMs(job) ?? -1;
-      case "state": return jobStatus(job)[0];
+      case "state": return jobStatus(job, data.devices)[0];
     }
   };
   let runs = data.jobs.filter((job) => RUN_FILTERS[filter](job) && job.updatedAt >= since && (!accountId || job.accountId === accountId));
@@ -64,7 +73,11 @@ export function RunsDesk() {
     });
   }
   const selected = desk && chosen ? data.jobs.find((job) => job.id === chosen) : undefined;
-  const open = (job: Job) => desk ? navigate(`${paths.devices}?job=${encodeURIComponent(job.id)}`, { replace: true }) : navigate(paths.job(job.id));
+  const open = (job: Job) => {
+    if (!desk) { navigate(paths.job(job.id)); return; }
+    const next = new URLSearchParams(query); next.set("job", job.id);
+    navigate(`${paths.devices}?${next}`, { replace: true });
+  };
   const sortBy = (column: Column) => setSort(sort?.[0] === column ? (sort[1] === -1 ? [column, 1] : null) : [column, -1]);
   const accounts = data.accounts.filter((a) => data.jobs.some((job) => job.accountId === a.id));
 
@@ -72,7 +85,8 @@ export function RunsDesk() {
     <section className={d.stack} aria-labelledby="runs">
       <div className={d.toolbar}>
         <h2 id="runs">战报</h2>
-        <SegmentTabs label="按状态筛选" value={filter} onChange={setFilter} items={[["all", "全部"], ["active", "运行中"], ["done", "完成"], ["bad", "异常"]]} />
+        <SegmentTabs label="按状态筛选" value={filter} onChange={setFilter}
+          items={[["all", "全部"], ["active", "运行中"], ["waiting", "排队"], ["done", "完成"], ["bad", "异常"]]} />
         <TextSelect label="时间" value={span} onChange={setSpan} options={[["today", "今天"], ["week", "近 7 天"], ["all", "全部时间"]]} />
         {accounts.length > 1 && <TextSelect label="账号" value={accountId} onChange={setAccountId} options={[["", "全部账号"], ...accounts.map((a): [string, string] => [a.id, a.name])]} />}
       </div>
@@ -90,7 +104,7 @@ export function RunsDesk() {
           })}
         </div>
         {runs.length === 0 ? <Empty>没有战报</Empty> : runs.slice(0, limit).map((job) => {
-          const [label, tone] = jobStatus(job);
+          const [label, tone] = jobStatus(job, data.devices);
           return (
             <div key={job.id} role="row" tabIndex={0} className={join(d.trow, d.clickable, s.cols, job.id === selected?.id && d.selected)}
               aria-selected={desk ? job.id === selected?.id : undefined}
@@ -101,7 +115,7 @@ export function RunsDesk() {
               <span role="cell" className={ui.tiny}>{jobPlace(job, data.devices)}</span>
               <span role="cell" className={join(ui.mono, s.nowrap)}>{shortTime(job.createdAt)}</span>
               <span role="cell" className={ui.tiny}>{took(tookMs(job))}</span>
-              <span role="cell"><Pill tone={tone}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
+              <span role="cell"><Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
             </div>
           );
         })}
@@ -124,7 +138,7 @@ export function RunsDesk() {
 function JobSide({ job }: { job: Job }) {
   const { data } = useConsole();
   const again = useAction();
-  const [label, tone] = jobStatus(job);
+  const [label, tone] = jobStatus(job, data.devices);
   const version = `${data.epoch}.${data.logVersion[job.id] ?? 0}`;
   const failed = job.state === "FAILED" || job.state === "UNKNOWN";
   const accountExists = data.accounts.some((item) => item.id === job.accountId);
@@ -138,15 +152,13 @@ function JobSide({ job }: { job: Job }) {
         {failed && <StoppedOn id={job.id} version={version} />}
         <div className={s.sideActions}>
           {!ACTIVE.has(job.state) && job.accountId && accountExists && (
-            <Button small variant="primary" disabled={again.busy} onClick={() => again.run(async () => {
-              await api("/api/jobs", { method: "POST", body: { targetId: job.targetId, taskId: job.taskId, accountId: job.accountId, deviceId: null, appKey: null } });
-              return "已提交";
-            })}>重跑</Button>
+            <Button small variant="primary" disabled={again.busy} onClick={() => again.run(() => rerun(job, data.devices))}>重跑</Button>
           )}
           <JobControls job={job} small />
           <Link to={paths.job(job.id)} className={s.full}>步骤明细 ›</Link>
         </div>
-        {again.message && <p role="status" className={again.message.ok ? s.ok : s.bad}>{again.message.text}</p>}
+        {again.message && !again.message.ok && <p role="alert" className={s.bad}>{again.message.text}</p>}
+        <NextSteps job={job} />
       </div>
     </Card>
   );

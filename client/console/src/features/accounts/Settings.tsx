@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiFailure, enc } from "../../api/client";
 import { settingVisible, type CloudTask, type ConfigView, type GameAccount, type GameTask, type SettingField, type TaskStepDetail } from "../../api/types";
-import { Button, Card, CardHead, Check, Chips, Choices, Empty, FootBar, Pill, Row, Stepper, Switch, ui } from "../../components/ui";
+import { Button, Card, CardHead, Check, Chips, Choices, Empty, ErrorCard, FootBar, Loading, Pill, Row, Stepper, Switch, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
 import { useAction } from "../../components/useAction";
+import { toast } from "../../components/Toast";
 import { Link, useLeaveGuard } from "../../router";
 import { useConsole } from "../../state/context";
 import s from "./Accounts.module.css";
@@ -192,16 +193,17 @@ export function StepGroupedFieldsets({
               const defLabel = meta?.defaultLabel ?? formatSettingValue(def, def.recommended);
               const hasRecommended = def.recommended !== undefined && def.recommended !== null;
               const same = hasRecommended && JSON.stringify(values[def.id]) === JSON.stringify(def.recommended);
-              const modified = hasRecommended && values[def.id] !== undefined && !same;
+              // Only a changed value says what the default was, with 还原 to put it back.
+              const modified = hasRecommended && values[def.id] !== undefined && !same && !def.readOnly;
               const wide = def.widget === "SINGLE_CHOICE" || def.widget === "MULTI_CHOICE";
               return (
                 <div key={def.id} className={s.fieldRow} style={def.visibleWhen ? { paddingLeft: 32 } : undefined}>
                   <div className={s.fieldName}>
                     <b>{def.label}{def.required ? " *" : ""}</b>
-                    {(defLabel || modified || same) && (
+                    {modified && (
                       <span className={ui.tiny} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        {defLabel && <span>任务默认：{defLabel}</span>}
-                        {modified ? <Pill tone="info">已改</Pill> : same ? <Pill tone="soft">推荐</Pill> : null}
+                        <span className={s.changed}>已改{defLabel ? ` · 默认 ${defLabel}` : ""}</span>
+                        <button type="button" className={s.configLink} onClick={() => change(def.id, def.recommended)}>还原</button>
                       </span>
                     )}
                   </div>
@@ -243,6 +245,7 @@ export function SettingsForm({
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   /** A newer copy saved elsewhere (the App, another tab) while this one has edits; 载入 takes it. */
   const [newer, setNewer] = useState<ConfigView | null>(null);
   const { busy, message, run } = useAction();
@@ -266,7 +269,7 @@ export function SettingsForm({
     setLoadError(null); setView(null); setDirty(false); setNewer(null); revision.current = -1;
     api<ConfigView>(path).then((loaded) => { if (current) take(loaded); }).catch((error: Error) => { if (current) setLoadError(error.message); });
     return () => { current = false; };
-  }, [path]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [path, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Read again when the page comes back into view or the stream reconnects: an untouched form takes a newer copy, an
   // edited one keeps its edits and offers it.
   useEffect(() => {
@@ -300,7 +303,7 @@ export function SettingsForm({
       throw error;
     }
   };
-  const save = () => run(persist);
+  const save = () => run(async () => { await persist(); toast("已保存", { tone: "ok" }); });
   const saveAndRun = () => run(async () => { if (dirty) await persist(); await onRun?.(); });
 
   const recommended = (fields: SettingField[]) => {
@@ -318,14 +321,15 @@ export function SettingsForm({
       run(async () => {
         const saved = await api<ConfigView>(path, { method: "PUT", body: { values: {}, revision: view.revision } });
         revision.current = saved.revision; setView(saved); setValues(recommended(saved.fields)); setDirty(false); setNewer(null);
+        toast("已恢复默认", { tone: "ok" });
       });
     });
   };
 
   const change = (id: string, value: unknown) => { setValues((now) => ({ ...now, [id]: value })); setDirty(true); };
 
-  if (loadError) return <>{desk && <div className={s.deskBar}>{head}</div>}<Card><Empty>{loadError}</Empty></Card></>;
-  if (!view) return <>{desk && <div className={s.deskBar}>{head}</div>}<Card><Empty>读取中…</Empty></Card></>;
+  if (loadError) return <>{desk && <div className={s.deskBar}>{head}</div>}<ErrorCard text={loadError} retry={() => setAttempt((n) => n + 1)} /></>;
+  if (!view) return <>{desk && <div className={s.deskBar}>{head}</div>}<Loading card /></>;
   const status = (
     <span role="status" className={newer ? s.statusWarn : message && !message.ok ? s.statusBad : ui.tiny} style={desk ? { whiteSpace: "normal" } : { flex: 1, minWidth: 0, whiteSpace: "normal" }}>
       {newer ? <>已在别处更新 · <button type="button" className={s.configLink} onClick={() => take(newer)}>载入</button></>

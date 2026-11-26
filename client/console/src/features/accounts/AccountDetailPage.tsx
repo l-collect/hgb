@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { EventFollowUp, GameAccount, GameTask, InterruptionOption } from "../../api/types";
-import { Breadcrumb, Button, Card, CardHead, Empty, Message, PageTabs, Pill, Row, Switch, TextSelect, ui } from "../../components/ui";
-import { orAlert } from "../../components/useAction";
+import { Breadcrumb, Button, Card, CardHead, Empty, LiveSelect, LiveSwitch, PageTabs, Pill, Row, ui } from "../../components/ui";
+import { orToast } from "../../components/useAction";
+import { ask } from "../../components/Confirm";
 import { shortTime } from "../../format";
 import { Link, navigate, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
 import { RunRows } from "../jobs/runs";
-import { accountNow, ApplyAccountLoginAction, EditAccount, ReportDeviceLoginAction } from "./GameAccountsPage";
+import { accountNow, ApplyAccountLoginAction, EditAccount, removeAccount, ReportDeviceLoginAction } from "./GameAccountsPage";
 import { PlanList } from "./Plans";
 import s from "./Accounts.module.css";
 
@@ -27,7 +28,7 @@ export function AccountDetailPage({ id, tab }: { id: string; tab: Tab }) {
       <Breadcrumb items={[["账号与计划", paths.accounts], [account.name, null]]} />
       <header className={s.header}>
         <h1 className={s.title}>{account.name} · 账号设置</h1>
-        <Pill tone={tone} className={s.headPill}>{now}</Pill>
+        <Pill tone={tone} live className={s.headPill}>{now}</Pill>
       </header>
       <PageTabs label="账号内容" value={tab} tabs={[
         ["settings", "设置", paths.account(account.id)],
@@ -44,18 +45,18 @@ export function AccountDetailPage({ id, tab }: { id: string; tab: Tab }) {
 function AccountSettingsTab({ account, gameName, tasks, interruptions }: { account: GameAccount; gameName: string; tasks: GameTask[]; interruptions: InterruptionOption[] }) {
   const { data } = useConsole();
   const [editing, setEditing] = useState(false);
-  const [snapNotice, setSnapNotice] = useState<string | null>(null);
   const peerAccounts = data.accounts.filter((item) => item.gameId === account.gameId && item.id !== account.id);
   const partner1 = account.coopPartnerIds?.[0] ?? "";
   const partner2 = account.coopPartnerIds?.[1] ?? "";
   const savePartners = (next1: string, next2: string) => {
     const partnerIds = [next1, next2].filter((id, idx, arr) => id && arr.indexOf(id) === idx);
-    orAlert(() => api(`/api/accounts/${enc(account.id)}/coop-partners`, { method: "PUT", body: { partnerIds } }));
+    return api(`/api/accounts/${enc(account.id)}/coop-partners`, { method: "PUT", body: { partnerIds } });
   };
   const peerName = (a: GameAccount): [string, string] => [a.id, a.nickname ? `${a.name} · ${a.nickname}` : a.name];
-  const remove = () => {
-    if (!confirm(`移除「${account.name}」和它的计划？`)) return;
-    orAlert(async () => { await api(`/api/accounts/${enc(account.id)}`, { method: "DELETE" }); navigate(paths.accounts); });
+  const remove = () => void removeAccount(account, () => navigate(paths.accounts, { force: true }));
+  const clearSnapshot = async () => {
+    if (!await ask({ title: `清除「${account.name}」的登录快照？`, body: "之后要切到它，得重新读取登录", ok: "清除", danger: true })) return;
+    await orToast(() => api(`/api/accounts/${enc(account.id)}/login-snapshot`, { method: "DELETE" }), "已清除登录快照");
   };
 
   return (
@@ -77,14 +78,14 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
         {peerAccounts.length > 0 && (
           <Row>
             <span style={{ flex: 1 }}>1 号协战</span>
-            <TextSelect label="1 号协战" value={partner1} onChange={(next) => savePartners(next, next === partner2 ? "" : partner2)}
+            <LiveSelect label="1 号协战" value={partner1} save={(next) => savePartners(next, next === partner2 ? "" : partner2)}
               options={[["", "不带"], ...peerAccounts.map(peerName)]} />
           </Row>
         )}
         {peerAccounts.length >= 2 && (
           <Row>
             <span style={{ flex: 1 }}>2 号协战</span>
-            <TextSelect label="2 号协战" value={partner2} onChange={(next) => savePartners(partner1, next)}
+            <LiveSelect label="2 号协战" value={partner2} save={(next) => savePartners(partner1, next)}
               options={[["", "不带"], ...peerAccounts.filter((a) => a.id !== partner1).map(peerName)]} />
           </Row>
         )}
@@ -93,27 +94,16 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
             登录快照
             <span className={ui.tiny} style={{ display: "block" }}>
               {account.hasLoginSnapshot
-                ? `已存 · 加密保存在云端${account.snapshotUpdatedAt ? ` · ${shortTime(account.snapshotUpdatedAt)}` : ""}`
-                : "未存 · 点「读取上传」从在线设备采集"}
+                ? `已存${account.snapshotUpdatedAt ? ` · ${shortTime(account.snapshotUpdatedAt)}` : ""}`
+                : "未存 · 从在线设备读取"}
             </span>
           </span>
           <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <ReportDeviceLoginAction gameId={account.gameId} label={account.hasLoginSnapshot ? "从设备更新" : "读取上传"} primary={!account.hasLoginSnapshot} small onNotice={setSnapNotice} />
-            {account.hasLoginSnapshot && (
-              <ApplyAccountLoginAction account={account} label="下发到设备" primary small onNotice={setSnapNotice} />
-            )}
-            {account.hasLoginSnapshot && (
-              <Button small onClick={() => {
-                if (!confirm(`清除「${account.name}」的登录快照？`)) return;
-                orAlert(async () => {
-                  await api(`/api/accounts/${enc(account.id)}/login-snapshot`, { method: "DELETE" });
-                  setSnapNotice("已清除云端登录快照");
-                });
-              }}>清除</Button>
-            )}
+            <ReportDeviceLoginAction gameId={account.gameId} label={account.hasLoginSnapshot ? "重新读取" : "读取登录"} primary={!account.hasLoginSnapshot} small />
+            {account.hasLoginSnapshot && <ApplyAccountLoginAction account={account} label="下发登录" primary small />}
+            {account.hasLoginSnapshot && <Button small onClick={() => void clearSnapshot()}>清除</Button>}
           </span>
         </Row>
-        {snapNotice && <div style={{ padding: "0 16px 12px" }}><Message text={snapNotice} ok /></div>}
       </Card>
 
       {interruptions.length > 0 && (
@@ -124,8 +114,8 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
             return (
               <Row key={opt.id}>
                 <span style={{ flex: 1 }}>{opt.name}</span>
-                <TextSelect label={opt.name} value={current} onChange={(next) => orAlert(() => api(`/api/accounts/${enc(account.id)}/interruptions`,
-                  { method: "PUT", body: { values: { ...(account.interruptions ?? {}), [opt.id]: next } } }))}
+                <LiveSelect label={opt.name} value={current} save={(next) => api(`/api/accounts/${enc(account.id)}/interruptions`,
+                  { method: "PUT", body: { values: { ...(account.interruptions ?? {}), [opt.id]: next } } })}
                   options={opt.choices.map((c): [string, string] => [c.id, c.name])} />
               </Row>
             );
@@ -142,9 +132,9 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
             return (
               <Row key={task.taskId}>
                 <span style={{ flex: 1, minWidth: 0 }} title={paused?.reason}>{task.name}</span>
-                {paused && <Pill tone="warn">已暂停</Pill>}
+                {paused && <Pill tone="warn">失败停用</Pill>}
                 {paused && (
-                  <Button small onClick={() => orAlert(() => api(`/api/accounts/${enc(account.id)}/paused-tasks/${enc(task.targetId)}/${enc(task.taskId)}`, { method: "DELETE" }))}>
+                  <Button small onClick={() => void orToast(() => api(`/api/accounts/${enc(account.id)}/paused-tasks/${enc(task.targetId)}/${enc(task.taskId)}`, { method: "DELETE" }), "已恢复")}>
                     恢复
                   </Button>
                 )}
@@ -170,10 +160,10 @@ function FollowUpSwitches({ gameId }: { gameId: string }) {
       {mine.map((item) => (
         <Row key={item.id}>
           <span style={{ flex: 1 }}>{item.eventName}后去做{item.taskName}</span>
-          <Switch checked={item.enabled} label={`${item.eventName}后去做${item.taskName}`} onChange={(on) => orAlert(async () => {
+          <LiveSwitch checked={item.enabled} label={`${item.eventName}后去做${item.taskName}`} save={async (on) => {
             await api("/api/notifications/follow-ups", { method: "POST", body: { targetId: item.targetId, eventName: item.eventName, taskId: item.taskId, enabled: on } });
             await load();
-          })} />
+          }} />
         </Row>
       ))}
     </>

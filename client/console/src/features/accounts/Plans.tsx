@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, enc } from "../../api/client";
 import { settingVisible, type ConfigView, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
-import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, Switch, ui } from "../../components/ui";
+import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
-import { orAlert, useAction } from "../../components/useAction";
+import { orToast, useAction } from "../../components/useAction";
+import { toast } from "../../components/Toast";
+import { runSubmitted } from "../jobs/runs";
 import { clockText, cycleText, jobStatus, shortTime, WEEK } from "../../format";
 import { leave, Link, navigate, paths, useLeaveGuard } from "../../router";
 import { useConsole } from "../../state/context";
@@ -36,10 +38,13 @@ export function planEntries(account: GameAccount, game: Game | undefined, plans:
       .map((preset) => ({ key: `preset:${preset.id}`, minuteOfDay: preset.minuteOfDay, name: preset.name, plan: null as Plan | null, preset })),
   ].sort((a, b) => a.minuteOfDay - b.minuteOfDay || a.name.localeCompare(b.name));
 }
-/** The switch of a plan line: a plan is saved with the new state; a preset is copied, enabled, the first time it is switched on. */
-export function switchPlan(account: GameAccount, { plan, preset }: PlanEntry, on: boolean) {
-  if (plan) orAlert(() => api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body: saveOf(plan, { enabled: on }) }));
-  else if (on && preset) orAlert(() => api(`/api/accounts/${enc(account.id)}/plans`, { method: "POST", body: presetSaveOf(preset, true) }));
+/**
+ * The switch of a plan line: a plan is saved with the new state; a preset is copied, enabled, the first time it is
+ * switched on. A refusal throws, so the switch (LiveSwitch) goes back and says why.
+ */
+export async function switchPlan(account: GameAccount, { plan, preset }: PlanEntry, on: boolean): Promise<void> {
+  if (plan) await api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body: saveOf(plan, { enabled: on }) });
+  else if (on && preset) await api(`/api/accounts/${enc(account.id)}/plans`, { method: "POST", body: presetSaveOf(preset, true) });
 }
 export const planHref = (account: GameAccount, { plan, preset }: PlanEntry) => plan ? paths.planEdit(account.id, plan.id) : paths.presetEdit(account.id, preset!.id);
 
@@ -76,11 +81,7 @@ export function PlanList({ account, game, plans }: { account: GameAccount; game?
                 <span className={`${ui.tiny} ${s.ellipsis}`}>{taskNames || "未选任务"}</span>
               </span>
             </Link>
-            <Switch
-              label={`启用${source.name}`}
-              checked={enabled}
-              onChange={(on) => switchPlan(account, entry, on)}
-            />
+            <LiveSwitch label={`启用${source.name}`} checked={enabled} save={(on) => switchPlan(account, entry, on)} />
           </div>
         );
       })}
@@ -171,6 +172,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
   const [stale, setStale] = useState(false);
   const [editingTask, setEditingTask] = useState<string | null>(openTask ?? null);
   const [adding, setAdding] = useState(false);
+  const [starting, setStarting] = useState(false);
   const { busy, message, run } = useAction();
   const saving = useRef(false);
   const enabled = plan?.enabled ?? true;
@@ -210,13 +212,14 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
       if (plan) await api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body });
       else await api(`/api/accounts/${enc(account.id)}/plans`, { method: "POST", body });
     } finally { saving.current = false; }
+    toast("已保存", { tone: "ok" });
     navigate(paths.accounts, { force: true });
   });
 
   const remove = () => {
     if (!plan) return;
     void ask(preset ? { title: `重置「${plan.name}」？`, body: "恢复预设并关闭", ok: "重置", danger: true } : { title: `删除「${plan.name}」？`, ok: "删除", danger: true })
-      .then((yes) => { if (yes) orAlert(async () => { await api(`/api/plans/${enc(plan.id)}`, { method: "DELETE" }); navigate(paths.accounts, { force: true }); }); });
+      .then((yes) => { if (yes) void orToast(async () => { await api(`/api/plans/${enc(plan.id)}`, { method: "DELETE" }); navigate(paths.accounts, { force: true }); }, preset ? "已重置" : "已删除"); });
   };
 
   const staleLine = stale && (
@@ -237,6 +240,19 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
     );
   }
 
+  const move = (idx: number, by: -1 | 1) => {
+    const tasks = [...form.tasks]; const [item] = tasks.splice(idx, 1); tasks.splice(idx + by, 0, item); change({ tasks });
+  };
+  // Removed at once, with 撤销 for a few seconds; its own settings come back with it.
+  const removeTask = (idx: number) => {
+    const tid = form.tasks[idx]; const configs = form.configs[tid];
+    setForm((now) => ({ ...now, tasks: now.tasks.filter((id) => id !== tid) }));
+    toast(`已移除「${taskMap.get(tid)?.name ?? "任务"}」`, { action: { text: "撤销", run: () => setForm((now) => {
+      if (now.tasks.includes(tid)) return now;
+      const tasks = [...now.tasks]; tasks.splice(Math.min(idx, tasks.length), 0, tid);
+      return { ...now, tasks, configs: configs ? { ...now.configs, [tid]: configs } : now.configs };
+    }) } });
+  };
   const follow = (tid: string) => { const configs = { ...form.configs }; delete configs[tid]; change({ configs }); };
   const last = plan ? data.jobs.find((job) => job.planId === plan.id) : undefined;
   const unpicked = (game?.tasks ?? []).filter((task) => !form.tasks.includes(task.taskId));
@@ -244,7 +260,11 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
   const partnerText = form.partners.length ? peerAccounts.filter((a) => form.partners.includes(a.id)).map((a) => a.name).join("、") || "不带" : "不带";
 
   const title = plan ? plan.name : preset ? preset.name : "新建计划";
-  const runNow = plan ? <Button small onClick={() => orAlert(() => api(`/api/plans/${enc(plan.id)}/run`, { method: "POST", body: {} }))}>立即运行</Button> : undefined;
+  const runNow = plan ? <Button small disabled={starting} onClick={async () => {
+    setStarting(true);
+    try { if (await orToast(() => api(`/api/plans/${enc(plan.id)}/run`, { method: "POST", body: {} }))) runSubmitted(null, data.devices, paths.account(account.id, "runs")); }
+    finally { setStarting(false); }
+  }}>立即运行</Button> : undefined;
   const lastLine = last && (
     <p className={ui.tiny} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
       上次：{shortTime(last.updatedAt)}{last.deviceName ? ` · ${last.deviceName}` : ""} <Pill tone={jobStatus(last)[1]}>{jobStatus(last)[0]}</Pill>
@@ -279,7 +299,11 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
             ) : <span className={s.followLine}><Pill tone="soft">跟随账号</Pill></span>}
           </span>
           <button type="button" className={s.configLink} onClick={() => setEditingTask(tid)}>配置 ›</button>
-          <Switch label={task.name} checked onChange={() => change({ tasks: form.tasks.filter((id) => id !== tid) })} />
+          <span className={s.orderButtons}>
+            <button type="button" className={s.orderButton} aria-label={`${task.name}上移`} title="上移" disabled={idx === 0} onClick={() => move(idx, -1)}>↑</button>
+            <button type="button" className={s.orderButton} aria-label={`${task.name}下移`} title="下移" disabled={idx === form.tasks.length - 1} onClick={() => move(idx, 1)}>↓</button>
+          </span>
+          <Button small variant="danger" onClick={() => removeTask(idx)}>移除</Button>
         </Row>
       );
     })}
@@ -433,7 +457,7 @@ function PlanTaskEditor({ account, plan, detail, planName, own, drawer, back, do
       <span className={ui.tiny}>{following ? "账号参数改了，这里跟着变" : "只在这个计划里生效"}</span>
     </p>
   );
-  const content = accountValues === null ? <Card><Empty>读取中…</Empty></Card> : (
+  const content = accountValues === null ? <Loading card /> : (
     <>
       <SegmentTabs label="任务内容" value={tab} onChange={setTab}
         items={[["config", `参数（${fields.length}）`], ["steps", `步骤（${detail.stepDetails?.length ?? detail.steps.length}）`]]} />

@@ -28,7 +28,8 @@ export function AppDetail({ device, app, base }: { device: Device; app: App; bas
   const accounts = data.accounts.filter((account) => account.gameId === app.gameId);
   const { current, fallback, setCurrent, setDefault } = useAppAccounts(device, app);
   const { current: job } = appJobs(data.jobs, device.id, app.key);
-  const [status, tone] = job?.state === "RUNNING" && job.pauseRequested ? ["已暂停", "warn" as const] : appStatus(app.phase, device.online, app.waiting);
+  // A running job's pause (正在暂停 until the phone says 已暂停) says more than the app's phase.
+  const [status, tone] = job?.state === "RUNNING" && (job.pauseRequested || job.cancelRequested) ? jobStatus(job, data.devices) : appStatus(app.phase, device.online, app.waiting);
   const waiting = device.online ? app.waiting : null;
   return (
     <>
@@ -44,12 +45,12 @@ export function AppDetail({ device, app, base }: { device: Device; app: App; bas
       </header>
       {waiting && <p className={s.waitBanner} role="status"><b>{waiting.text}</b>{waitNext(waiting) && <span>{waitNext(waiting)}</span>}</p>}
       <Observed app={app} accounts={accounts} />
-      <PageTabs label="应用内容" value={tab} tabs={[["run", "运行", base], ["runs", "运行记录", `${base}?tab=runs`]]} />
+      <PageTabs label="应用内容" value={tab} tabs={[["run", "运行", base], ["runs", "战报", `${base}?tab=runs`]]} />
       {tab === "run" ? <RunTab device={device} app={app} /> : (
         <Card flush>
           {(() => {
             const mine = data.jobs.filter((item) => item.deviceId === device.id && item.appKey === app.key);
-            return mine.length ? <RunRows jobs={mine} devices={data.devices} columns={["account", "source"]} /> : <Empty>还没有运行记录</Empty>;
+            return mine.length ? <RunRows jobs={mine} devices={data.devices} columns={["account", "source"]} /> : <Empty>还没有战报</Empty>;
           })()}
         </Card>
       )}
@@ -65,7 +66,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
   const [chosen, setChosen] = useState<string | null>(null);
   const pick = accounts.some((item) => item.id === chosen) ? chosen! : (app.accountId && accounts.some((item) => item.id === app.accountId) ? app.accountId : accounts[0]?.id ?? "");
   const { notes, busy, run, clear } = useRunNow();
-  const note = [pick ? switchNote(app, pick, accounts) : null, device.online ? null : "设备离线，上线后执行"].filter(Boolean).join("；");
+  const note = [pick ? switchNote(app, pick, accounts) : null, device.online ? null : "设备离线，30 分钟内上线才执行"].filter(Boolean).join("；");
   // An idle, online app has nothing to show here: the header already says 空闲.
   const showNow = job || queued.length > 0 || app.currentTask || !device.online;
   return (
@@ -75,7 +76,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
           <div className={s.current}>
             {job ? (
               <>
-                <div className={s.currentHead}><b>{job.taskName}</b><Pill tone={jobStatus(job)[1]}>{jobStatus(job)[0]}</Pill><Link to={paths.job(job.id)} className={s.end}>步骤 ›</Link></div>
+                <div className={s.currentHead}><b>{job.taskName}</b><Pill tone={jobStatus(job, data.devices)[1]} live>{jobStatus(job, data.devices)[0]}</Pill><Link to={paths.job(job.id)} className={s.end}>步骤明细 ›</Link></div>
                 <Muted>{[job.accountName, jobSource(job), job.detail].filter(Boolean).join(" · ")}</Muted>
                 <div className={s.actions}><JobControls job={job} small /></div>
               </>
@@ -110,7 +111,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
                 appKey={app.key}
                 busy={busy}
                 notes={notes}
-                onRun={(task) => run(task, pick, { deviceId: device.id, appKey: app.key }, `已排进${app.name}的队列`)}
+                onRun={(task) => run(task, pick, { deviceId: device.id, appKey: app.key })}
               />
             ) : <Muted className={s.cardNote}>设备未上报任务</Muted>}
           </>

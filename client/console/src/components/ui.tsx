@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type FormEvent, type HTMLAttributes, type ReactNode } from "react";
 import type { Tone } from "../format";
 import { Link } from "../router";
+import { useOptimistic } from "./useAction";
 import s from "./ui.module.css";
 
 /** The building blocks every page is made of, after the approved design; their look comes only from the theme tokens. */
@@ -21,9 +22,12 @@ export function ButtonLink({ to, primary, small, children }: { to: string; prima
   return <Link to={to} className={join(s.button, small ? s.small : s.large, primary ? s.primary : s.ghost)}>{children}</Link>;
 }
 
-/** A status pill. [dot] adds the leading dot the design uses for live states. */
-export function Pill({ tone = "", dot, className, children }: { tone?: Tone | "soft"; dot?: boolean; className?: string; children: ReactNode }) {
-  return <span className={join(s.pill, s[`pill_${tone || "neutral"}`], className)}>{dot && <span className={s.dot} aria-hidden="true" />}{children}</span>;
+/**
+ * A status pill. [dot] adds the leading dot the design uses for live states; a live pill ([dot] or [live]) turns grey
+ * while the connection is lost, since it may no longer be true.
+ */
+export function Pill({ tone = "", dot, live, className, children }: { tone?: Tone | "soft"; dot?: boolean; live?: boolean; className?: string; children: ReactNode }) {
+  return <span className={join(s.pill, s[`pill_${tone || "neutral"}`], className)} data-live={dot || live ? "" : undefined}>{dot && <span className={s.dot} aria-hidden="true" />}{children}</span>;
 }
 /** Result text in a list, coloured by tone. */
 export function Result({ tone = "", children }: { tone?: Tone; children: ReactNode }) {
@@ -38,10 +42,37 @@ export function Check({ label, checked, onChange, disabled }: { label: string; c
 }
 export function Choices({ children }: { children: ReactNode }) { return <div className={s.choices}>{children}</div>; }
 
-/** The design's on/off switch. */
-export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (checked: boolean) => void; label: string; disabled?: boolean }) {
-  return <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} className={join(s.switch, checked && s.on)}
-    onClick={() => onChange(!checked)}><i /></button>;
+/** The design's on/off switch. [pending]: the change is on its way to the server. */
+export function Switch({ checked, onChange, label, disabled, pending }: { checked: boolean; onChange: (checked: boolean) => void; label: string; disabled?: boolean; pending?: boolean }) {
+  return <button type="button" role="switch" aria-checked={checked} aria-label={label} aria-busy={pending || undefined} disabled={disabled}
+    className={join(s.switch, checked && s.on, pending && s.pending)} onClick={() => { if (!pending) onChange(!checked); }}><i /></button>;
+}
+/** Why a change made in place did not take, beside its control. */
+function InlineError({ text }: { text: string | null }) {
+  return text ? <span className={s.inlineError} role="alert">{text}</span> : null;
+}
+/**
+ * A switch saved as soon as it is flipped: it moves at once, waits for [save], and moves back with the server's reason
+ * beside it when refused.
+ */
+export function LiveSwitch({ checked, label, save, disabled }: { checked: boolean; label: string; save: (on: boolean) => Promise<unknown>; disabled?: boolean }) {
+  const live = useOptimistic(checked);
+  return (
+    <span className={s.liveControl}>
+      <InlineError text={live.error} />
+      <Switch label={label} checked={live.value} pending={live.pending} disabled={disabled} onChange={(on) => void live.commit(on, () => save(on))} />
+    </span>
+  );
+}
+/** A TextSelect saved as soon as an option is picked, as LiveSwitch. */
+export function LiveSelect<T extends string>({ value, options, label, save }: { value: T; options: [T, string][]; label: string; save: (value: T) => Promise<unknown> }) {
+  const live = useOptimistic(value);
+  return (
+    <span className={join(s.liveControl, live.pending && s.pendingText)} aria-busy={live.pending || undefined}>
+      <InlineError text={live.error} />
+      <TextSelect label={label} value={live.value} options={options} onChange={(next) => void live.commit(next, () => save(next))} />
+    </span>
+  );
 }
 
 /** A result line under a form; empty when there is nothing to say. */
@@ -59,6 +90,20 @@ export function Row({ children, className, top }: { children: ReactNode; classNa
 export function RowLink({ to, children }: { to: string; children: ReactNode }) { return <Link to={to} className={join(s.row, s.rowLink)}>{children}</Link>; }
 export function Grow({ children, className }: { children: ReactNode; className?: string }) { return <div className={join(s.grow, className)}>{children}</div>; }
 export function Empty({ children }: { children: ReactNode }) { return <p className={s.empty}>{children}</p>; }
+/** While something is read: one line, the same everywhere. [card] puts it in a card. */
+export function Loading({ card }: { card?: boolean }) {
+  const line = <p className={s.empty} role="status">读取中…</p>;
+  return card ? <Card>{line}</Card> : line;
+}
+/** A read that failed: the reason and 重试. */
+export function ErrorCard({ text, retry }: { text: string; retry?: () => void }) {
+  return (
+    <Card className={s.errorCard} role="alert">
+      <span>{text}</span>
+      {retry && <Button small onClick={retry}>重试</Button>}
+    </Card>
+  );
+}
 
 /** Underlined tabs inside a page. Each tab is a link so it has its own address. */
 export function PageTabs({ label, tabs, value }: { label: string; tabs: [string, string, string][]; value: string }) {

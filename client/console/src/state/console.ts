@@ -49,11 +49,12 @@ function reduce(state: ConsoleData, action: Action): ConsoleData {
  * but not after an error status (a proxy's 502 during a deploy); then it is opened again here, a little later each time.
  * [signedOut] is called when the session turns out to be gone.
  */
-export function useConsoleStream(signedOut: () => void): { data: ConsoleData; connection: Connection; loaded: boolean } {
+export function useConsoleStream(signedOut: () => void): { data: ConsoleData; connection: Connection; loaded: boolean; retry: () => void } {
   const [data, dispatch] = useReducer(reduce, empty);
   const [connection, setConnection] = useReducer((_: Connection, next: Connection) => next, "connecting" as Connection);
   const [loaded, setLoaded] = useReducer(() => true, false);
   const leave = useRef(signedOut); leave.current = signedOut;
+  const again = useRef(() => {});
 
   useEffect(() => {
     let stream: EventSource | null = null;
@@ -88,7 +89,9 @@ export function useConsoleStream(signedOut: () => void): { data: ConsoleData; co
       };
     }
     connect();
+    // 重试 / 重连: now, not after the growing wait.
+    again.current = () => { if (stopped) return; window.clearTimeout(timer); retryMs = 2000; setConnection("connecting"); connect(); };
     return () => { stopped = true; window.clearTimeout(timer); stream?.close(); };
   }, []);
-  return { data, connection, loaded };
+  return { data, connection, loaded, retry: () => again.current() };
 }

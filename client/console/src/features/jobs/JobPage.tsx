@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { api, apiUrl, enc } from "../../api/client";
 import type { Job, JobEvent } from "../../api/types";
-import { Breadcrumb, Button, Card, Empty, Muted, Pill } from "../../components/ui";
+import { Breadcrumb, Button, ButtonLink, Card, Empty, ErrorCard, Loading, Muted, Pill } from "../../components/ui";
 import { useAction } from "../../components/useAction";
 import { ACTIVE, clock, eventDetail, eventKind, jobSource, jobStatus, seconds, shortDuration, shortTime, waitReason } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
-import { jobPlace, JobControls } from "./runs";
+import { jobPlace, JobControls, rerun } from "./runs";
 import s from "./Jobs.module.css";
 
 type StepState = "done" | "stop" | "running" | "plain";
@@ -47,7 +47,7 @@ function stepsOf(events: JobEvent[], job: Job): Step[] {
 }
 const MARK: Record<StepState, string> = { done: "✓", stop: "!", running: "…", plain: "" };
 
-/** 运行记录详情: what the job was, how it ended, and every step and action the device reported. */
+/** 战报详情: what the job was, how it ended, and every step and action the device reported. */
 export function JobPage({ id }: { id: string }) {
   const { data } = useConsole();
   const job = data.jobs.find((item) => item.id === id);
@@ -56,15 +56,16 @@ export function JobPage({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [all, setAll] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const again = useAction();
   useEffect(() => {
     let current = true;
     api<JobEvent[]>(`/api/jobs/${enc(id)}/events`).then((list) => { if (current) { setEvents(list); setError(null); } })
       .catch((failure: Error) => { if (current) setError(failure.message); });
     return () => { current = false; };
-  }, [id, version]);
-  if (!job) return <NotFound text="找不到这条运行记录" />;
-  const [label, tone] = jobStatus(job);
+  }, [id, version, attempt]);
+  if (!job) return <NotFound text="找不到这条战报" />;
+  const [label, tone] = jobStatus(job, data.devices);
   const device = data.devices.find((item) => item.id === job.deviceId);
   const app = device?.apps.find((item) => item.key === job.appKey);
   const steps = events ? stepsOf(events, job) : [];
@@ -72,8 +73,8 @@ export function JobPage({ id }: { id: string }) {
   const started = events?.find((event) => event.kind === "step-started")?.at;
   const ended = events?.length ? events[events.length - 1].at : null;
   const crumbs: [string, string | null][] = device
-    ? [["设备", paths.devices], [device.name, paths.device(device.id)], ...(app ? [[app.name, paths.app(device.id, app.key)] as [string, string]] : []), ["运行记录", null]]
-    : job.accountId ? [["游戏账号", paths.accounts], [job.accountName ?? "账号", paths.account(job.accountId, "runs")], ["运行记录", null]] : [["设备", paths.devices], ["运行记录", null]];
+    ? [["设备", paths.devices], [device.name, paths.device(device.id)], ...(app ? [[app.name, paths.app(device.id, app.key)] as [string, string]] : []), ["战报", null]]
+    : job.accountId ? [["账号与计划", paths.accounts], [job.accountName ?? "账号", paths.account(job.accountId, "runs")], ["战报", null]] : [["设备", paths.devices], ["战报", null]];
   const toggle = (key: string) => { setAll(false); setOpen((now) => { const next = new Set(now); if (next.has(key)) next.delete(key); else next.add(key); return next; }); };
   const accountExists = data.accounts.some((item) => item.id === job.accountId);
   return (
@@ -84,21 +85,18 @@ export function JobPage({ id }: { id: string }) {
           {/* The account is a link to its settings; the line under the title says only where, when and how long. */}
           <div className={s.titleLine}><h1>{job.taskName}</h1>
             {job.accountName && (job.accountId && accountExists ? <Link to={paths.account(job.accountId)} className={s.accountLink}>{job.accountName}</Link> : <Muted as="span">{job.accountName}</Muted>)}
-            <Pill tone={tone}>{label}</Pill></div>
+            <Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill></div>
           <Muted>{[data.devices.length > 1 || !job.deviceName ? jobPlace(job, data.devices) : null,
             started ? `${shortTime(started)} 开始` : `${shortTime(job.createdAt)} 创建`, started && ended && !ACTIVE.has(job.state) ? `用时 ${seconds(ended - started)}` : null, jobSource(job)].filter(Boolean).join(" · ")}</Muted>
         </div>
         <div className={s.jobActions}>
           <JobControls job={job} />
           {!ACTIVE.has(job.state) && job.accountId && accountExists && (
-            <Button variant="primary" className={s.big} disabled={again.busy} onClick={() => again.run(async () => {
-              await api("/api/jobs", { method: "POST", body: { targetId: job.targetId, taskId: job.taskId, accountId: job.accountId, deviceId: null, appKey: null } });
-              return "已提交，服务端会分配应用";
-            })}>再运行一次</Button>
+            <Button variant="primary" className={s.big} disabled={again.busy} onClick={() => again.run(() => rerun(job, data.devices))}>重跑</Button>
           )}
         </div>
       </header>
-      {again.message && <p role="status" className={again.message.ok ? s.noteOk : s.noteBad}>{again.message.text}</p>}
+      {again.message && !again.message.ok && <p role="alert" className={s.noteBad}>{again.message.text}</p>}
       {waitReason(job) && <p role="status" className={s.waitNote}>{label}：{waitReason(job)}</p>}
       {(job.state === "FAILED" || job.state === "UNKNOWN" || job.state === "SKIPPED" || (job.state === "CANCELLED" && stopped)) && (
         <section aria-labelledby="why" className={s.why}>
@@ -106,16 +104,17 @@ export function JobPage({ id }: { id: string }) {
           <div>
             <h2 id="why">{stopped ? `停在“${stopped.name}”：${label}` : label}</h2>
             <p>{job.detail || stopped?.summary || "设备没有说明原因。"}</p>
+            <NextSteps job={job} />
             {(job.state === "FAILED" || job.state === "UNKNOWN") && <StoppedOn id={job.id} version={version} />}
           </div>
         </section>
       )}
       <section aria-labelledby="steps" className={s.stepsSection}>
         <div className={s.stepsHead}>
-          <h2 id="steps">步骤</h2>
+          <h2 id="steps">步骤明细</h2>
           {steps.length > 0 && <Button small onClick={() => { setAll(!all); setOpen(new Set()); }}>{all ? "收起全部" : "展开全部"}</Button>}
         </div>
-        {error ? <Card><Empty>{error}</Empty></Card> : events === null ? <Card><Empty>正在读取…</Empty></Card> : steps.length === 0 ? (
+        {error ? <ErrorCard text={error} retry={() => { setError(null); setEvents(null); setAttempt((n) => n + 1); }} /> : events === null ? <Loading card /> : steps.length === 0 ? (
           <Card><Empty>{ACTIVE.has(job.state) ? "设备还没有上报明细" : "这次运行没有明细"}</Empty></Card>
         ) : (
           <ol className={s.steps}>
@@ -149,6 +148,32 @@ export function JobPage({ id }: { id: string }) {
       </section>
     </>
   );
+}
+
+/**
+ * Where to go after a run that did not finish, by how it ended: a failure to its settings, a held or skipped one to
+ * the device or the plan, an unconfirmed one to the phone (放弃本次 is with the other controls).
+ */
+export function NextSteps({ job }: { job: Job }) {
+  const { data } = useConsole();
+  const device = data.devices.find((item) => item.id === job.deviceId);
+  const reason = `${job.detail} ${job.waitReason ?? ""}`;
+  const links: [string, string][] = [];
+  const settings = job.accountId && data.accounts.some((item) => item.id === job.accountId) ? paths.taskDetail(job.targetId, job.taskId, job.accountId) : null;
+  const plan = job.planId && job.accountId && data.plans.some((item) => item.id === job.planId) ? paths.planEdit(job.accountId, job.planId) : null;
+  if (job.state === "FAILED") {
+    if (settings) links.push(["调整参数", settings]);
+    if (device) links.push(["看设备", paths.device(device.id)]);
+  } else if (job.state === "UNKNOWN") {
+    if (device) links.push(["去设备核对", paths.device(device.id)]);
+  } else if (job.state === "SKIPPED" || (job.state === "CANCELLED" && !job.cancelRequested)) {
+    if (/Pro|会员/.test(reason)) links.push(["开通会员", paths.meAccount]);
+    else if (/编号|昵称|账号/.test(reason) && job.accountId) links.push(["补全账号", paths.account(job.accountId)]);
+    if (/离线|设备/.test(reason) && device) links.push(["看设备", paths.device(device.id)]);
+    if (plan) links.push(["看计划", plan]);
+  }
+  if (!links.length) return null;
+  return <div className={s.next}>{links.map(([text, to]) => <ButtonLink key={to} small to={to}>{text}</ButtonLink>)}</div>;
 }
 
 /** The screen the job stopped on, as its device sent it; nothing when there is none. */

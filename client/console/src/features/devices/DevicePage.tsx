@@ -65,7 +65,7 @@ function AppCard({ device, app, accounts, jobs }: { device: Device; app: App; ac
       <div className={s.cardHead}>
         <Link to={paths.app(device.id, app.key)} className={s.appName}>{app.name}</Link>
         <AccountMenu app={app} accounts={accounts} current={current} fallback={fallback} setCurrent={setCurrent} setDefault={setDefault} />
-        <span className={s.end}><Pill tone={tone}>{status}</Pill></span>
+        <span className={s.end}><Pill tone={tone} live>{status}</Pill></span>
       </div>
       <div className={job ? `${s.now} ${s.nowBusy}` : s.now}>
         <div className={s.nowText}>{job?.taskName ?? app.currentTask ?? "空闲"}</div>
@@ -81,12 +81,12 @@ function AppCard({ device, app, accounts, jobs }: { device: Device; app: App; ac
 function Waiting({ device, gameId, apps, jobs }: { device: Device; gameId: string; apps: App[]; jobs: Job[] }) {
   const queued = apps.flatMap((app) => appJobs(jobs, device.id, app.key).queued.map((job) => ({ job, where: waitReason(job) || `排在${app.name}后面` })));
   const waiting = jobs.filter((job) => job.state === "WAITING" && job.targetId === gameId)
-    .map((job) => ({ job, where: `${waitReason(job) || "等可用应用"}${job.latestStartAt ? `，最晚 ${clock(job.latestStartAt)} 前开始` : ""}` }));
+    .map((job) => ({ job, where: `${waitReason(job) || "等可用设备"}${job.latestStartAt ? `，最晚 ${clock(job.latestStartAt)} 前开始` : ""}` }));
   const rows = [...queued, ...waiting];
   if (!rows.length) return null;
   return (
     <Card as="section" flush aria-labelledby="waiting" className={s.half}>
-      <CardTitle id="waiting">等待中</CardTitle>
+      <CardTitle id="waiting">排队与等待</CardTitle>
       {rows.map(({ job, where }) => (
         <Row key={job.id}>
           <Grow><Link to={paths.job(job.id)} className={s.plain}><b className={s.semi}>{job.taskName}</b> · {job.accountName ?? "—"}</Link><br /><Muted as="span">{jobSource(job)}</Muted></Grow>
@@ -131,8 +131,7 @@ function RunNow({ device, apps, accounts }: { device: Device; apps: App[]; accou
             appKey={app?.key}
             busy={busy}
             notes={notes}
-            onRun={(task) => run(task, pick, app ? { deviceId: device.id, appKey: app.key } : null,
-              app ? `已排进${app.name}的队列` : "已提交")}
+            onRun={(task) => run(task, pick, app ? { deviceId: device.id, appKey: app.key } : null)}
           />
         </>
       )}

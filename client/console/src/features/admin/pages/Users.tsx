@@ -62,7 +62,7 @@ export function UsersPage({ me }: { me: string }) {
               </tbody>
             </table></div>
             {page && page.items.length === 0 && <Empty>没有用户</Empty>}
-            {!page && !error && <Empty>正在加载…</Empty>}
+            {!page && !error && <Empty>读取中…</Empty>}
           </Card>
           {page && <Pager offset={offset} total={page.total} onChange={setOffset} />}
         </div>
@@ -99,7 +99,7 @@ function Detail({ id, self, onSaved }: { id: string; self: boolean; onSaved: () 
     } catch (e) { setError(failure(e)); } finally { setBusy(false); }
   };
 
-  if (!user) return <Card>{error ? <Message text={error} /> : <Empty>正在加载…</Empty>}</Card>;
+  if (!user) return <Card>{error ? <Message text={error} /> : <Empty>读取中…</Empty>}</Card>;
   return (
     <Card flush>
       <div className={s.detailHead}><b>{who(user)}</b><span className={ui.tiny}>注册 {day(user.createdAt)} · 最近活跃 {since(user.lastSeenAt)}</span></div>

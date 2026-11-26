@@ -25,7 +25,7 @@ const LIVE_SHORT: Record<Connection, string> = { live: "已连接", connecting: 
  * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1200. [admin] adds
  * 后台管理 (/admin, with a frame of its own) above the connection, or to the top bar when narrow.
  */
-export function Shell({ section, connection, full, admin, children }: { section: Section; connection: Connection; full?: boolean; admin?: boolean; children: ReactNode }) {
+export function Shell({ section, connection, full, admin, stale, children }: { section: Section; connection: Connection; full?: boolean; admin?: boolean; stale?: boolean; children: ReactNode }) {
   // The workbench lives under 我的.
   const current = section === "dev" ? "me" : section;
   return (
@@ -55,7 +55,7 @@ export function Shell({ section, connection, full, admin, children }: { section:
           </div>
         </div>
       </nav>
-      <main className={s.main}>{children}</main>
+      <main className={s.main} data-stale={stale ? "true" : undefined}>{children}</main>
     </div>
   );
 }

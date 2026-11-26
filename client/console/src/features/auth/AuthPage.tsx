@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import { api, apiUrl } from "../../api/client";
 import type { AuthOptions } from "../../api/types";
 import { Brand, Button, Field, Form, Mark, Message, Tabs, ui } from "../../components/ui";
-import { useAction } from "../../components/useAction";
+import { useAction, useCountdown } from "../../components/useAction";
 import { Link, paths } from "../../router";
 import s from "./AuthPage.module.css";
 
 type Tab = "password" | "code" | "register";
 /** What the form is asking for: an email first, then the code sent to it. */
-type Step = { kind: "start" } | { kind: "forgot" } | { kind: "code"; email: string; purpose: "verify" | "login" | "reset" };
+type Step = { kind: "start" } | { kind: "forgot"; email: string } | { kind: "code"; email: string; purpose: "verify" | "login" | "reset" };
+type Purpose = "verify" | "login" | "reset";
+/** Asks for a new code to [email] for [purpose]: the same request that sent the first one (sign-up has none of its own). */
+const REQUEST: Record<Purpose, string | null> = { login: "/api/auth/code/request", reset: "/api/auth/password/request", verify: null };
+
 
 /** Sign-in, sign-up and password reset by email, or GitHub. [signedIn] opens the console. */
 export function AuthPage({ signedIn, notice: initialNotice }: { signedIn: () => void; notice?: string }) {
@@ -44,9 +48,10 @@ export function AuthPage({ signedIn, notice: initialNotice }: { signedIn: () => 
           <div><h2 className={s.title}>{title}</h2><p className={s.sub}>{sub}</p></div>
           <Tabs label="登录方式" tabs={[["password", "密码登录"], ["code", "验证码登录"], ["register", "注册"]]} value={tab} onChange={choose} />
           {step.kind === "code" ? <CodeForm key={step.purpose + step.email} {...step} signedIn={signedIn}
-            reset={() => { setTab("password"); setStep({ kind: "start" }); setNotice("密码已重置，请重新登录"); }} />
-            : step.kind === "forgot" ? <EmailForm submit="发送验证码" send={async (email) => { await api("/api/auth/password/request", { method: "POST", body: { email } }); setStep({ kind: "code", email, purpose: "reset" }); }} />
-            : tab === "password" ? <PasswordForm signedIn={signedIn} forgot={() => setStep({ kind: "forgot" })} />
+            reset={() => { setTab("password"); setStep({ kind: "start" }); setNotice("密码已重置，请重新登录"); }}
+            back={() => { setStep(step.purpose === "reset" ? { kind: "forgot", email: step.email } : { kind: "start" }); setNotice(""); }} />
+            : step.kind === "forgot" ? <EmailForm submit="发送验证码" initial={step.email} send={async (email) => { await api("/api/auth/password/request", { method: "POST", body: { email } }); setStep({ kind: "code", email, purpose: "reset" }); }} />
+            : tab === "password" ? <PasswordForm signedIn={signedIn} forgot={(email) => setStep({ kind: "forgot", email })} />
             : tab === "code" ? <EmailForm submit="发送验证码" send={async (email) => { await api("/api/auth/code/request", { method: "POST", body: { email } }); setStep({ kind: "code", email, purpose: "login" }); }} />
             : <RegisterForm registered={(email) => setStep({ kind: "code", email, purpose: "verify" })} />}
           <Message text={notice || failed} ok={!!notice} />
@@ -62,7 +67,7 @@ export function AuthPage({ signedIn, notice: initialNotice }: { signedIn: () => 
   );
 }
 
-function PasswordForm({ signedIn, forgot }: { signedIn: () => void; forgot: () => void }) {
+function PasswordForm({ signedIn, forgot }: { signedIn: () => void; forgot: (email: string) => void }) {
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const { busy, message, run } = useAction();
   return (
@@ -71,13 +76,13 @@ function PasswordForm({ signedIn, forgot }: { signedIn: () => void; forgot: () =
       <Field label="密码"><input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
       <Button variant="primary" className={s.submit} type="submit" disabled={busy}>登录</Button>
       <Message text={message?.text} ok={message?.ok} />
-      <Button variant="link" onClick={forgot}>忘记密码</Button>
+      <Button variant="link" onClick={() => forgot(email)}>忘记密码</Button>
     </Form>
   );
 }
 
-function EmailForm({ submit, send }: { submit: string; send: (email: string) => Promise<void> }) {
-  const [email, setEmail] = useState("");
+function EmailForm({ submit, send, initial = "" }: { submit: string; send: (email: string) => Promise<void>; initial?: string }) {
+  const [email, setEmail] = useState(initial);
   const { busy, message, run } = useAction();
   return (
     <Form onSubmit={() => run(() => send(email))}>
@@ -101,9 +106,14 @@ function RegisterForm({ registered }: { registered: (email: string) => void }) {
   );
 }
 
-function CodeForm({ email, purpose, signedIn, reset }: { email: string; purpose: "verify" | "login" | "reset"; signedIn: () => void; reset: () => void }) {
+function CodeForm({ email, purpose, signedIn, reset, back }: { email: string; purpose: Purpose; signedIn: () => void; reset: () => void; back: () => void }) {
   const [code, setCode] = useState(""); const [password, setPassword] = useState("");
   const { busy, message, run } = useAction();
+  // The code was just sent: a new one can be asked for after a minute.
+  const [left, setLeft] = useCountdown();
+  useEffect(() => setLeft(60), [setLeft]);
+  const again = REQUEST[purpose];
+  const resend = () => run(async () => { if (!again) return; await api(again, { method: "POST", body: { email } }); setLeft(60); return "已重新发送"; });
   const submit = () => run(async () => {
     if (purpose === "reset") { await api("/api/auth/password/reset", { method: "POST", body: { email, code, password } }); reset(); return; }
     await api(purpose === "verify" ? "/api/auth/verify-email" : "/api/auth/code/login", { method: "POST", body: { email, code } });
@@ -115,6 +125,10 @@ function CodeForm({ email, purpose, signedIn, reset }: { email: string; purpose:
       {purpose === "reset" && <Field label="新密码（至少 10 位）"><input type="password" required minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>}
       <Button variant="primary" className={s.submit} type="submit" disabled={busy}>{purpose === "reset" ? "重置密码" : purpose === "verify" ? "完成注册" : "登录"}</Button>
       <Message text={message?.text} ok={message?.ok} />
+      <div className={s.codeLinks}>
+        {again ? <Button variant="link" onClick={resend} disabled={busy || left > 0}>{left > 0 ? `${left} 秒后可重发` : "重发验证码"}</Button> : <span />}
+        <Button variant="link" onClick={back}>换个邮箱</Button>
+      </div>
     </Form>
   );
 }

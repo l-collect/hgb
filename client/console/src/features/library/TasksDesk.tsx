@@ -1,8 +1,7 @@
 import { useState, type ReactNode, useEffect } from "react";
 import { api, enc } from "../../api/client";
 import type { Device, App, Game, GameAccount, GameTask, Plan } from "../../api/types";
-import { Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, Switch, TextSelect, join, ui } from "../../components/ui";
-import { orAlert } from "../../components/useAction";
+import { Button, ButtonLink, Card, CardHead, Empty, LiveSwitch, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, join, ui } from "../../components/ui";
 import { clockText, jobStatus, shortTime } from "../../format";
 import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
@@ -52,20 +51,22 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
   });
   const runTask = (target: GameTask) => {
     if (!account) { navigate(paths.accounts); return; }
-    void run.run(target, account.id, place ? { deviceId: place.device.id, appKey: place.app.key } : null, place ? `已排进 ${place.label}` : "已提交");
+    return run.run(target, account.id, place ? { deviceId: place.device.id, appKey: place.app.key } : null);
   };
   const accountOptions = accounts.map((a): [string, string] => [a.id, a.nickname ? `${a.name} · ${a.nickname}` : a.name]);
   const placeOptions: [string, string][] = [["", "自动分配"], ...places.map((p): [string, string] => [p.value, p.label])];
-  const context = task && (
-    <TaskContext game={game} task={task} account={account} plans={data.plans} pickers={accounts.length > 0 ? {
-      account: <TextSelect label="账号" value={account?.id ?? ""} onChange={pickAccount} options={accountOptions} />,
-      place: <TextSelect label="设备" value={place ? where : ""} onChange={(next) => { setWhere(next); run.clear(); }} options={placeOptions} />,
-    } : null} />
-  );
+  const pickers = accounts.length > 0 ? {
+    account: <TextSelect label="账号" value={account?.id ?? ""} onChange={pickAccount} options={accountOptions} />,
+    place: <TextSelect label="设备" value={place ? where : ""} onChange={(next) => { setWhere(next); run.clear(); }} options={placeOptions} />,
+  } : null;
+  // Two columns (1024–1279): 在哪跑 sits in the title row, where it is seen before ▶; with three it heads the right column.
+  const context = task && <TaskContext game={game} task={task} account={account} plans={data.plans} pickers={desk ? pickers : null} />;
 
   return (
     <>
-      <PageHeader title="任务与日常" />
+      <PageHeader title="任务与日常" aside={!desk && pickers ? (
+        <span className={s.pickers} aria-label="在哪跑"><span className={ui.tiny}>账号</span>{pickers.account}<span className={ui.tiny}>设备</span>{pickers.place}</span>
+      ) : undefined} />
       {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => leave(() => { setChosenGame(id); run.clear(); navigate(paths.tasks, { force: true }); })} items={data.games.map((item) => [item.id, item.name])} />}
       <div className={join(d.cols, d.cols3)}>
         <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} />
@@ -194,7 +195,7 @@ function TaskContext({ game, task, account, plans, pickers }: {
       <Card flush as="section" aria-label="这个任务的战报">
         <CardHead soft title="这个任务的战报" aside={account ? <Link to={paths.account(account.id, "runs")} className={ui.tiny} style={{ textDecoration: "none" }}>全部 ›</Link> : undefined} />
         {runs.length === 0 ? <Empty>还没有战报</Empty> : runs.map((job) => {
-          const [label, tone] = jobStatus(job);
+          const [label, tone] = jobStatus(job, data.devices);
           return (
             <Link key={job.id} to={paths.job(job.id)} className={join(ui.row, ui.rowLink)} style={{ minHeight: 44 }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-sm)" }}>{shortTime(job.updatedAt)}{job.deviceName ? ` · ${job.deviceName}` : ""}</span>
@@ -211,8 +212,8 @@ function TaskContext({ game, task, account, plans, pickers }: {
               <Link to={paths.planEdit(account.id, plan.id)} style={{ flex: 1, minWidth: 0, color: "inherit", textDecoration: "none", fontSize: "var(--text-sm)" }}>
                 {plan.name} · <span className={ui.mono}>{clockText(plan.minuteOfDay)}</span>
               </Link>
-              <Switch label={`启用${plan.name}`} checked={plan.enabled}
-                onChange={(on) => orAlert(() => api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body: saveOf(plan, { enabled: on }) }))} />
+              <LiveSwitch label={`启用${plan.name}`} checked={plan.enabled}
+                save={(on) => api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body: saveOf(plan, { enabled: on }) })} />
             </Row>
           ))}
         </Card>

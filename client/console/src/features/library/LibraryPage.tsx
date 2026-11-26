@@ -38,7 +38,7 @@ export function taskState(jobs: Job[] | undefined, task: CloudTask, accountId: s
   if (!jobs || !accountId) return null;
   const job = jobs.find((item) => item.accountId === accountId && item.targetId === task.targetId && item.taskId === task.taskId && ACTIVE.has(item.state));
   if (!job) return null;
-  return job.state === "RUNNING" ? jobStatus(job) : ["排队中", "warn"];
+  return job.state === "RUNNING" || job.state === "LEASED" ? jobStatus(job) : [job.state === "WAITING" ? "等待中" : "排队", "warn"];
 }
 
 /** Task rows: the name (★ when starred, the live state), its settings as grey pills, and ▶ to run it now. */
@@ -164,8 +164,7 @@ export function LibraryPage() {
                 favorites={favorites}
                 onRun={(cTask) => {
                   if (!activeAccount) { navigate(paths.accounts); return; }
-                  run(cTask, activeAccount.id, place ? { deviceId: place.device.id, appKey: place.app.key } : null,
-                    place ? `已排进 ${place.label}` : "已提交");
+                  void run(cTask, activeAccount.id, place ? { deviceId: place.device.id, appKey: place.app.key } : null);
                 }}
               />
             )}
@@ -233,7 +232,7 @@ function TaskDetail({ gameId, taskId, detail }: { gameId: string; taskId: string
       {activeAccount ? (
         <SettingsForm key={`${activeAccount.id}:${taskId}`} account={activeAccount} task={{ targetId: gameId, taskId, name: detail.name }} stepHref={stepUrl}
           replace={tab === "steps" ? steps : undefined} runBusy={busy !== null}
-          onRun={() => run({ targetId: gameId, taskId }, activeAccount.id, null, "已提交")} />
+          onRun={() => run({ targetId: gameId, taskId }, activeAccount.id, null)} />
       ) : tab === "steps" ? steps : (
         <Card><Row><span style={{ flex: 1 }}>先添加账号</span><ButtonLink to={paths.accounts}>＋ 添加账号</ButtonLink></Row></Card>
       )}

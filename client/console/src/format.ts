@@ -2,12 +2,13 @@ import type { AppWaiting, Device, Job, JobEvent, JobState, Plan } from "./api/ty
 
 export type Tone = "" | "ok" | "info" | "warn" | "bad";
 export const JOB_STATES: Record<JobState, [string, Tone]> = {
-  WAITING: ["等可用应用", "info"], QUEUED: ["排队中", "info"], LEASED: ["已下发", "info"], RUNNING: ["运行中", "info"], COMPLETED: ["完成", "ok"],
-  FAILED: ["失败", "bad"], UNKNOWN: ["结果未知", "warn"], CANCELLED: ["已取消", ""], SKIPPED: ["已跳过", "warn"],
+  // 已下发 (LEASED) reads as 运行中: the device has it and is starting.
+  WAITING: ["等待中", "info"], QUEUED: ["排队", "info"], LEASED: ["运行中", "info"], RUNNING: ["运行中", "info"], COMPLETED: ["完成", "ok"],
+  FAILED: ["失败", "bad"], UNKNOWN: ["待核对", "warn"], CANCELLED: ["已取消", ""], SKIPPED: ["已跳过", "warn"],
 };
 export const ACTIVE = new Set<JobState>(["WAITING", "QUEUED", "LEASED", "RUNNING"]);
 export const PHASES: Record<string, string> = {
-  CONNECTING: "连接中", IDLE: "空闲", DEVELOPING: "调试中", RUNNING: "运行中", PAUSING: "正在暂停", PAUSED: "已暂停", REMOVING: "正在停止", SWITCHING: "切换中", BLOCKED_UNKNOWN: "需要处理",
+  CONNECTING: "连接中", IDLE: "空闲", DEVELOPING: "调试中", RUNNING: "运行中", PAUSING: "正在暂停", PAUSED: "已暂停", REMOVING: "正在停止", SWITCHING: "切换中", BLOCKED_UNKNOWN: "待核对",
 };
 export const dateTime = (value: number | null | undefined) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
 export const clock = (value: number) => new Date(value).toLocaleTimeString("zh-CN", { hour12: false });
@@ -22,13 +23,13 @@ export function planRule(plan: Pick<Plan, "days" | "minuteOfDay" | "jitterMinute
 
 const EVENT_KINDS: Record<string, string> = {
   "enqueued": "已排队", "step-started": "开始步骤", "step-observed": "步骤结果", "step-completed": "步骤完成", "task-completed": "任务完成",
-  "task-failed": "任务失败", "task-restarted": "任务重来", "run-ended": "运行结束", "cancelled": "已取消", "input-unconfirmed": "输入未确认",
+  "task-failed": "任务失败", "task-restarted": "任务重来", "run-ended": "运行结束", "cancelled": "已取消", "input-unconfirmed": "待核对",
   "result-resolved": "结果已确认", "revocation-observed": "停止确认", "action": "动作", "task-event": "上报事件",
 };
 const ACTION_RESULTS: Record<string, string> = { PRODUCED: "完成", VERIFIED: "核对通过", UNAVAILABLE: "未通过", INTERRUPTED: "中断" };
 export const eventKind = (kind: string) => EVENT_KINDS[kind] ?? kind;
 /** Makes the executor's wording readable without changing what it says. */
-const RUN_ENDS: Record<string, string> = { COMPLETED: "已完成", FAILED: "失败", CANCELLED: "已停止", UNKNOWN: "结果未知", INTERRUPTED: "已中断" };
+const RUN_ENDS: Record<string, string> = { COMPLETED: "完成", FAILED: "失败", CANCELLED: "已取消", UNKNOWN: "待核对", INTERRUPTED: "已中断" };
 export function eventDetail(event: JobEvent): string {
   if (event.kind === "action") {
     const [result, ...rest] = event.detail.split("：");
@@ -36,7 +37,7 @@ export function eventDetail(event: JobEvent): string {
   }
   // A run's end names its state the device's way (COMPLETED, FAILED, …).
   if (event.kind === "run-ended") return RUN_ENDS[event.detail] ?? event.detail;
-  return event.detail.replace(/^Completed\(evidence=(.*)\)$/, "完成：$1").replace(/^Unknown\(reason=(.*)\)$/, "结果未知：$1")
+  return event.detail.replace(/^Completed\(evidence=(.*)\)$/, "完成：$1").replace(/^Unknown\(reason=(.*)\)$/, "待核对：$1")
     .replace(/^Failed\(reason=(.*)\)$/, "失败：$1").replace(/^Interrupted$/, "已中断");
 }
 
@@ -79,11 +80,30 @@ export const platformName = (platform: string) => PLATFORMS[platform.toLowerCase
 
 /** The plan a job came from; empty for a run started by hand, which needs no saying. */
 export const jobSource = (job: Job) => job.planName ? `计划 · ${job.planName}` : "";
-/** The job's state as the user should read it, taking pending pause and cancel requests into account. */
-export function jobStatus(job: Job): [string, Tone] {
+/** The phase of the app a job runs on, as its device last said; null when unknown. */
+export function jobPhase(job: Job, devices?: Device[]): string | null {
+  if (!devices || !job.deviceId) return null;
+  const device = devices.find((item) => item.id === job.deviceId);
+  if (!device?.online) return null;
+  return device.apps.find((app) => app.key === job.appKey)?.phase ?? device.phase ?? null;
+}
+/** Whether a running job is paused, or asked to pause, by the web or on the phone itself: then the button says 继续. */
+export const jobPaused = (job: Job, devices?: Device[]) => {
+  const phase = jobPhase(job, devices);
+  return job.state === "RUNNING" && (job.pauseRequested || phase === "PAUSED" || phase === "PAUSING");
+};
+/**
+ * The job's state as the user should read it, taking pending pause and cancel requests into account. With [devices],
+ * a pause is 已暂停 only once the device says so (正在暂停 until then), and one made on the phone shows too.
+ */
+export function jobStatus(job: Job, devices?: Device[]): [string, Tone] {
   const [label, tone] = JOB_STATES[job.state];
   if (job.cancelRequested && ACTIVE.has(job.state)) return ["正在停止", "warn"];
-  if (job.state === "RUNNING" && job.pauseRequested) return ["已暂停", "warn"];
+  if (job.state === "RUNNING") {
+    const phase = jobPhase(job, devices);
+    if (phase === "PAUSED") return ["已暂停", "warn"];
+    if (job.pauseRequested || phase === "PAUSING") return ["正在暂停", "warn"];
+  }
   return [label, tone];
 }
 /** What to do about what the phone waits for, in one line. */

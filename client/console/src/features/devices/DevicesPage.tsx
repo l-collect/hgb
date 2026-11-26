@@ -3,19 +3,20 @@ import { api } from "../../api/client";
 import type { Channel, ChannelKind, Device, EventRule, GameAccount, Job } from "../../api/types";
 import { ButtonLink, Card, Empty, Muted, PageHeader, Pill, RowLink, SegmentTabs, ui } from "../../components/ui";
 import { ACTIVE, deviceWaiting, JOB_STATES, platformName, shortTime, waitNext, type Tone } from "../../format";
-import { Link, paths } from "../../router";
+import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { lastFinished, RunRows } from "../jobs/runs";
 import { useWide } from "../../shell/useWidth";
 import { RunsDesk } from "./RunsDesk";
 import s from "./Devices.module.css";
 
-type RunFilter = "all" | "active" | "done" | "bad";
+type RunFilter = "all" | "active" | "done" | "bad" | "waiting";
 const FILTERS: Record<RunFilter, (job: Job) => boolean> = {
   all: () => true,
   active: (job) => ACTIVE.has(job.state),
   done: (job) => job.state === "COMPLETED",
   bad: (job) => job.state === "FAILED" || job.state === "UNKNOWN",
+  waiting: (job) => job.state === "QUEUED" || job.state === "WAITING",
 };
 const isToday = (at: number) => new Date(at).toDateString() === new Date().toDateString();
 const CHANNEL_NAMES: Record<ChannelKind, string> = { DINGTALK: "钉钉", WECOM: "企业微信", BARK: "Bark", EMAIL: "邮件", WEBHOOK: "Webhook", LOCAL: "本机" };
@@ -27,17 +28,27 @@ const CHANNEL_NAMES: Record<ChannelKind, string> = { DINGTALK: "钉钉", WECOM: 
 export function DevicesPage() {
   const { data } = useConsole();
   const wide = useWide();
-  const [filter, setFilter] = useState<RunFilter>("all");
+  // A number opens the runs it counts: ?runs=done&span=today (the table reads the same address).
+  const query = useQuery();
+  const asked = query.get("runs") as RunFilter | null;
+  const filter: RunFilter = asked && asked in FILTERS ? asked : "all";
+  const todayOnly = query.get("span") === "today";
+  const setFilter = (next: RunFilter) => navigate(next === "all" ? paths.devices : `${paths.devices}?runs=${next}`, { replace: true });
   const today = data.jobs.filter((job) => isToday(job.updatedAt));
-  const runs = data.jobs.filter(FILTERS[filter]);
+  const runs = data.jobs.filter((job) => FILTERS[filter](job) && (!todayOnly || isToday(job.updatedAt)));
+  const stat = (to: string, value: number, label: string, tone?: string) => (
+    <Link to={to} className={`${s.stat} ${s.statLink}`} onClick={() => setTimeout(() => (document.getElementById("recent") ?? document.getElementById("runs"))?.scrollIntoView({ block: "start" }))}>
+      <b className={tone}>{value}</b><span>{label} ›</span>
+    </Link>
+  );
   return (
     <>
       <PageHeader title="设备与战报" aside={wide ? <NoticeButton /> : undefined} />
       <div className={wide ? `${s.stats} ${s.stats4}` : s.stats}>
         <div className={s.stat}><b>{data.devices.filter((device) => device.online).length}</b><span>在线设备</span></div>
-        <div className={s.stat}><b className={s.statOk}>{today.filter(FILTERS.done).length}</b><span>今日完成</span></div>
-        <div className={s.stat}><b className={s.statBad}>{today.filter(FILTERS.bad).length}</b><span>异常待查</span></div>
-        {wide && <div className={s.stat}><b className={s.statRun}>{data.jobs.filter((job) => job.state === "QUEUED" || job.state === "WAITING").length}</b><span>排队中</span></div>}
+        {stat(`${paths.devices}?runs=done&span=today`, today.filter(FILTERS.done).length, "今日完成", s.statOk)}
+        {stat(`${paths.devices}?runs=bad&span=today`, today.filter(FILTERS.bad).length, "异常待查", s.statBad)}
+        {wide && stat(`${paths.devices}?runs=waiting`, data.jobs.filter(FILTERS.waiting).length, "排队", s.statRun)}
       </div>
       {!wide && <NoticeEntry />}
       <section aria-labelledby="devices" className={s.section}>
@@ -49,7 +60,8 @@ export function DevicesPage() {
       {wide ? <RunsDesk /> : (
         <section aria-labelledby="recent" className={s.section}>
           <h2 id="recent" className={s.h2}>战报</h2>
-          <SegmentTabs label="按状态筛选" value={filter} onChange={setFilter} items={[["all", "全部"], ["active", "运行中"], ["done", "完成"], ["bad", "异常"]]} />
+          <SegmentTabs label="按状态筛选" value={filter === "waiting" ? "active" : filter} onChange={setFilter} items={[["all", "全部"], ["active", "运行中"], ["done", "完成"], ["bad", "异常"]]} />
+          {todayOnly && <Muted>只看今天 · <Link to={filter === "all" ? paths.devices : `${paths.devices}?runs=${filter}`}>看全部时间</Link></Muted>}
           <Card flush>
             {runs.length ? <RunRows jobs={runs} devices={data.devices} columns={["place", "source"]} limit={15} /> : <Empty>没有战报</Empty>}
           </Card>
@@ -102,7 +114,7 @@ export function deviceStatus(device: Device, jobs: Job[]): [string, Tone, number
   if (waiting) return [waiting.text, "warn", running];
   if (running > 1) return [`${running} 个应用运行中`, "info", running];
   if (running === 1 || device.phase === "RUNNING") return ["运行中", "info", Math.max(running, 1)];
-  return ["在线", "ok", 0];
+  return ["空闲", "ok", 0];
 }
 const accountName = (accounts: GameAccount[], id: string | null) => accounts.find((item) => item.id === id)?.name;
 

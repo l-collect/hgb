@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiFailure } from "../../api/client";
-import { Button, Empty, Mark, Pill, ui } from "../../components/ui";
+import { Button, ErrorCard, Loading, Mark, Pill, ui } from "../../components/ui";
+import { ConfirmHost } from "../../components/Confirm";
+import { ToastHost } from "../../components/Toast";
 import { Link, paths, usePath } from "../../router";
 import { admin, type Admin } from "./api";
 import { AUTH_LOST } from "./failure";
@@ -17,6 +19,7 @@ type Session = { kind: "loading" } | { kind: "signed-out" } | { kind: "denied" }
  * server's answer alone: 401 shows 去登录, 403 not_admin shows 没有权限.
  */
 export default function AdminApp() {
+  const path = usePath();
   const [session, setSession] = useState<Session>({ kind: "loading" });
   useEffect(() => { document.title = "护肝宝管理"; return () => { document.title = "护肝宝控制台"; }; }, []);
   const check = useCallback(async () => {
@@ -34,9 +37,10 @@ export default function AdminApp() {
     return () => window.removeEventListener(AUTH_LOST, again);
   }, [check]);
   switch (session.kind) {
-    case "loading": return <Empty>正在加载…</Empty>;
-    case "failed": return <Empty>{session.message}</Empty>;
-    case "signed-out": return <Gate title="护肝宝 · 管理" text="用控制台的账号登录"><Link className={buttonClass("primary")} to={paths.login}>去登录</Link></Gate>;
+    case "loading": return <Loading />;
+    case "failed": return <div style={{ padding: 16 }}><ErrorCard text={session.message} retry={() => { setSession({ kind: "loading" }); void check(); }} /></div>;
+    // Signed in, the sign-in page comes back here (next).
+    case "signed-out": return <Gate title="护肝宝 · 管理" text="用控制台的账号登录"><Link className={buttonClass("primary")} to={`${paths.login}?next=${encodeURIComponent(path)}`}>去登录</Link></Gate>;
     case "denied": return (
       <Gate title="没有权限" text="当前账号不是管理员">
         <Link className={buttonClass("primary")} to={paths.tasks}>回控制台</Link>
@@ -79,6 +83,8 @@ function Shell({ me }: { me: Admin }) {
         <span className={s.me}><span className={s.meName}>{who(me)}</span><Link to={paths.tasks}>← 控制台</Link></span>
       </nav>
       <main className={s.main}>{section === "users" ? <UsersPage me={me.userId} /> : <CodesPage />}</main>
+      <ConfirmHost />
+      <ToastHost />
     </div>
   );
 }

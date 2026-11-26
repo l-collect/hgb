@@ -53,3 +53,4 @@
 /* Why a queued run waits (设备离线 …), under its pill. */
 .reason { display: block; margin-top: 2px; color: var(--color-warn); font-size: var(--text-xs); font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
 .waitNote { padding: 10px 14px; border-radius: var(--radius-lg); background: var(--color-warn-soft); border: 1px solid var(--color-warn-line); color: var(--color-warn-ink); font-size: var(--text-sm); }
+.next, .why .next { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }

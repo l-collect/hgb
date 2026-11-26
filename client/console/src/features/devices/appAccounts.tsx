@@ -10,6 +10,7 @@ const GEAR = (
   </svg>
 );
 import { useAction } from "../../components/useAction";
+import { toast } from "../../components/Toast";
 import s from "./Devices.module.css";
 
 /**
@@ -23,7 +24,7 @@ export function useAppAccounts(device: Device, app: App) {
   const save = (accountId: string | null, defaultAccountId: string | null) => {
     setCurrent(accountId); setFallback(defaultAccountId);
     api(`/api/devices/${enc(device.id)}/apps/${enc(app.key)}`, { method: "PUT", body: { accountId, defaultAccountId } }).catch((error: Error) => {
-      setCurrent(app.accountId); setFallback(app.defaultAccountId); alert(error.message);
+      setCurrent(app.accountId); setFallback(app.defaultAccountId); toast(error.message, { tone: "bad" });
     });
   };
   return {

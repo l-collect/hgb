@@ -8,7 +8,7 @@ import { useConsole } from "../../state/context";
 import { applyAppearance, readAppearance, type Appearance } from "../../theme/appearance";
 import { JumpList } from "../accounts/Settings";
 import { BindEmail, DeleteAccount, MergeCard } from "./AccountActions";
-import { TimeZone, useMeActions } from "./MePage";
+import { GithubUnlink, TimeZone, useMeActions } from "./MePage";
 import s from "./MeDesk.module.css";
 
 const GROUPS: [string, string][] = [
@@ -21,7 +21,7 @@ const GROUPS: [string, string][] = [
  */
 export function MeDesk() {
   const { data } = useConsole();
-  const { account, setAccount, codeInput, setCodeInput, redeem, unlink, unbind, logout, expires, isPro, signedOut } = useMeActions();
+  const { account, setAccount, codeInput, setCodeInput, redeem, redeeming, unlink, unbind, logout, expires, isPro, forever, signedOut } = useMeActions();
   // Read again: a code redeemed elsewhere changes the tier shown here.
   useEffect(() => { api<Account>("/api/me").then(setAccount).catch(() => {}); }, [setAccount]);
   const [binding, setBinding] = useState(false);
@@ -43,15 +43,15 @@ export function MeDesk() {
             </span>
             <Button small onClick={logout}>退出登录</Button>
           </Card>
-          <Card flush className={isPro ? s.halves : undefined} aria-label="会员">
+          <Card flush className={isPro && !forever ? s.halves : undefined} aria-label="会员">
             {isPro && <div className={s.half}><span className={s.whoLine}><b>Cloud Pro</b><Pill tone="ok">{expires ? `到期 ${expires}` : "永久"}</Pill></span></div>}
-            <form className={s.half} onSubmit={(e) => { e.preventDefault(); redeem(); }}>
+            {!forever && <form className={s.half} onSubmit={(e) => { e.preventDefault(); void redeem(); }}>
               <label className={s.label} htmlFor="pro-code-desk">{isPro ? "续期激活码" : "激活码"}</label>
               <span className={s.codeLine}>
                 <input id="pro-code-desk" type="text" value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="HGB-PRO-…" />
-                <Button type="submit" variant="primary" disabled={!codeInput.trim()}>兑换</Button>
+                <Button type="submit" variant="primary" disabled={!codeInput.trim() || redeeming}>{redeeming ? "兑换中…" : "兑换"}</Button>
               </span>
-            </form>
+            </form>}
           </Card>
           <Card flush as="section" aria-label="登录方式">
             <CardHead soft title="登录方式" />
@@ -64,7 +64,7 @@ export function MeDesk() {
             <Row>
               <span className={s.key}>GitHub</span>
               <Grow><span className={ui.tiny}>{account.githubLogin ?? "未绑定"}</span></Grow>
-              {account.githubLogin ? <Button small onClick={unlink} disabled={!account.email}>解绑</Button> : <a className={s.button} href={apiUrl("/api/auth/github/start?link=1")}>绑定</a>}
+              {account.githubLogin ? <GithubUnlink account={account} unlink={unlink} /> : <a className={s.button} href={apiUrl("/api/auth/github/start?link=1")}>绑定</a>}
             </Row>
           </Card>
           {offer && <MergeCard token={offer.token} offer={offer} settled={(merged) => { setOffer(null); setBinding(false); if (merged) location.reload(); }} />}
@@ -88,7 +88,7 @@ export function MeDesk() {
             {data.devices.map((device) => (
               <Row key={device.id}>
                 <Grow>{device.name}<span className={ui.tiny} style={{ display: "block" }}>{platformName(device.platform)} · {device.online ? "在线" : `上次 ${shortTime(device.lastSeenAt)}`}{device.appVersion ? ` · App ${device.appVersion}` : ""}</span></Grow>
-                <MoreMenu label={`${device.name} 的操作`} actions={[["解绑", () => unbind(device.id, device.name), true]]} />
+                <MoreMenu label={`${device.name} 的操作`} actions={[["解绑", () => void unbind(device.id, device.name), true]]} />
               </Row>
             ))}
             <Row><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/releases/latest`}>下载</a></Row>

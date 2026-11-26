@@ -53,7 +53,8 @@ export function Pager({ offset, total, onChange }: { offset: number; total: numb
 /** The design's right-hand drawer over the page: a heading row with ✕, the body, and a row of buttons at the foot. */
 export function Drawer({ title, onClose, children, foot }: { title: string; onClose: () => void; children: ReactNode; foot: ReactNode }) {
   useEffect(() => {
-    const key = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    // A question open over the drawer takes Escape itself.
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape" && !document.querySelector("[role=alertdialog]")) onClose(); };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
   }, [onClose]);

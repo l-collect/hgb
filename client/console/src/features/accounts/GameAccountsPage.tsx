@@ -2,8 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api, ApiFailure, enc } from "../../api/client";
 import { ask } from "../../components/Confirm";
 import type { Device, Game, GameAccount } from "../../api/types";
-import { Button, ButtonLink, Card, CardHead, Chips, Empty, Field, Form, Message, MoreMenu, Muted, PageHeader, Pill, Row, RowLink, Segments, ui } from "../../components/ui";
-import { orAlert, useAction } from "../../components/useAction";
+import { Button, ButtonLink, Card, CardHead, Chips, Empty, Field, Form, join, Message, MoreMenu, Muted, PageHeader, Pill, Popover, Row, RowLink, Segments, ui } from "../../components/ui";
+import { orToast, useAction } from "../../components/useAction";
+import { toast } from "../../components/Toast";
 import { jobStatus, shortTime, type Tone } from "../../format";
 import { leave, Link, navigate, paths } from "../../router";
 import type { ConsoleData } from "../../state/console";
@@ -19,7 +20,29 @@ export function onlineGameDevices(devices: Device[], gameId: string, requireApp 
   return devices.filter((d) => d.online && (d.apps.some((a) => a.gameId === gameId) || (!requireApp && d.apps.length === 0)));
 }
 
-export function ReportDeviceLoginAction({ gameId, label = "读取设备登录", primary = false, small = true, onNotice }: {
+/**
+ * A text button that does [run] on the one device there is, or, with several, opens them to pick from (the button keeps
+ * its words either way). With none it says what is missing.
+ */
+function DeviceAction({ label, devices, none, primary, small, run, itemText }: {
+  label: string; devices: Device[]; none: string; primary?: boolean; small?: boolean; run: (device: Device) => void; itemText: (device: Device) => string;
+}) {
+  if (devices.length <= 1) {
+    return <Button small={small} variant={primary ? "primary" : undefined} onClick={() => devices.length ? run(devices[0]) : toast(none, { tone: "bad" })}>{label}</Button>;
+  }
+  return (
+    <Popover label={label} plain trigger={<span className={join(ui.button, small && ui.small, primary ? ui.primary : ui.ghost)}>{label} ▾</span>}>
+      {(close) => (
+        <>
+          <span className={ui.menuLabel}>选设备</span>
+          {devices.map((dev) => <button key={dev.id} type="button" role="menuitem" className={ui.menuItem} onClick={() => { close(); run(dev); }}>{itemText(dev)}</button>)}
+        </>
+      )}
+    </Popover>
+  );
+}
+
+export function ReportDeviceLoginAction({ gameId, label = "读取登录", primary = false, small = true, onNotice }: {
   gameId: string; label?: string; primary?: boolean; small?: boolean; onNotice?: (msg: string) => void;
 }) {
   const { data } = useConsole();
@@ -28,28 +51,16 @@ export function ReportDeviceLoginAction({ gameId, label = "读取设备登录", 
     const appKey = dev.apps.find((a) => a.gameId === gameId)?.key;
     const qs = new URLSearchParams({ gameId });
     if (appKey) qs.set("appKey", appKey);
-    orAlert(async () => {
+    void orToast(async () => {
       await api(`/api/devices/${enc(dev.id)}/report-login?${qs.toString()}`, { method: "POST" });
-      onNotice?.(`已通知「${dev.name}」读取本机阴阳师登录信息，识别后将自动建号并加密上传登录态`);
+      const text = `已让「${dev.name}」读取登录，读到后自动建号`;
+      if (onNotice) onNotice(text); else toast(text, { tone: "ok" });
     });
   };
-  if (candidates.length <= 1) {
-    return (
-      <Button small={small} variant={primary ? "primary" : undefined} onClick={() => {
-        if (candidates.length === 0) {
-          alert("当前没有在线设备，请先在手机打开护肝宝并连上云端");
-          return;
-        }
-        trigger(candidates[0]);
-      }}>{label}</Button>
-    );
-  }
-  return (
-    <MoreMenu label={label} actions={candidates.map((dev): [string, () => void] => [`从「${dev.name}」读取登录`, () => trigger(dev)])} />
-  );
+  return <DeviceAction label={label} devices={candidates} none="没有在线设备，先在手机打开护肝宝" primary={primary} small={small} run={trigger} itemText={(dev) => dev.name} />;
 }
 
-export function ApplyAccountLoginAction({ account, label = "下发到设备", primary = false, small = true, onNotice }: {
+export function ApplyAccountLoginAction({ account, label = "下发登录", primary = false, small = true, onNotice }: {
   account: GameAccount; label?: string; primary?: boolean; small?: boolean; onNotice?: (msg: string) => void;
 }) {
   const { data } = useConsole();
@@ -60,30 +71,18 @@ export function ApplyAccountLoginAction({ account, label = "下发到设备", pr
     const appKey = dev.apps.find((a) => a.gameId === account.gameId)?.key ?? null;
     if (!await ask({ title: `下发「${account.name}」到「${dev.name}」？`, body: "游戏会换成这个账号登录", ok: "下发" })) return;
     const send = (force: boolean) => api(`/api/accounts/${enc(account.id)}/apply-login`, { method: "POST", body: { deviceId: dev.id, appKey, ...(force ? { force: true } : {}) } });
-    orAlert(async () => {
+    void orToast(async () => {
       try { await send(false); }
       catch (error) {
         if (!(error instanceof ApiFailure && error.status === 409 && error.code === "device_busy")) throw error;
         if (!await ask({ title: `${error.message || "设备正在运行"}，仍要下发？`, body: "正在跑的任务会被打断", ok: "仍要下发", danger: true })) return;
         await send(true);
       }
-      onNotice?.(`已向「${dev.name}」下发「${account.name}」的登录信息`);
+      const text = `已向「${dev.name}」下发登录`;
+      if (onNotice) onNotice(text); else toast(text, { tone: "ok" });
     });
   };
-  if (candidates.length <= 1) {
-    return (
-      <Button small={small} variant={primary ? "primary" : undefined} onClick={() => {
-        if (candidates.length === 0) {
-          alert("当前没有装有该游戏的在线设备");
-          return;
-        }
-        void trigger(candidates[0]);
-      }}>{label}</Button>
-    );
-  }
-  return (
-    <MoreMenu label={label} actions={candidates.map((dev): [string, () => void] => [`下发到「${dev.name}」`, () => void trigger(dev)])} />
-  );
+  return <DeviceAction label={label} devices={candidates} none="没有装这个游戏的在线设备" primary={primary} small={small} run={(dev) => void trigger(dev)} itemText={(dev) => dev.name} />;
 }
 
 export function accountNow(account: GameAccount, data: ConsoleData): [string, Tone] {
@@ -109,7 +108,6 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
   const game = data.games.find((g) => g.id === gameId);
   const accounts = data.accounts.filter((account) => account.gameId === gameId);
   const [selectedId, setSelectedId] = useState(accounts[0]?.id ?? "");
-  const [syncNotice, setSyncNotice] = useState<string | null>(null);
   // Opening a plan of another account (its address) shows that account behind the drawer, and keeps it after closing.
   const routed = accountId ? data.accounts.find((a) => a.id === accountId) : undefined;
   useEffect(() => { if (routed) { setSelectedId(routed.id); setChosen(routed.gameId); } }, [routed]);
@@ -122,11 +120,10 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
         <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {accounts.length > 0 && <Button small onClick={() => setManaging(!managing)}>{managing ? "回到计划" : "管理账号"}</Button>}
           {isOnmyoji
-            ? <ReportDeviceLoginAction gameId={gameId || "onmyoji"} label="读取设备登录" primary small onNotice={setSyncNotice} />
+            ? <ReportDeviceLoginAction gameId={gameId || "onmyoji"} label="读取设备登录" primary small />
             : <Button small variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>{adding ? "收起" : "＋ 添加账号"}</Button>}
         </span>
       } />
-      {syncNotice && <Message text={syncNotice} ok />}
       {!isOnmyoji && adding && <AddAccount games={data.games} gameId={gameId} done={() => setAdding(false)} />}
       {data.games.length === 0 ? <Card><Empty>先连一台设备</Empty></Card> : (
         <>
@@ -137,8 +134,8 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
               {isOnmyoji ? (
                 <div style={{ padding: "24px 16px", textAlign: "center", display: "grid", gap: 10, justifyItems: "center" }}>
                   <b>还没有阴阳师账号</b>
-                  <Muted>无需手动新建：在手机登录阴阳师并允许护肝宝 Root 权限后，直接读取当前机器登录信息即可自动建号并加密上传登录态。</Muted>
-                  <ReportDeviceLoginAction gameId={gameId} label="读取设备登录建号" primary small={false} onNotice={setSyncNotice} />
+                  <Muted>在手机登录阴阳师、允许护肝宝 Root 后，读取登录即可自动建号。</Muted>
+                  <ReportDeviceLoginAction gameId={gameId} label="读取设备登录" primary small={false} />
                 </div>
               ) : <Empty>还没有账号</Empty>}
             </Card>
@@ -197,16 +194,16 @@ function AccountSummary({ account, accounts, game }: { account: GameAccount; acc
   const paused = (account.pausedTasks ?? []).map((p) => game?.tasks.find((t) => t.taskId === p.taskId)?.name ?? p.taskId);
   return (
     <Card flush as="section" aria-label="当前账号">
-      <CardHead title={account.name} aside={<><Pill tone={tone}>{now}</Pill><ButtonLink small to={paths.account(account.id)}>设置</ButtonLink></>} />
+      <CardHead title={account.name} aside={<><Pill tone={tone} live>{now}</Pill><ButtonLink small to={paths.account(account.id)}>设置</ButtonLink></>} />
       <Row><span style={{ flex: 1 }}>协战</span><span className={ui.tiny}>{partners || "不带"}</span></Row>
       <Row>
         <span style={{ flex: 1 }}>登录快照</span>
-        <span className={ui.tiny}>{account.hasLoginSnapshot ? "已加密保存" : "未存"}</span>
+        <span className={ui.tiny}>{account.hasLoginSnapshot ? "已存" : "未存"}</span>
         {/* 下发 replaces the game's login on a phone, so it lives in 设置, not on this card. */}
-        {!account.hasLoginSnapshot && <ReportDeviceLoginAction gameId={account.gameId} label="读取上传" small />}
+        {!account.hasLoginSnapshot && <ReportDeviceLoginAction gameId={account.gameId} label="读取登录" small />}
       </Row>
       {popup && <Row><span style={{ flex: 1 }}>弹窗处理</span><span className={ui.tiny}>{popup.name}：{popupChoice ?? "—"}</span></Row>}
-      <Row><span style={{ flex: 1 }}>暂停的任务</span>{paused.length ? paused.map((name) => <Pill key={name} tone="warn">{name}</Pill>) : <span className={ui.tiny}>无</span>}</Row>
+      <Row><span style={{ flex: 1 }}>失败停用</span>{paused.length ? paused.map((name) => <Pill key={name} tone="warn">{name}</Pill>) : <span className={ui.tiny}>无</span>}</Row>
     </Card>
   );
 }
@@ -216,10 +213,7 @@ function AccountRow({ account }: { account: GameAccount }) {
   const [editing, setEditing] = useState(false);
   const [now, tone] = accountNow(account, data);
   const last = data.jobs.find((job) => job.accountId === account.id);
-  const remove = () => {
-    if (!confirm(`移除「${account.name}」和它的计划？`)) return;
-    orAlert(() => api(`/api/accounts/${enc(account.id)}`, { method: "DELETE" }));
-  };
+  const remove = () => removeAccount(account);
   if (editing) return <tr><td colSpan={4}><EditAccount account={account} done={() => setEditing(false)} /></td></tr>;
   return (
     <tr>
@@ -231,6 +225,12 @@ function AccountRow({ account }: { account: GameAccount }) {
   );
 }
 
+/** 移除账号, once the user agrees: its plans go with it. */
+export async function removeAccount(account: GameAccount, after?: () => void) {
+  if (!await ask({ title: `移除「${account.name}」？`, body: "它的计划一起删除，不能恢复", ok: "移除", danger: true })) return;
+  await orToast(async () => { await api(`/api/accounts/${enc(account.id)}`, { method: "DELETE" }); after?.(); }, "已移除");
+}
+
 export function EditAccount({ account, done }: { account: GameAccount; done: () => void }) {
   const [name, setName] = useState(account.name);
   const [uid, setUid] = useState(account.uid ?? "");
@@ -238,7 +238,7 @@ export function EditAccount({ account, done }: { account: GameAccount; done: () 
   const { busy, message, run } = useAction();
   return (
     <>
-      <Form inline onSubmit={() => run(async () => { await api(`/api/accounts/${enc(account.id)}`, { method: "PUT", body: { name, uid: uid || null, nickname: nickname || null } }); done(); })}>
+      <Form inline onSubmit={() => run(async () => { await api(`/api/accounts/${enc(account.id)}`, { method: "PUT", body: { name, uid: uid || null, nickname: nickname || null } }); toast("已保存", { tone: "ok" }); done(); })}>
         <Field label="名称"><input type="text" required maxLength={40} value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="昵称"><input type="text" maxLength={40} value={nickname} onChange={(e) => setNickname(e.target.value)} /></Field>
         <Field label="UID"><input type="text" maxLength={40} value={uid} onChange={(e) => setUid(e.target.value)} /></Field>

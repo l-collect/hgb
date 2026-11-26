@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { Account, EmailBindResult, MergeOffer } from "../../api/types";
 import { Button, Card, Form, Message, Muted } from "../../components/ui";
-import { useAction } from "../../components/useAction";
+import { useAction, useCountdown } from "../../components/useAction";
 import s from "./Me.module.css";
 
 /** Binds an email to an account that has none: a code to the address, then the code. */
@@ -11,7 +11,8 @@ export function BindEmail({ done, merge }: { done: (account: Account) => void; m
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const { busy, message, run } = useAction();
-  const send = () => run(async () => { await api("/api/me/email/request", { method: "POST", body: { email } }); setSent(true); return `验证码已发到 ${email}`; });
+  const [left, setLeft] = useCountdown();
+  const send = () => run(async () => { await api("/api/me/email/request", { method: "POST", body: { email } }); setSent(true); setLeft(60); return `验证码已发到 ${email}`; });
   const verify = () => run(async () => {
     const result = await api<EmailBindResult>("/api/me/email/verify", { method: "POST", body: { email, code } });
     if (result.merge) merge(result.merge); else if (result.account) done(result.account);
@@ -21,6 +22,7 @@ export function BindEmail({ done, merge }: { done: (account: Account) => void; m
       <input type="email" required autoComplete="email" placeholder="邮箱" aria-label="邮箱" value={email} disabled={sent} onChange={(e) => setEmail(e.target.value)} />
       {sent && <input inputMode="numeric" required autoComplete="one-time-code" placeholder="验证码" aria-label="验证码" value={code} onChange={(e) => setCode(e.target.value)} />}
       <Button type="submit" variant="primary" disabled={busy}>{sent ? "绑定" : "发送验证码"}</Button>
+      {sent && <Button variant="link" onClick={send} disabled={busy || left > 0}>{left > 0 ? `${left} 秒后可重发` : "重发"}</Button>}
       {sent && <Button variant="link" onClick={() => { setSent(false); setCode(""); }}>换个邮箱</Button>}
       <Message text={message?.text} ok={message?.ok} />
     </Form>

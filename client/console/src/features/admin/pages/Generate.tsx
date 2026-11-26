@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button, Card, Chips, Message, Stepper, ui } from "../../../components/ui";
 import { admin, save, stamp, type Generated } from "../api";
+import { ask } from "../../../components/Confirm";
+import { toast } from "../../../components/Toast";
 import { failure } from "../failure";
 import { dateInput, duration, endOfDay, MAX_DAYS } from "../format";
 import { Drawer } from "./parts";
@@ -36,14 +38,14 @@ export function Generate({ onClose, onGenerated }: { onClose: () => void; onGene
       setDone(result); onGenerated();
     } catch (e) { setError(failure(e)); } finally { setBusy(false); }
   };
-  const close = () => {
-    if (done && !kept && !confirm("明文关掉就看不到了，确定关闭？")) return;
+  const close = async () => {
+    if (done && !kept && !await ask({ title: "关掉就看不到明文了", body: "还没复制或下载", ok: "仍要关闭", cancel: "再看看", danger: true })) return;
     onClose();
   };
   const copy = async () => {
     if (!done) return;
     try { await navigator.clipboard.writeText(done.codes.join("\n")); setKept(true); setCopied(true); setTimeout(() => setCopied(false), 2000); }
-    catch { alert("复制失败，请改用下载 CSV"); }
+    catch { toast("复制失败，请改用下载 CSV", { tone: "bad" }); }
   };
   const download = () => {
     if (!done) return;

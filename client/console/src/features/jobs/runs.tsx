@@ -3,9 +3,11 @@ import { api, enc } from "../../api/client";
 import type { App, Device, GameAccount, Job } from "../../api/types";
 import { Button, Pill, RowLink } from "../../components/ui";
 import { ask } from "../../components/Confirm";
-import { orAlert } from "../../components/useAction";
-import { ACTIVE, jobSource, jobStatus, shortTime, waitReason } from "../../format";
+import { orToast } from "../../components/useAction";
+import { toast } from "../../components/Toast";
+import { ACTIVE, jobPaused, jobSource, jobStatus, shortTime, waitReason } from "../../format";
 import { paths } from "../../router";
+import { useConsole } from "../../state/context";
 import s from "./Jobs.module.css";
 
 /** The jobs an app holds: the one it is running (or was just handed), then the ones queued behind it. */
@@ -16,7 +18,7 @@ export function appJobs(jobs: Job[], deviceId: string, appKey: string): { curren
 }
 /** Where a job ran, as the list shows it: the device, and the app when the device has more than one. */
 export function jobPlace(job: Job, devices: Device[]): string {
-  if (!job.deviceName) return job.state === "WAITING" ? "等可用应用" : "—";
+  if (!job.deviceName) return job.state === "WAITING" ? "等可用设备" : "—";
   const device = devices.find((item) => item.id === job.deviceId);
   const app = device && device.apps.length > 1 ? device.apps.find((item) => item.key === job.appKey) : undefined;
   return app ? `${job.deviceName} · ${app.name}` : job.deviceName;
@@ -24,7 +26,24 @@ export function jobPlace(job: Job, devices: Device[]): string {
 export const lastFinished = (jobs: Job[], keep: (job: Job) => boolean) => jobs.find((job) => keep(job) && !ACTIVE.has(job.state)) ?? null;
 
 export function jobCommand(job: Job, command: "pause" | "resume" | "cancel") {
-  return orAlert(() => api(`/api/jobs/${enc(job.id)}/${command}`, { method: "POST", body: {} }));
+  return orToast(() => api(`/api/jobs/${enc(job.id)}/${command}`, { method: "POST", body: {} }));
+}
+
+/**
+ * What to say once a run is submitted, from the job the server made: 「已排进 {设备} · 查看」, or, when its device is
+ * offline, that it waits for it; without a job (a plan's 立即运行) only 「已提交 · 查看」 to [fallback].
+ */
+export function runSubmitted(job: Job | null | undefined, devices: Device[], fallback: string = paths.devices) {
+  if (!job?.id) { toast("已提交", { tone: "ok", link: { to: fallback, text: "查看" } }); return; }
+  const link = { to: paths.job(job.id), text: "查看" };
+  const device = devices.find((item) => item.id === job.deviceId);
+  if ((device && !device.online) || job.waitReason === "设备离线") { toast("设备离线，30 分钟内上线才执行", { tone: "ok", link }); return; }
+  toast(job.deviceName ? `已排进 ${jobPlace(job, devices)}` : "已提交", { tone: "ok", link });
+}
+/** Starts [job]'s task again for the same account; the server picks the app. */
+export async function rerun(job: Job, devices: Device[]) {
+  const made = await api<Job>("/api/jobs", { method: "POST", body: { targetId: job.targetId, taskId: job.taskId, accountId: job.accountId, deviceId: null, appKey: null } });
+  runSubmitted(made, devices);
 }
 /** Stops a running job, or gives up an unconfirmed one, once the user agrees; a job still queued is cancelled at once. */
 export async function stopJob(job: Job) {
@@ -36,13 +55,18 @@ export async function stopJob(job: Job) {
 }
 /** Pause or resume, and stop (or cancel before it starts), for a job that is still going. */
 export function JobControls({ job, small }: { job: Job; small?: boolean }) {
+  const { data } = useConsole();
+  const [busy, setBusy] = useState(false);
   if (job.cancelRequested) return null;
+  // Paused on the phone itself counts too: 继续 works from here.
+  const paused = jobPaused(job, data.devices);
+  const command = async (what: "pause" | "resume") => { setBusy(true); try { await jobCommand(job, what); } finally { setBusy(false); } };
   // A result left unconfirmed holds the phone: giving it up takes the step as not done and frees the phone.
   if (job.state === "UNKNOWN") return <Button small={small} variant="danger" onClick={() => void stopJob(job)}>放弃本次</Button>;
   if (!ACTIVE.has(job.state)) return null;
   return (
     <>
-      {job.state === "RUNNING" && <Button small={small} onClick={() => jobCommand(job, job.pauseRequested ? "resume" : "pause")}>{job.pauseRequested ? "继续" : "暂停"}</Button>}
+      {job.state === "RUNNING" && <Button small={small} disabled={busy} onClick={() => void command(paused ? "resume" : "pause")}>{paused ? "继续" : "暂停"}</Button>}
       <Button small={small} variant="danger" onClick={() => void stopJob(job)}>{job.state === "RUNNING" ? "停止" : "取消"}</Button>
     </>
   );
@@ -56,7 +80,7 @@ export function RunRows({ jobs, devices, columns, limit }: { jobs: Job[]; device
   return (
     <>
       {shown.map((job) => {
-        const [label, tone] = jobStatus(job);
+        const [label, tone] = jobStatus(job, devices);
         return (
           <RowLink key={job.id} to={paths.job(job.id)}>
             <span className={s.task}>{job.taskName}{!columns.includes("account") && job.accountName ? ` · ${job.accountName}` : ""}</span>
@@ -64,7 +88,7 @@ export function RunRows({ jobs, devices, columns, limit }: { jobs: Job[]; device
             {columns.includes("place") && devices.length > 1 && <span className={`${s.cell} ${s.wide}`}>{jobPlace(job, devices)}</span>}
             {columns.includes("source") && <span className={s.cell}>{jobSource(job)}</span>}
             <span className={`${s.cell} ${s.time}`}>{shortTime(job.updatedAt)}</span>
-            <span className={s.state}><Pill tone={tone}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
+            <span className={s.state}><Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
           </RowLink>
         );
       })}
@@ -74,17 +98,20 @@ export function RunRows({ jobs, devices, columns, limit }: { jobs: Job[]; device
 }
 
 /**
- * Starts tasks now and keeps a note beside each one about what happened. [place] is the app to send it to, or none to
- * let the server pick an app signed in to the account (or one that can switch to it).
+ * Starts tasks now: a toast says where it went (「已排进 X · 查看」), and a refusal stays as a note beside the task.
+ * [place] is the app to send it to, or none to let the server pick an app signed in to the account (or one that can
+ * switch to it).
  */
 export function useRunNow() {
+  const { data } = useConsole();
   const [notes, setNotes] = useState<Record<string, { text: string; ok: boolean }>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const run = async (task: { targetId: string; taskId: string }, accountId: string, place: { deviceId: string; appKey: string } | null, done: string) => {
+  const run = async (task: { targetId: string; taskId: string }, accountId: string, place: { deviceId: string; appKey: string } | null) => {
     const key = task.taskId; setBusy(key);
+    setNotes((now) => { const next = { ...now }; delete next[key]; return next; });
     try {
-      await api("/api/jobs", { method: "POST", body: { targetId: task.targetId, taskId: task.taskId, accountId, deviceId: place?.deviceId ?? null, appKey: place?.appKey ?? null } });
-      setNotes((now) => ({ ...now, [key]: { text: done, ok: true } }));
+      const job = await api<Job>("/api/jobs", { method: "POST", body: { targetId: task.targetId, taskId: task.taskId, accountId, deviceId: place?.deviceId ?? null, appKey: place?.appKey ?? null } });
+      runSubmitted(job, data.devices);
     } catch (error) {
       setNotes((now) => ({ ...now, [key]: { text: error instanceof Error ? error.message : "提交失败", ok: false } }));
     } finally { setBusy(null); }
