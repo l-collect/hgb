@@ -1,0 +1,61 @@
+client/console/src/state/console.ts
+  s_75c1698e4ed8c2::t_22a25f5b92ce69 3,47-65,97
+client/console/src/features/devices/DevicesPage.tsx
+  s_75c1698e4ed8c2::t_db54e4dff073b7 9,70-71
+client/console/src/features/accounts/AccountDetailPage.tsx
+  s_75c1698e4ed8c2::t_db54e4dff073b7 12,40
+  s_75c1698e4ed8c2::t_bd8445d540e519 4
+client/console/src/features/auth/AuthPage.tsx
+  s_75c1698e4ed8c2::t_efb15c15d73f3c 23-24
+  s_75c1698e4ed8c2::t_bd8445d540e519 2,17-22,25-26,70
+client/console/src/features/accounts/Plans.tsx
+  s_75c1698e4ed8c2::t_cca80b78998c8f 3-4,10,21,27,30-44,68,92-93,104-106,108-109,161,173-174,240-241,293-294,297-300,308,310-313,365-379
+  s_75c1698e4ed8c2::t_d80a4b3b66ee0b 107
+client/console/src/features/accounts/Accounts.module.css
+  s_75c1698e4ed8c2::t_d80a4b3b66ee0b 129
+  s_75c1698e4ed8c2::t_bfdbea9ab1c7f2 124-128
+client/console/src/features/devices/RunsDesk.tsx
+  s_75c1698e4ed8c2::t_0a05aeaafd1822 3,10,55-56,68,76-77,84,108-109,125,134-135
+client/console/src/features/me/MeDesk.tsx
+  s_75c1698e4ed8c2::t_bd8445d540e519 70
+  s_75c1698e4ed8c2::t_efb15c15d73f3c 2
+client/console/src/features/accounts/PlansDesk.module.css
+  s_75c1698e4ed8c2::t_da2dff8f970961 2,6,32-34
+client/console/src/api/client.ts
+  s_75c1698e4ed8c2::t_bd8445d540e519 37-56
+client/console/src/features/jobs/JobPage.tsx
+  s_75c1698e4ed8c2::t_0a05aeaafd1822 10,53-55,69-73
+client/console/src/features/jobs/runs.tsx
+  s_75c1698e4ed8c2::t_835082cf97245c 1-4,135-234
+client/console/src/features/me/MePage.tsx
+  s_75c1698e4ed8c2::t_bd8445d540e519 139
+  s_75c1698e4ed8c2::t_efb15c15d73f3c 2
+client/console/src/api/types.ts
+  s_75c1698e4ed8c2::t_620765d0399ffe 100-101,114-131,135
+client/console/src/features/accounts/PlansDesk.tsx
+  s_75c1698e4ed8c2::t_12fafd01587333 1,3,5-6,9,50,55-56,69-70,82-83,85-91,93-116,119-128,130,133-139,141,147,149-150,156
+  s_75c1698e4ed8c2::t_da2dff8f970961 2,118
+client/console/src/features/ConsolePage.tsx
+  s_75c1698e4ed8c2::t_db913b0c296fc4 7-8,46,48-49,51-52,61-65
+client/console/src/format.ts
+  s_75c1698e4ed8c2::t_d283e0b53e798f 1,9-12,80-88
+  s_75c1698e4ed8c2::t_3199c7f3271048 89
+client/console/src/features/accounts/GameAccountsPage.tsx
+  s_75c1698e4ed8c2::t_de37b426442ab4 1,4,10,13,46-66,69,71-75,79-88,90-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf808fa91ad9d0a42d636a90e048b5c00f72bcda",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
