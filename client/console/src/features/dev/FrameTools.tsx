@@ -171,7 +171,7 @@ export function FrameTools({ picture, makeSample, target: into, assets }: {
           <button type="button" className={`${w.btn} ${w.primary} ${w.sm}`} disabled={!name.trim() || busy === "cut"} onClick={() => void cut()}>{busy === "cut" ? "裁剪中…" : "存为模板"}</button>
         </div>
       )}
-      {sample && tool === "color" && <div className={s.line}><span className={w.muted}>容差</span><Stepper label="容差" value={tolerance} min={0} max={255} onChange={(v) => setTolerance(v ?? 24)} /></div>}
+      {sample && tool === "color" && <div className={s.line}><span className={w.muted}>容差</span><Stepper small label="容差" value={tolerance} min={0} max={255} onChange={(v) => setTolerance(v ?? 24)} /></div>}
       {result && (
         <div className={s.result}>
           <span className={w.muted}>{result.head}</span>

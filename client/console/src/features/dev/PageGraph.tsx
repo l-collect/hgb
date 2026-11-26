@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Stepper } from "../../components/ui";
 import { dev, follow, judgeOnServer, type Json, type Obj, type Sample } from "./api";
 import { useDev } from "./context";
 import { uniqueId } from "./HomePage";
@@ -175,7 +176,7 @@ export function PageDefForm({ page, known, taken = [], onSave, onDelete, onCance
         <div className={g.f} style={{ flex: "1 1 130px" }}><label>名称</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="庭院" /></div>
         {!page && <div className={g.f} style={{ flex: "1 1 130px" }}><label>编号</label>
           <input value={wanted} onChange={(e) => setWanted(e.target.value)} placeholder={idOf(name) || "courtyard"} /></div>}
-        <div className={g.f} style={{ flex: "0 1 95px" }}><label>优先级</label><input type="number" min={-100} max={100} value={priority} onChange={(e) => setPriority(e.target.value)} /></div>
+        <div className={g.f} style={{ flex: "none" }}><span className={g.lb}>优先级</span><Stepper label="优先级" min={-100} max={100} value={priority === "" || !Number.isFinite(Number(priority)) ? undefined : Number(priority)} onChange={(v) => setPriority(v === undefined ? "" : String(v))} /></div>
       </div>
       <div className={g.f}><span className={g.lb}>认法</span>
         <div className={g.pair}>
@@ -221,7 +222,7 @@ export function RouteForm({ route, pages, lib, taken = [], from: fixedFrom, onSa
       <div className={g.pair}>
         <div className={g.f} style={{ flex: "1 1 120px" }}><label>从</label><select value={from} onChange={(e) => setFrom(e.target.value)}>{options}</select></div>
         <div className={g.f} style={{ flex: "1 1 120px" }}><label>到</label><select value={to} onChange={(e) => setTo(e.target.value)}>{options}</select></div>
-        <div className={g.f} style={{ flex: "0 1 80px" }}><label>代价</label><input type="number" min={1} max={100} value={cost} onChange={(e) => setCost(e.target.value)} /></div>
+        <div className={g.f} style={{ flex: "none" }}><span className={g.lb}>代价</span><Stepper label="代价" min={1} max={100} value={cost === "" || !Number.isFinite(Number(cost)) ? undefined : Number(cost)} onChange={(v) => setCost(v === undefined ? "" : String(v))} /></div>
       </div>
       <div className={g.f}><label>片段</label>
         <select value={use} onChange={(e) => setUse(e.target.value)}>
@@ -259,7 +260,7 @@ function FallbackForm({ fb, lib, taken = [], onSave, onDelete, onCancel }: {
             {!lib.length && <option value="">先建片段</option>}
             {lib.map((sn) => <option key={String(sn.id)} value={String(sn.id)}>{str(sn.name) ?? String(sn.id)}</option>)}
           </select></div>
-        <div className={g.f} style={{ flex: "0 1 90px" }}><label>最多试</label><input type="number" min={1} max={10} value={maximum} onChange={(e) => setMaximum(e.target.value)} /></div>
+        <div className={g.f} style={{ flex: "none" }}><span className={g.lb}>最多试</span><Stepper label="最多试" unit="次" min={1} max={10} value={maximum === "" || !Number.isFinite(Number(maximum)) ? undefined : Number(maximum)} onChange={(v) => setMaximum(v === undefined ? "" : String(v))} /></div>
       </div>
       <div className={g.pair}>
         <button type="button" className={`${w.btn} ${w.primary}`} disabled={!ready} onClick={() => {

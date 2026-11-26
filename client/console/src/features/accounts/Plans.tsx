@@ -3,6 +3,7 @@ import { api, enc } from "../../api/client";
 import { settingVisible, type ConfigView, type CoopMode, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
 import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, join, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
+import { TimePicker } from "../../components/TimePicker";
 import { ProCount, ProLimitButton, ProLockButton, ProLockCard, ProLockRow, usePro } from "../../components/Pro";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
@@ -401,7 +402,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
           {lastLine}
           <DrawerGrid>
             <DrawerField label="名称"><input type="text" required maxLength={40} aria-label="名称" value={form.name} onChange={(e) => change({ name: e.target.value })} /></DrawerField>
-            <DrawerField label="时间"><input type="time" required aria-label="时间" value={form.at} onChange={(e) => change({ at: e.target.value })} className={ui.mono} /></DrawerField>
+            <DrawerField label="时间"><TimePicker required label="时间" value={form.at} onChange={(at) => change({ at })} /></DrawerField>
             <DrawerField label="浮动"><Stepper label="浮动" unit="±分" min={0} max={60} value={form.jitter} onChange={(jitter) => change({ jitter })} /></DrawerField>
             <DrawerField label="补跑窗口"><Stepper label="补跑窗口" unit="分" min={1} max={1440} step={5} value={form.late} onChange={(late) => change({ late })} /></DrawerField>
             <DrawerField label="周期" wide>{dayPicks}</DrawerField>
@@ -440,7 +441,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
         </Row>
         <Row>
           <span style={{ flex: 1 }}>时间</span>
-          <input type="time" required aria-label="时间" value={form.at} onChange={(e) => change({ at: e.target.value })} className={ui.mono} />
+          <TimePicker required label="时间" value={form.at} onChange={(at) => change({ at })} />
           <Stepper label="浮动" unit="±分" min={0} max={60} value={form.jitter} onChange={(jitter) => change({ jitter })} />
         </Row>
         {dayPicks}

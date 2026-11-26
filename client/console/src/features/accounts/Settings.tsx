@@ -3,6 +3,7 @@ import { api, ApiFailure, enc } from "../../api/client";
 import { settingVisible, type CloudTask, type ConfigView, type GameAccount, type GameTask, type SettingField, type TaskStepDetail } from "../../api/types";
 import { Button, Card, CardHead, Check, Chips, Choices, Empty, ErrorCard, FootBar, Loading, Pill, Row, Stepper, Switch, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
+import { TimePicker } from "../../components/TimePicker";
 import { useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { Link, useLeaveGuard } from "../../router";
@@ -489,10 +490,13 @@ function SettingInput({ def, value, change }: { def: SettingField; value: unknow
     }
     case "SWITCH": return <Switch label={def.label} disabled={disabled} checked={value === true} onChange={change} />;
     case "NUMBER": case "RANGE":
-      return <Stepper label={def.label} disabled={disabled} min={def.minimum} max={def.maximum} step={def.step ?? 1} unit={def.unit?.trim() || undefined}
+      return <Stepper label={def.label} disabled={disabled} clearable={!def.required} min={def.minimum} max={def.maximum} step={def.step ?? 1} unit={def.unit?.trim() || undefined}
         value={typeof value === "number" ? value : undefined} onChange={change} />;
-    case "TEXT": case "TIME": case "DATE":
-      return <input className={s.input} aria-label={def.label} type={def.widget === "TEXT" ? "text" : def.widget.toLowerCase()} disabled={disabled}
+    case "TIME":
+      return <TimePicker label={def.label} disabled={disabled} clearable={!def.required}
+        value={typeof value === "string" ? value : ""} onChange={(next) => change(next || undefined)} />;
+    case "TEXT": case "DATE":
+      return <input className={s.input} aria-label={def.label} type={def.widget === "TEXT" ? "text" : "date"} disabled={disabled}
         value={typeof value === "string" ? value : ""} onChange={(e) => change(e.target.value || undefined)} />;
     default: return <span className={ui.tiny}>在 App 里改</span>;
   }

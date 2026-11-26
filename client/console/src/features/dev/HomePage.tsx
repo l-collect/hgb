@@ -191,7 +191,7 @@ function TaskEdit({ task, kind, categories, onCancel, onSet, onDelete }: { task:
       {kind === "category" && <><select aria-label="分类" className={w.input} value={category} onChange={(e) => setCategory(e.target.value)}>
         {categories.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
         <button type="button" className={`${w.btn} ${w.primary} ${w.sm}`} disabled={category === task.raw.category} onClick={() => onSet({ category })}>改</button>{cancel}</>}
-      {kind === "priority" && <><Stepper label="优先级" value={priority} onChange={setPriority} min={0} max={100} />
+      {kind === "priority" && <><Stepper small label="优先级" value={priority} onChange={setPriority} min={0} max={100} />
         <button type="button" className={`${w.btn} ${w.primary} ${w.sm}`} disabled={priority === undefined || priority === task.raw.priority} onClick={() => onSet({ priority: priority ?? 50 })}>改</button>{cancel}</>}
       {kind === "delete" && <><span>删除「{task.name}」？不能撤销</span>
         <button type="button" className={`${w.btn} ${w.danger} ${w.sm}`} onClick={onDelete}>删除</button>{cancel}</>}

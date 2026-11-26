@@ -155,25 +155,103 @@ export function SegmentTabs<T extends string>({ items, value, onChange, label }:
     </div>
   );
 }
-/** A number with − / + on each side, 40 high, as the design's 步进器; typing still works. */
-export function Stepper({ value, onChange, label, min, max, step = 1, unit, disabled }: {
-  value: number | undefined; onChange: (value: number | undefined) => void; label: string; min?: number; max?: number; step?: number; unit?: string; disabled?: boolean;
+/** Decimal places a step implies (0.5 → 1), so sums do not drift (0.1 + 0.2). */
+const placesOf = (step: number) => (String(step).split(".")[1] ?? "").length;
+/** [n] put on the step's grid (multiples of step: 0, 5, 10 …) and clamped to min..max; an end off the grid still counts. */
+export function snapNumber(n: number, { min, max, step = 1 }: { min?: number; max?: number; step?: number }) {
+  let next = step > 0 ? Math.round(n / step) * step : n;
+  if (max != null && next > max) next = max;
+  if (min != null && next < min) next = min;
+  return Number(next.toFixed(placesOf(step)));
+}
+/**
+ * The design's 步进器: − / a number with its unit / +, 36 high (32 with [small]). ± step and clamp to min..max, and go
+ * on while held (after 400 ms, faster the longer). The number can be typed: only digits (and . or − when the range
+ * allows them), committed on blur or Enter, snapped to the step; Escape puts back what was there; ↑↓ step,
+ * PageUp/PageDown ten steps. An emptied number goes back to the value, or to none when [clearable].
+ */
+export function Stepper({ value, onChange, label, min, max, step = 1, unit, disabled, clearable, small, placeholder }: {
+  value: number | undefined; onChange: (value: number | undefined) => void; label: string; min?: number; max?: number; step?: number; unit?: string;
+  disabled?: boolean; clearable?: boolean; small?: boolean; placeholder?: string;
 }) {
-  const places = (String(step).split(".")[1] ?? "").length;
-  const base = value ?? min ?? 0;
-  const bump = (by: number) => {
-    let next = Number((base + by).toFixed(places));
-    if (min != null) next = Math.max(min, next);
-    if (max != null) next = Math.min(max, next);
-    onChange(next);
+  const places = placesOf(step);
+  const [draft, setDraft] = useState<string | null>(null);
+  // The value a held button counts from: the parent's answer may not have come back between two ticks.
+  const current = useRef(value); current.current = value;
+  const emit = useRef(onChange); emit.current = onChange;
+  const hold = useRef<{ timer: number; stop: () => void } | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const range = { min, max, step };
+  const atMin = min != null && value != null && value <= min;
+  const atMax = max != null && value != null && value >= max;
+  const show = (n: number | undefined) => n === undefined ? "" : n.toFixed(places);
+  // What is typed but not yet committed counts as the value when a button or an arrow steps from it.
+  const settle = () => {
+    if (draft === null) return;
+    const n = Number(draft); setDraft(null);
+    if (draft.trim() !== "" && Number.isFinite(n)) current.current = snapNumber(n, range);
   };
+  /** One step; false when there is no further step that way. */
+  const bump = (by: number) => {
+    const next = current.current === undefined ? snapNumber(min ?? 0, range) : snapNumber(current.current + by, range);
+    if (next === current.current) return false;
+    current.current = next; emit.current(next);
+    return by > 0 ? max == null || next < max : min == null || next > min;
+  };
+  const stopHold = () => { hold.current?.stop(); hold.current = null; };
+  useEffect(() => stopHold, []);
+  useEffect(() => { if (disabled) stopHold(); }, [disabled]);
+  const startHold = (by: number) => {
+    stopHold(); settle();
+    if (!bump(by)) return;
+    let ticks = 0;
+    const tick = () => { ticks++; if (!bump(by)) { stopHold(); return; } h.timer = window.setTimeout(tick, ticks > 20 ? 30 : ticks > 8 ? 50 : 80); };
+    const h = { timer: window.setTimeout(tick, 400), stop: () => { window.clearTimeout(h.timer); window.removeEventListener("pointerup", stopHold); window.removeEventListener("pointercancel", stopHold); } };
+    // The button may turn disabled under the finger at an end, and a disabled button sends no pointerup.
+    window.addEventListener("pointerup", stopHold); window.addEventListener("pointercancel", stopHold);
+    hold.current = h;
+  };
+  const commit = () => {
+    if (draft === null) return;
+    setDraft(null);
+    const text = draft.trim();
+    if (text === "" || text === "-" || text === "." || text === "-.") { if (text === "" && clearable && value !== undefined) onChange(undefined); return; }
+    const n = Number(text);
+    if (!Number.isFinite(n)) return;
+    const next = snapNumber(n, range);
+    if (next !== value) onChange(next);
+  };
+  const negative = min == null || min < 0;
+  const allowed = new RegExp(`[^0-9${places > 0 ? "." : ""}${negative ? "-" : ""}]`, "g");
+  const button = (by: number, text: string, name: string, off: boolean) => (
+    <button type="button" tabIndex={-1} aria-label={`${name}${label}`} disabled={disabled || off} className={s.stepperButton}
+      onPointerDown={(e) => { if (e.button !== 0) return; e.preventDefault(); startHold(by); }}
+      onPointerLeave={stopHold}
+      // A click with no pointer behind it (detail 0) is a keyboard or a screen reader pressing the button.
+      onClick={(e) => { if (e.detail === 0) { settle(); bump(by); } }}>{text}</button>
+  );
+  const width = Math.min(8, Math.max(2, ...[min, max, value].map((n) => n == null ? 0 : show(n).length), draft?.length ?? 0));
   return (
-    <span className={s.stepper} role="group" aria-label={label}>
-      <button type="button" aria-label={`${label}减一`} disabled={disabled || (min != null && base <= min)} onClick={() => bump(-step)}>−</button>
-      <input type="number" aria-label={label} disabled={disabled} min={min} max={max} step={step} value={value === undefined ? "" : String(value)}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} />
-      <button type="button" aria-label={`${label}加一`} disabled={disabled || (max != null && base >= max)} onClick={() => bump(step)}>+</button>
-      {unit && <span className={s.stepperUnit}>{unit}</span>}
+    <span className={join(s.stepper, small && s.stepperSmall, disabled && s.stepperOff)} role="group" aria-label={label}>
+      {button(-step, "−", "减少", atMin)}
+      <span className={s.stepperValue} onClick={() => input.current?.focus()}>
+        <input ref={input} type="text" inputMode={places > 0 ? "decimal" : negative ? "text" : "numeric"} role="spinbutton" aria-label={label}
+          aria-valuenow={value} aria-valuemin={min} aria-valuemax={max} aria-valuetext={value === undefined ? "未填" : `${show(value)}${unit ?? ""}`}
+          disabled={disabled} placeholder={placeholder} autoComplete="off" className={s.stepperInput} style={{ width: `calc(${width}ch + 4px)` }}
+          value={draft ?? show(value)}
+          onChange={(e) => setDraft(e.target.value.replace(allowed, ""))}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            const by = e.key === "ArrowUp" ? step : e.key === "ArrowDown" ? -step : e.key === "PageUp" ? step * 10 : e.key === "PageDown" ? -step * 10 : 0;
+            if (by) {
+              e.preventDefault();
+              settle(); bump(by);
+            } else if (e.key === "Enter") { if (draft !== null) { e.preventDefault(); commit(); } }
+            else if (e.key === "Escape" && draft !== null) { e.preventDefault(); e.stopPropagation(); setDraft(null); }
+          }} />
+        {unit && <span className={s.stepperUnit} aria-hidden="true">{unit}</span>}
+      </span>
+      {button(step, "+", "增加", atMax)}
     </span>
   );
 }

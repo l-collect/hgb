@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { ask } from "../../components/Confirm";
-import { Chips, SegmentTabs, Stepper } from "../../components/ui";
+import { Chips, SegmentTabs, Stepper, ui } from "../../components/ui";
 import { navigate } from "../../router";
 import { dev, follow, type Sample, type Template } from "./api";
 import { failure, useDev } from "./context";
@@ -306,7 +306,7 @@ export function SamplesPage({ id }: { id?: string }) {
             <button type="button" className={m.x} aria-label="去掉这个点" onClick={() => setPicks(picks.filter((_, k) => k !== i))}>✕</button></div>)
             : <div className={w.muted}>点 3–6 个颜色稳的点</div>}
           <div className={m.line}><span className={m.grow}>锚点</span><Chips label="锚点" items={ANCHORS} value={anchor} onChange={setAnchor} /></div>
-          <div className={m.line}><span className={m.grow}>容差</span><Stepper label="容差" value={tolerance} min={0} max={255} onChange={(v) => setTolerance(v ?? 0)} /></div>
+          <div className={m.line}><span className={m.grow}>容差</span><Stepper small label="容差" value={tolerance} min={0} max={255} onChange={(v) => setTolerance(v ?? 0)} /></div>
           {picks.length > 0 && <>
             <button type="button" className={w.btn} disabled={busy === "verify"} onClick={verify}>{busy === "verify" ? "验证中…" : `在 ${list.length} 张样本上验`}</button>
             {verdict}
@@ -509,7 +509,7 @@ function CutPanel({ rect, inside, made, game, sample, pfx, known, insert, copy, 
         <datalist id="tpl-names">{known.map((x) => <option key={x} value={x} />)}</datalist></div>
       <div className={m.f}><label htmlFor="tv">变体</label><input id="tv" value={variant} onChange={(e) => setVariant(e.target.value)} placeholder="留空 = 原皮" /></div>
       <label className={`${w.muted} ${m.toggle}`}><input type="checkbox" checked={mask} onChange={(e) => setMask(e.target.checked)} />抠背景</label>
-      {mask && <div className={m.line}><span className={m.grow}>背景容差</span><Stepper label="背景容差" value={maskTol} min={4} max={96} onChange={(v) => setMaskTol(v ?? 28)} /></div>}
+      {mask && <div className={m.line}><span className={m.grow}>背景容差</span><Stepper small label="背景容差" value={maskTol} min={4} max={96} onChange={(v) => setMaskTol(v ?? 28)} /></div>}
       {(rect[2] > 64 || rect[3] > 64) && <div className={m.f}><label htmlFor="tr">超 64×64 的理由</label><input id="tr" value={reason} onChange={(e) => setReason(e.target.value)} /></div>}
       {inside.length > 0 && <div className={w.muted}>确认是游戏里的字：
         <div className={m.checks}>{inside.map((t) => <label key={t}><input type="checkbox" checked={confirmed.includes(t)} onChange={(e) => setConfirmed(e.target.checked ? [...confirmed, t] : confirmed.filter((x) => x !== t))} />{t}</label>)}</div></div>}
@@ -543,8 +543,8 @@ function ColorSetView({ name, points, used, insert, copy, onRename, onDelete }: 
       <div className={`${w.card} ${m.panel} ${m.setSide}`}>
         <h2 className={m.h2}>取色组</h2>
         <div className={m.rect}>
-          <label className={m.f}><span>左上 x</span><input type="number" min={0} value={x} onChange={(e) => setX(e.target.value)} /></label>
-          <label className={m.f}><span>左上 y</span><input type="number" min={0} value={y} onChange={(e) => setY(e.target.value)} /></label>
+          <label className={m.f}><span>左上 x</span><input type="number" inputMode="numeric" className={ui.numberInput} min={0} value={x} onChange={(e) => setX(e.target.value)} /></label>
+          <label className={m.f}><span>左上 y</span><input type="number" inputMode="numeric" className={ui.numberInput} min={0} value={y} onChange={(e) => setY(e.target.value)} /></label>
         </div>
         <Result text={placed ? `色 ${name}@${x.trim()},${y.trim()} 容差 24` : null} kind="color" insert={insert} copy={copy} missing="填上组左上角在画面上的位置" />
         <div className={m.f}><label htmlFor="sn">改名</label>
@@ -572,7 +572,7 @@ function RectEditor({ rect, sample, onChange }: { rect: number[]; sample: Sample
   return (
     <div className={`${w.card} ${m.panel}`}>
       <div className={m.rect}>{(["x", "y", "宽", "高"] as const).map((label, i) => (
-        <label key={label} className={m.f}><span>{label}</span><input type="number" value={rect[i]} onChange={(e) => set(i, e.target.value)} /></label>
+        <label key={label} className={m.f}><span>{label}</span><input type="number" inputMode="numeric" className={ui.numberInput} value={rect[i]} onChange={(e) => set(i, e.target.value)} /></label>
       ))}</div>
       <div className={m.zoom} role="img" aria-label="框里的内容（放大）" style={{ width: rect[2] * zoom, height: rect[3] * zoom,
         backgroundImage: `url(${dev.sampleImage(sample.id)})`, backgroundSize: `${sample.width * zoom}px ${sample.height * zoom}px`,

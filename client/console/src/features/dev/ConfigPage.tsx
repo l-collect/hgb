@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Chips, Stepper, Switch, join, ui } from "../../components/ui";
+import { TimePicker } from "../../components/TimePicker";
 import { Link, navigate, useQuery } from "../../router";
 import { NameButton } from "./NameButton";
 import { dev, type Json, type Obj, type SettingUse } from "./api";
@@ -121,8 +122,8 @@ export function ConfigPage({ id }: { id: string }) {
                 </div>
               ))}</div>)}
             {(f.widget === "NUMBER" || f.widget === "RANGE") && row("范围", <div className={c.option}>
-              <input aria-label="最小" inputMode="numeric" placeholder="最小" defaultValue={f.minimum === undefined ? "" : String(f.minimum)} onBlur={(e) => set("minimum", e.target.value === "" ? undefined : Number(e.target.value))} />
-              <input aria-label="最大" inputMode="numeric" placeholder="最大" defaultValue={f.maximum === undefined ? "" : String(f.maximum)} onBlur={(e) => set("maximum", e.target.value === "" ? undefined : Number(e.target.value))} />
+              <input aria-label="最小" inputMode="numeric" className={ui.numberInput} placeholder="最小" defaultValue={f.minimum === undefined ? "" : String(f.minimum)} onBlur={(e) => set("minimum", e.target.value === "" ? undefined : Number(e.target.value))} />
+              <input aria-label="最大" inputMode="numeric" className={ui.numberInput} placeholder="最大" defaultValue={f.maximum === undefined ? "" : String(f.maximum)} onBlur={(e) => set("maximum", e.target.value === "" ? undefined : Number(e.target.value))} />
               <input aria-label="单位" placeholder="单位" defaultValue={str(f.unit) ?? ""} onBlur={(e) => set("unit", e.target.value)} />
             </div>)}
             {row("推荐", <input id="rc" className={c.mono} defaultValue={f.recommended === undefined ? "" : JSON.stringify(f.recommended)}
@@ -189,7 +190,8 @@ function Preview({ field: x, value, onChange }: { field: Obj; value: Json | unde
       return <button key={str(o.value)} type="button" aria-pressed={on} className={join(ui.chip, on && ui.chipOn)}
         onClick={() => onChange(on ? cur.filter((v) => v !== o.value) : [...cur, o.value as Json])}>{str(o.label)}</button>; })}</div>;
   } else if (x.widget === "NUMBER" || x.widget === "RANGE") control = <Stepper label={label} value={typeof value === "number" ? value : undefined}
-    min={typeof x.minimum === "number" ? x.minimum : undefined} max={typeof x.maximum === "number" ? x.maximum : undefined} unit={str(x.unit)} onChange={(v) => onChange(v ?? null)} />;
+    min={typeof x.minimum === "number" ? x.minimum : undefined} max={typeof x.maximum === "number" ? x.maximum : undefined} step={typeof x.step === "number" && x.step > 0 ? x.step : 1} unit={str(x.unit)} clearable={x.required !== true} onChange={(v) => onChange(v ?? null)} />;
+  else if (x.widget === "TIME") control = <TimePicker label={label} value={typeof value === "string" ? value : ""} clearable={x.required !== true} onChange={(v) => onChange(v || null)} />;
   else control = <input className={c.input} aria-label={label} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />;
   const inline = x.widget === "SWITCH";
   return (

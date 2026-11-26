@@ -119,12 +119,37 @@
 .tiny { font-size: var(--text-xs); color: var(--color-muted); }
 .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-.stepper { display: inline-flex; align-items: center; flex: none; border: 1px solid var(--color-control); border-radius: var(--radius-md); background: var(--color-surface); }
-.stepper button { width: 40px; height: 40px; border: 0; background: none; padding: 0; font-size: 18px; color: var(--color-ink); }
-.stepper button:disabled { color: var(--color-faint); opacity: .5; cursor: default; }
-.stepper input { width: 56px; min-height: 40px; padding: 0; border: 0; border-radius: 0; background: none; text-align: center; font-weight: 700; -moz-appearance: textfield; appearance: textfield; }
-.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.stepperUnit { padding-right: 10px; color: var(--color-muted); font-size: var(--text-sm); white-space: nowrap; }
+.stepper {
+  display: inline-flex; align-items: stretch; align-self: flex-start; flex: none; height: var(--control-height-sm); max-width: 100%;
+  border: 1px solid var(--color-control); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-ink);
+}
+.stepper:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
+.stepperSmall { height: 32px; }
+.stepperOff { opacity: .55; }
+.stepperButton {
+  flex: none; width: 34px; display: inline-flex; align-items: center; justify-content: center; border: 0; padding: 0; background: none;
+  color: var(--color-ink); font-size: 18px; line-height: 1; user-select: none; touch-action: manipulation; -webkit-user-select: none;
+}
+.stepperSmall .stepperButton { width: 30px; font-size: 16px; }
+.stepperButton:first-child { border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px); }
+.stepperButton:last-child { border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0; }
+.stepperButton:hover:not(:disabled) { background: var(--color-primary-soft); color: var(--color-primary); }
+.stepperButton:active:not(:disabled) { background: var(--color-primary-line); }
+.stepperButton:disabled { color: var(--color-faint); opacity: .45; cursor: default; }
+.stepperValue {
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px; min-width: 44px; padding: 0 4px; cursor: text;
+  border-inline: 1px solid var(--color-line-soft);
+}
+/* Above the field rules a stepper sits in (a drawer's or a form's `input`), which would stretch and box it. */
+span.stepper input.stepperInput {
+  flex: none; min-width: 0; min-height: 0; height: 100%; padding: 0; margin: 0; border: 0; border-radius: 0; background: none; outline: none; box-shadow: none;
+  text-align: center; color: var(--color-ink); font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700;
+  font-size: var(--text-md); font-variant-numeric: tabular-nums;
+}
+span.stepper input.stepperInput::placeholder { color: var(--color-faint); font-weight: 400; }
+.stepperUnit { color: var(--color-muted); font-size: var(--text-xs); white-space: nowrap; }
+.numberInput { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: textfield; }
+.numberInput::-webkit-outer-spin-button, .numberInput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
 .cardHead { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px var(--space-4); border-bottom: 1px solid var(--color-line-soft); }
 .cardHead h2 { flex: 1; min-width: 0; font-size: var(--text-lg); font-weight: 600; }

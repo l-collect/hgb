@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Stepper } from "../../components/ui";
 import type { Json, Obj } from "./api";
 import { uniqueId } from "./HomePage";
 import { idOf } from "./NameButton";
@@ -58,7 +59,7 @@ export function InterruptionForm({ page, lib, known, taken = [], onSave, onDelet
         <div className={g.f} style={{ flex: "1 1 140px" }}><label htmlFor="pn">名称</label><input id="pn" value={name} onChange={(e) => setName(e.target.value)} placeholder="断线重连" /></div>
         {!page && <div className={g.f} style={{ flex: "1 1 140px" }}><label htmlFor="pi">编号</label>
           <input id="pi" value={wanted} onChange={(e) => setWanted(e.target.value)} placeholder={idOf(name) || "lost-connection"} /></div>}
-        <div className={g.f} style={{ flex: "0 1 100px" }}><label htmlFor="pm">最多处理</label><input id="pm" type="number" min={1} max={10} value={maximum} onChange={(e) => setMaximum(e.target.value)} /></div>
+        <div className={g.f} style={{ flex: "none" }}><span className={g.lb}>最多处理</span><Stepper label="最多处理" unit="次" min={1} max={10} value={maximum === "" || !Number.isFinite(Number(maximum)) ? undefined : Number(maximum)} onChange={(v) => setMaximum(v === undefined ? "" : String(v))} /></div>
       </div>
       <div className={g.f}><span className={g.lb}>认法</span>
         <div className={g.pair}>
