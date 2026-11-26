@@ -1,0 +1,51 @@
+client/console/src/features/site/Home.module.css
+  s_fae32e7f0efe76::t_9df4ed14d85328 1-120
+client/console/src/features/site/LegalPage.tsx
+  s_fae32e7f0efe76::t_3d91727f148fc6 1-145
+client/console/src/App.tsx
+  s_fae32e7f0efe76::t_103c9ef6efbf0f 7-9,13-17,19,29-35,38-41
+client/console/src/features/site/HomePage.tsx
+  s_fae32e7f0efe76::t_9d40e81b9b9c26 1-162
+client/admin/src/App.tsx
+  s_fae32e7f0efe76::t_c4a01a5e9f5118 49,52-53,89
+client/console/src/features/auth/AuthPage.tsx
+  s_fae32e7f0efe76::t_4945f61b061c12 6,58
+client/console/src/features/library/TasksDesk.tsx
+  s_fae32e7f0efe76::t_7fd4ad6b0f51b7 67
+client/console/src/features/me/MeDesk.tsx
+  s_fae32e7f0efe76::t_6c06267ce87cb7 6,94,117-118
+client/console/src/features/me/MePage.tsx
+  s_fae32e7f0efe76::t_342ae78e818b39 52-53,133
+client/console/src/router.tsx
+  s_fae32e7f0efe76::t_6de6d2f57bfa9c 79-81
+client/console/vite.config.ts
+  s_fae32e7f0efe76::t_0639fa992b3656 19-21,23
+client/docs/astro.config.mjs
+  s_fae32e7f0efe76::t_6e97a0275e86d0 6,8-10,23,28-31
+client/docs/src/components/DocsTitle.astro
+  s_fae32e7f0efe76::t_f9c066b2a4c84a 2,7
+client/docs/src/content/docs/start/quick-start.mdx
+  s_fae32e7f0efe76::t_a0b6fbd842a4ef 7-8,11,21,29
+design/tokens.mjs
+  s_fae32e7f0efe76::t_3d9d9dba94fdb9 36
+scripts/build-sites.sh
+  s_fae32e7f0efe76::t_5b5c9a03de8e9e 2-7,20-22
+vercel.json
+  s_fae32e7f0efe76::t_1b781ba71cc39e 12-13,18,69,82-83,94,96-108,120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ddbabe22aef1f80db8628a5e638e2207eeb345c",
+  "prompts": {},
+  "sessions": {
+    "s_fae32e7f0efe76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e4ff622-41d3-4c0b-919b-3730481be66a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
