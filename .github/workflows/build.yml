@@ -35,7 +35,7 @@ on:
         default: ""
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: public-builder-${{ github.event.client_payload.ref || inputs.ref || 'master' }}
@@ -128,6 +128,8 @@ jobs:
           java-version: "17"
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
 
       - name: Test and package the server
         run: ./gradlew --no-daemon :core:protocol:test :core:engine:test :core:server:test :core:server:distTar
@@ -136,7 +138,7 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.HGB_DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.HGB_DEPLOY_KNOWN_HOSTS }}
-          HOST: ${{ vars.HGB_DEPLOY_HOST || '213.35.99.41' }}
+          HOST: ${{ secrets.HGB_DEPLOY_HOST }}
           LABEL: ${{ needs.plan.outputs.label }}
         run: |
           set -euo pipefail
@@ -152,17 +154,13 @@ jobs:
 
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
-          if [ -n "$KNOWN_HOSTS" ]; then
-            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-            STRICT_OPT="yes"
-          else
-            STRICT_OPT="accept-new"
-          fi
+          [ -n "$KNOWN_HOSTS" ] || { echo "::error::缺少 HGB_DEPLOY_KNOWN_HOSTS，拒绝在未校验主机指纹时部署"; exit 1; }
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
           commit_sha="$(git rev-parse HEAD)"
           deploy_id="${commit_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          echo "正在通过 SSH 加密流将 server-$LABEL.tgz 直接部署至生产主机 $HOST (deploy_id=$deploy_id)..."
-          ssh -i ~/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking="$STRICT_OPT" -o ConnectTimeout=20 \
+          echo "正在通过 SSH 部署 server-$LABEL.tgz ..."
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 \
             "hgb-deploy@$HOST" "deploy $deploy_id" < "$package"
 
           rm -f ~/.ssh/deploy
@@ -206,6 +204,8 @@ jobs:
         run: python3 tools/qa/prepare_maa_inputs.py --native-only
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
 
       - name: Test and build the signed APK
         env:
