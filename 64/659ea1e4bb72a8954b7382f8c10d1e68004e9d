@@ -1,0 +1,51 @@
+client/console/src/components/Pro.tsx
+  s_75c1698e4ed8c2::t_aec79c495528f5 1-46,48-88
+  s_75c1698e4ed8c2::t_f8046ae64f4d5c 47
+client/console/src/components/Pro.module.css
+  s_75c1698e4ed8c2::t_84c3bc97efdfa5 1-43
+  s_75c1698e4ed8c2::t_d6137bfae5b0d1 44-45
+client/console/src/features/ConsolePage.tsx
+  s_75c1698e4ed8c2::t_36e127036eee63 28-29,51
+client/console/src/features/accounts/AccountDetailPage.tsx
+  s_75c1698e4ed8c2::t_23961b11866d2a 6,48,80,95
+client/console/src/features/accounts/GameAccountsPage.tsx
+  s_75c1698e4ed8c2::t_d0576ede8c0960 13,117-122,128,132,159,165,201,210-212
+client/console/src/features/accounts/Plans.tsx
+  s_75c1698e4ed8c2::t_424647f8582de4 6,57-60,64-65,89-90,174-177,367,370,415,417
+client/console/src/features/accounts/PlansDesk.tsx
+  s_75c1698e4ed8c2::t_2bbd65a4f7ee73 6,26-28,32,34,37,43,68-69
+client/console/src/features/devices/AppPage.tsx
+  s_75c1698e4ed8c2::t_96cae7a7c33e41 7,70-73,107
+client/console/src/features/devices/DevicePage.tsx
+  s_75c1698e4ed8c2::t_cd4df326a6f1ee 7,109-110,126,128
+client/console/src/features/devices/Devices.module.css
+  s_75c1698e4ed8c2::t_7a61d4d0ae528d 89
+client/console/src/features/devices/DevicesPage.tsx
+  s_75c1698e4ed8c2::t_e7abec40728c24 8,31,57-60
+client/console/src/features/me/MeDesk.tsx
+  s_75c1698e4ed8c2::t_c82eb89677736e 8,32-33,89,97-99
+client/console/src/features/me/MePage.tsx
+  s_75c1698e4ed8c2::t_8516dc15730386 1,12,18,20-21,66-69,111-112,142,150-151
+client/console/src/features/notices/Channels.tsx
+  s_75c1698e4ed8c2::t_61b9ef2a1225fa 10,31-32,49,70-71,91-92,101-104,135-139
+client/console/src/features/notices/Notices.module.css
+  s_75c1698e4ed8c2::t_cb68e78c239f9e 51
+client/console/src/state/context.ts
+  s_75c1698e4ed8c2::t_26a5b313266fac 5-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64659ea1e4bb72a8954b7382f8c10d1e68004e9d",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "unknown"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
