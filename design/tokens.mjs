@@ -1,8 +1,7 @@
-// Writes the web theme (console, docs, admin) from design/tokens.json, the one place colours, type, spacing and breakpoints are set.
+// Writes the web theme (console, docs) from design/tokens.json, the one place colours, type, spacing and breakpoints are set.
 // The App's Kotlin theme is generated from the same file in the private repository, which has this repository as a submodule.
 // Run by `pnpm dev` and `pnpm build`; the outputs are generated and must not be edited by hand.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url));
@@ -33,9 +32,8 @@ ${colors("dark").join("\n")}
 }
 `;
 writeFileSync(here("../client/console/src/theme/tokens.css"), css);
-// The docs use the same variables, and so does the admin when it is there.
+// The docs use the same variables.
 writeFileSync(here("../client/docs/src/styles/tokens.css"), css);
-if (existsSync(here("../client/admin/src/theme"))) writeFileSync(here("../client/admin/src/theme/tokens.css"), css);
 
 const { medium, wide } = tokens.breakpoint;
 writeFileSync(here("../client/console/src/theme/tokens.ts"), `${header}

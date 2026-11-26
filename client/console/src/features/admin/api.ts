@@ -1,4 +1,4 @@
-import { api, ApiFailure, apiUrl, enc } from "../../console/src/api/client";
+import { api, ApiFailure, apiUrl, enc } from "../../api/client";
 
 /** The /api/admin calls, with the field names of the agreed contract (admin-api.md). Times are epoch milliseconds. */
 

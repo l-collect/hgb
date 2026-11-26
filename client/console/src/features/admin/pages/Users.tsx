@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Card, Chips, Empty, join, Message, Pill, SegmentTabs, ui } from "../../../console/src/components/ui";
-import { navigate, useQuery } from "../../../console/src/router";
+import { Button, Card, Chips, Empty, join, Message, Pill, SegmentTabs, ui } from "../../../components/ui";
+import { navigate, useQuery } from "../../../router";
 import { admin, type Tier, type UserDetail, type UserFilter, type UserPage } from "../api";
-import { failure } from "../App";
+import { failure } from "../failure";
 import { dateInput, day, endOfDay, expiry, MAX_DAYS, since, time, who } from "../format";
 import { Pager, Search, Title } from "./parts";
 import s from "./pages.module.css";
@@ -48,7 +48,7 @@ export function UsersPage({ me }: { me: string }) {
               <tbody>
                 {page?.items.map((user) => (
                   <tr key={user.id} className={join(s.pick, user.id === chosen && s.picked)}
-                    onClick={() => navigate(`/users?user=${encodeURIComponent(user.id)}`, { replace: true })}>
+                    onClick={() => navigate(`/admin/users?user=${encodeURIComponent(user.id)}`, { replace: true })}>
                     <td>
                       <button type="button" className={s.rowButton}><b>{user.email ?? "—"}</b></button>{" "}
                       <span className={ui.tiny}>{user.githubLogin ? `gh:${user.githubLogin}` : ""}</span>

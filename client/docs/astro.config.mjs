@@ -1,10 +1,36 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
-import { repoUrl } from "./src/instance.mjs";
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { repoUrl, siteUrl } from "./src/instance.mjs";
 
-// The docs alone, under "/docs"; the console (with the home page, privacy and terms) is a separate app at "/" (C42, C43).
+/**
+ * The site's home page is src/pages/home.astro, built as /docs/home/ like any page under the base; once the build is
+ * done it moves to dist/index.html, the site's "/" (vercel.json sends "/" to this build too), and the sitemap lists it
+ * there. robots.txt at the site's root names the sitemap.
+ * @type {import("astro").AstroIntegration}
+ */
+const homeAtRoot = {
+  name: "home-at-root",
+  hooks: {
+    "astro:build:done": ({ dir }) => {
+      const out = fileURLToPath(dir);
+      const root = fileURLToPath(new URL("..", dir));
+      renameSync(`${out}home/index.html`, `${root}index.html`);
+      rmSync(`${out}home`, { recursive: true });
+      // @astrojs/sitemap (added by Starlight) has written its files by now.
+      const sitemap = `${out}sitemap-0.xml`;
+      if (existsSync(sitemap)) writeFileSync(sitemap, readFileSync(sitemap, "utf8").replace(`<loc>${siteUrl}/docs/home/</loc>`, `<loc>${siteUrl}/</loc>`));
+      writeFileSync(`${root}robots.txt`, `User-agent: *\nDisallow: /admin\nSitemap: ${siteUrl}/docs/sitemap-index.xml\n`);
+    },
+  },
+};
+
+// The docs under "/docs" and the home page at "/"; the console (privacy and terms included) and /admin are the
+// console's (C42, C43).
 export default defineConfig({
+  site: siteUrl,
   base: "/docs",
   // Built under dist/docs, so a host serving dist (Vercel passes the path on as it is) finds the /docs/... it is asked for.
   outDir: "./dist/docs",
@@ -31,5 +57,6 @@ export default defineConfig({
         { label: "开发者", items: [{ autogenerate: { directory: "dev" } }] },
       ],
     }),
+    homeAtRoot,
   ],
 });

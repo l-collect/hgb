@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Card, Empty, Message, MoreMenu, Pill, SegmentTabs, ui } from "../../../console/src/components/ui";
-import { navigate } from "../../../console/src/router";
+import { Button, Card, Empty, Message, MoreMenu, Pill, SegmentTabs, ui } from "../../../components/ui";
+import { navigate } from "../../../router";
 import { admin, type Code, type CodeFilter, type CodePage } from "../api";
-import { failure } from "../App";
+import { failure } from "../failure";
 import { CODE_STATUS, duration, shortCode, time, who } from "../format";
 import { Generate } from "./Generate";
 import { FilterChip, Pager, Search, Title } from "./parts";
@@ -70,7 +70,7 @@ export function CodesPage() {
               const [label, tone] = CODE_STATUS[code.status];
               const actions: [string, () => void, boolean?][] = [];
               if (code.status === "unused") actions.push(["作废", () => void revoke(code), true]);
-              if (code.redeemedBy) { const id = code.redeemedBy.userId; actions.push(["看兑换人", () => navigate(`/users?user=${encodeURIComponent(id)}`)]); }
+              if (code.redeemedBy) { const id = code.redeemedBy.userId; actions.push(["看兑换人", () => navigate(`/admin/users?user=${encodeURIComponent(id)}`)]); }
               return (
                 <tr key={code.id}>
                   <td className={ui.mono}>{shortCode(code.prefix)}</td>

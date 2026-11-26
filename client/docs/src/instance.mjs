@@ -1,5 +1,6 @@
-// This deployment's code repository, for GitHub, edit and download links: HGB_CODE_REPO if set, else the repository
-// Vercel is building (so a fork's own Vercel project points at the fork), else config/instance.json.
+// This deployment's addresses, read when the docs and the home page are built. The code repository, for GitHub, edit
+// and download links: HGB_CODE_REPO if set, else the repository Vercel is building (so a fork's own Vercel project
+// points at the fork), else config/instance.json.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -12,8 +13,15 @@ function instanceFile() {
   }
 }
 const defaults = JSON.parse(readFileSync(instanceFile(), "utf8"));
-const { HGB_CODE_REPO, VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG } = process.env;
+const { HGB_CODE_REPO, HGB_API_URL, HGB_SITE_URL, VITE_API_ORIGIN, VERCEL_GIT_REPO_OWNER, VERCEL_GIT_REPO_SLUG } = process.env;
 const vercel = VERCEL_GIT_REPO_OWNER && VERCEL_GIT_REPO_SLUG ? `${VERCEL_GIT_REPO_OWNER}/${VERCEL_GIT_REPO_SLUG}` : "";
 
 export const codeRepo = HGB_CODE_REPO || vercel || defaults.codeRepo;
 export const repoUrl = `https://github.com/${codeRepo}`;
+/**
+ * Where the home page asks who is signed in, as the console does: VITE_API_ORIGIN when set (empty means this site's own
+ * /api, as scripts/build-sites.sh may ask), else HGB_API_URL, else config/instance.json.
+ */
+export const apiUrl = (VITE_API_ORIGIN ?? (HGB_API_URL || defaults.apiUrl)).replace(/\/$/, "");
+/** The site's own address, for the home page's canonical link: HGB_SITE_URL, else config/instance.json. */
+export const siteUrl = (HGB_SITE_URL || defaults.siteUrl).replace(/\/$/, "");

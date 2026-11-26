@@ -1,24 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { api, ApiFailure } from "./api/client";
 import type { Account } from "./api/types";
 import { Empty } from "./components/ui";
-import { orAlert } from "./components/useAction";
 import { AuthPage } from "./features/auth/AuthPage";
 import { ConsolePage } from "./features/ConsolePage";
-import { HomePage } from "./features/site/HomePage";
 import { LegalPage } from "./features/site/LegalPage";
-import type { SiteSession } from "./features/site/SiteAccount";
 import { navigate, paths, usePath } from "./router";
+
+/** /admin is a bundle of its own, fetched only when that address is opened. */
+const AdminApp = lazy(() => import("./features/admin/AdminApp"));
 
 type Session = { kind: "loading" } | { kind: "signed-out" } | { kind: "signed-in"; account: Account } | { kind: "failed"; message: string };
 
 /**
- * The whole site but /docs and /admin. "/" (the home page), /privacy and /terms open for anyone, signed in or not.
- * Signed in, every other address is the console (/login goes on to 任务); signed out, the sign-in page, which stays on
- * that address once signed in. The session is the server's cookie; this only asks who it is.
+ * The whole site but "/" (the home page) and /docs, which the docs build serves. /admin has its own gate and frame;
+ * /privacy and /terms open for anyone, signed in or not.
  */
 export function App() {
   const path = usePath().replace(/(.)\/$/, "$1");
+  if (path === "/admin" || path.startsWith("/admin/")) return <Suspense fallback={<Empty>正在加载…</Empty>}><AdminApp /></Suspense>;
+  if (path === paths.privacy || path === paths.terms) return <LegalPage page={path === paths.privacy ? "privacy" : "terms"} />;
+  return <Console path={path} />;
+}
+
+/**
+ * Signed in, every address is the console (/login goes on to 任务); signed out, the sign-in page, which stays on that
+ * address once signed in. The session is the server's cookie; this only asks who it is.
+ */
+function Console({ path }: { path: string }) {
   const [session, setSession] = useState<Session>({ kind: "loading" });
   const check = useCallback(async () => {
     try { setSession({ kind: "signed-in", account: await api<Account>("/api/me") }); }
@@ -38,29 +47,19 @@ export function App() {
     api("/api/admin/me").then(() => { if (live) setAdmin(true); }, () => {});
     return () => { live = false; };
   }, [userId]);
-  // GitHub comes back to "/": "?error=github" after a failed sign-in (the sign-in page says so) or a failed link, and
-  // "?merge=" to offer a merge. Signed in, both belong to the console, which reads them; once, on arrival.
-  const [githubFailed] = useState(() => new URLSearchParams(location.search).has("error"));
-  const fromGitHub = useRef(/[?&](error|merge)=/.test(location.search));
-  const signedOutOnce = useRef(false);
-  if (session.kind === "signed-out") signedOutOnce.current = true;
+  // "/" is the docs' home page on the site; one reaching the console (the dev server) goes on to 任务, keeping GitHub's
+  // ?error= or ?merge= as the home page does.
   const signedIn = session.kind === "signed-in";
-  const leaveHome = signedIn && path === "/" && fromGitHub.current;
   useEffect(() => {
-    if (!signedIn) return;
-    if (path === paths.login) navigate(paths.tasks, { replace: true });
-    else if (leaveHome) { fromGitHub.current = false; navigate(paths.tasks + (signedOutOnce.current ? "" : location.search), { replace: true }); }
-  }, [signedIn, path, leaveHome]);
+    if (path === "/") navigate(paths.tasks + location.search, { replace: true });
+    else if (signedIn && path === paths.login) navigate(paths.tasks, { replace: true });
+  }, [signedIn, path]);
+  // An offer to merge belongs to the session that asked for it, not to whoever signs in next.
+  useEffect(() => {
+    if (session.kind === "signed-out" && new URLSearchParams(location.search).has("merge")) history.replaceState(null, "", location.pathname);
+  }, [session.kind]);
 
-  const site: SiteSession = {
-    account: session.kind === "loading" ? undefined : session.kind === "signed-in" ? session.account : null,
-    admin,
-    signOut: () => orAlert(async () => { await api("/api/auth/logout", { method: "POST", body: {} }); setSession({ kind: "signed-out" }); await check(); }),
-  };
-  if (path === paths.privacy || path === paths.terms) return <LegalPage page={path === paths.privacy ? "privacy" : "terms"} site={site} />;
-  if (leaveHome) return <Empty>正在加载…</Empty>;
-  const home = path === "/" && !(githubFailed && session.kind !== "signed-in");
-  if (home) return <HomePage site={site} />;
+  if (path === "/") return <Empty>正在加载…</Empty>;
   switch (session.kind) {
     case "loading": return <Empty>正在加载…</Empty>;
     case "failed": return <Empty>{session.message}</Empty>;

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button, Card, Chips, Message, Stepper, ui } from "../../../console/src/components/ui";
+import { Button, Card, Chips, Message, Stepper, ui } from "../../../components/ui";
 import { admin, save, stamp, type Generated } from "../api";
-import { failure } from "../App";
+import { failure } from "../failure";
 import { dateInput, duration, endOfDay, MAX_DAYS } from "../format";
 import { Drawer } from "./parts";
 import s from "./pages.module.css";

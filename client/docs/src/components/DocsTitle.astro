@@ -1,10 +1,10 @@
 ---
-// The docs' title opens the docs' first page, with the console (the site's "/") beside it, as in the design.
+// The docs' title opens the docs' first page, with the console (/tasks) beside it, as in the design.
 import Default from "@astrojs/starlight/components/SiteTitle.astro";
 ---
 <div class="titles">
   <Default {...Astro.props} />
-  <a class="console" href="/">控制台</a>
+  <a class="console" href="/tasks">控制台</a>
 </div>
 <style>
   .titles { display: flex; align-items: center; gap: 1rem; }

@@ -22,28 +22,17 @@
               "value": "public, max-age=31536000, immutable"
             }
           ]
-        }
-      ]
-    },
-    "admin": {
-      "root": "client/admin",
-      "framework": "vite",
-      "installCommand": "pnpm install --frozen-lockfile",
-      "buildCommand": "pnpm build && find dist -name '*.map' -delete",
-      "outputDirectory": "dist",
-      "rewrites": [
+        },
         {
-          "source": "/admin/:path((?!assets/).*)",
-          "destination": "/admin/index.html"
-        }
-      ],
-      "headers": [
-        {
-          "source": "/admin/assets/(.*)",
+          "source": "/admin",
           "headers": [
             {
-              "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
+              "key": "Content-Security-Policy",
+              "value": "default-src 'self'; script-src 'self'; connect-src 'self' https://api-hgb.l2cl.link; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            },
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex"
             }
           ]
         },
@@ -53,6 +42,10 @@
             {
               "key": "Content-Security-Policy",
               "value": "default-src 'self'; script-src 'self'; connect-src 'self' https://api-hgb.l2cl.link; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            },
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex"
             }
           ]
         }
@@ -82,14 +75,21 @@
       "source": "/docs",
       "destination": "/docs/",
       "permanent": true
-    },
-    {
-      "source": "/admin",
-      "destination": "/admin/",
-      "permanent": true
     }
   ],
   "rewrites": [
+    {
+      "source": "/",
+      "destination": {
+        "service": "docs"
+      }
+    },
+    {
+      "source": "/robots.txt",
+      "destination": {
+        "service": "docs"
+      }
+    },
     {
       "source": "/docs",
       "destination": {
@@ -100,18 +100,6 @@
       "source": "/docs/(.*)",
       "destination": {
         "service": "docs"
-      }
-    },
-    {
-      "source": "/admin",
-      "destination": {
-        "service": "admin"
-      }
-    },
-    {
-      "source": "/admin/(.*)",
-      "destination": {
-        "service": "admin"
       }
     },
     {

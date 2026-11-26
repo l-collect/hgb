@@ -23,7 +23,7 @@ const LIVE_SHORT: Record<Connection, string> = { live: "已连接", connecting: 
  * The frame every console page sits in, in the widths of the design: from 1280 a 240 sidebar with full names, from 600 a
  * rail of icons with short labels, and below that a top bar with the section's name and four tabs at the bottom.
  * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1200. [admin] adds
- * 后台管理 (another app, so a plain link) above the connection, or to the top bar when narrow.
+ * 后台管理 (/admin, with a frame of its own) above the connection, or to the top bar when narrow.
  */
 export function Shell({ section, connection, full, admin, children }: { section: Section; connection: Connection; full?: boolean; admin?: boolean; children: ReactNode }) {
   // The workbench lives under 我的.
@@ -32,7 +32,7 @@ export function Shell({ section, connection, full, admin, children }: { section:
     <div className={s.shell} data-wide={section === "dev" || full === true}>
       <header className={s.top}>
         <Mark size={26} /><b className={s.topTitle}>{TITLES[section]}</b>
-        {admin && <a className={s.topAdmin} href="/admin/">后台</a>}
+        {admin && <Link className={s.topAdmin} to="/admin">后台</Link>}
         <span className={s.liveShort} role="status"><span className={s.liveDot} data-state={connection} aria-hidden="true" />{LIVE_SHORT[connection]}</span>
       </header>
       <nav className={s.nav} aria-label="主导航">
@@ -46,9 +46,9 @@ export function Shell({ section, connection, full, admin, children }: { section:
         </div>
         <div className={s.foot}>
           {admin && (
-            <a className={s.link} href="/admin/">
+            <Link className={s.link} to="/admin">
               <span className={s.linkIcon}>{ADMIN_ICON}</span><span className={s.linkLabel}>后台管理</span><span className={s.linkShort}>后台</span>
-            </a>
+            </Link>
           )}
           <div className={s.live} role="status" title={LIVE[connection]}>
             <span className={s.liveDot} data-state={connection} aria-hidden="true" /><span className={s.liveText}>{LIVE[connection]}</span>

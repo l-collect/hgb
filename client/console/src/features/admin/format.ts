@@ -1,4 +1,4 @@
-import type { Tone } from "../../console/src/format";
+import type { Tone } from "../../format";
 import type { CodeStatus, Person, User } from "./api";
 
 const pad = (n: number) => String(n).padStart(2, "0");

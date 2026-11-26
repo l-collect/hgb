@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Button, join, Popover, ui } from "../../../console/src/components/ui";
+import { Button, join, Popover, ui } from "../../../components/ui";
 import { PAGE } from "../api";
 import s from "./pages.module.css";
 

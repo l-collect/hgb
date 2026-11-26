@@ -1,30 +1,36 @@
 import { useEffect, type ReactNode } from "react";
 import { Mark } from "../../components/ui";
 import { Link, paths } from "../../router";
-import { SiteFooter } from "./HomePage";
-import { SiteAccount, type SiteSession } from "./SiteAccount";
-import s from "./Home.module.css";
+import s from "./Legal.module.css";
 
 const repoUrl = `https://github.com/${import.meta.env.VITE_CODE_REPO}`;
 
-/** 隐私政策 or 服务条款: a page anyone can open, signed in or not. */
-export function LegalPage({ page, site }: { page: "privacy" | "terms"; site: SiteSession }) {
+/**
+ * 隐私政策 or 服务条款: a page anyone can open, signed in or not, with the home page's bar and foot. The home page ("/")
+ * and the docs are the docs build's, so they are plain links.
+ */
+export function LegalPage({ page }: { page: "privacy" | "terms" }) {
   const [title, body] = page === "privacy" ? ["隐私政策", <Privacy />] : ["服务条款", <Terms />];
   useEffect(() => { document.title = `${title} · 护肝宝`; window.scrollTo(0, 0); return () => { document.title = "护肝宝控制台"; }; }, [title]);
   return (
     <div className={s.home}>
       <header className={s.top}>
         <nav className={s.bar} aria-label="网站导航">
-          <Link className={s.brand} to="/" aria-label="护肝宝首页"><Mark /><span>护肝宝</span></Link>
-          <a className={s.docs} style={{ display: "inline" }} href="/docs/">文档</a>
-          <SiteAccount site={site} />
+          <a className={s.brand} href="/" aria-label="护肝宝首页"><Mark /><span>护肝宝</span></a>
+          <a className={s.docs} href="/docs/">文档</a>
+          <Link className={s.cta} to={paths.tasks}>控制台</Link>
         </nav>
       </header>
       <main className={`${s.wrap} ${s.legal}`}>
         <h1>{title}</h1>
         {body}
       </main>
-      <SiteFooter site={site} />
+      <footer className={s.foot}>
+        <div className={`${s.wrap} ${s.row}`}>
+          <span className={`${s.brand} ${s.brandSmall}`}><Mark size={22} />护肝宝</span>
+          <a href="/docs/">文档</a><a href={`${repoUrl}/releases/latest`}>下载</a><Link to={paths.tasks}>控制台</Link><a href={repoUrl}>GitHub</a><a href={`${repoUrl}/issues`}>反馈问题</a><Link to={paths.privacy}>隐私政策</Link><Link to={paths.terms}>服务条款</Link>
+        </div>
+      </footer>
     </div>
   );
 }
