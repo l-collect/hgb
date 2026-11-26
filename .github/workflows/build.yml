@@ -1,0 +1,248 @@
+# Public CI/CD Builder in `l-collect/hgb` (Public Repository -> Unlimited Free GitHub Actions Minutes):
+#
+# Triggered either:
+# 1. Automatically by `l-collect/hgb-private` via `repository_dispatch` (`event_type: hgb-private-build`)
+#    or a standard GitHub Webhook / push notification;
+# 2. Manually from the Actions tab (`workflow_dispatch`) in `l-collect/hgb`.
+#
+# Pulls the closed-source repository `l-collect/hgb-private` using `secrets.HGB_PRIVATE_REPO_TOKEN` in an isolated
+# ephemeral runner memory workspace:
+# - Signed Android APK (`hgb-x.y.z.apk` + `.sha256`) is published directly to THIS public repository (`l-collect/hgb`) Releases.
+# - Server distribution (`server-*.tgz`) is NEVER published to any public release or public artifact; it is streamed
+#   directly to the production host (`hgb-deploy@$HOST`) over SSH stdin (`deploy <id>`) and immediately wiped!
+name: Build & Deploy from Private Source
+
+on:
+  repository_dispatch:
+    types: [hgb-private-build]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: l-collect/hgb-private 的分支、Tag 或 Commit SHA
+        type: string
+        default: "master"
+      server:
+        description: 构建服务端并直接通过 SSH 部署到生产主机
+        type: boolean
+        default: true
+      app:
+        description: 构建安卓正式版签名 APK 并发布到本公开库 Releases（必须填版本号）
+        type: boolean
+        default: false
+      version:
+        description: 版本号，如 0.4.2；填了就在本公开库创建 v版本号 的 APK Release
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: public-builder-${{ github.event.client_payload.ref || inputs.ref || 'master' }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.plan.outputs.ref }}
+      server: ${{ steps.plan.outputs.server }}
+      app: ${{ steps.plan.outputs.app }}
+      version: ${{ steps.plan.outputs.version }}
+      release: ${{ steps.plan.outputs.release }}
+      label: ${{ steps.plan.outputs.label }}
+    steps:
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          P_REF: ${{ github.event.client_payload.ref }}
+          P_SHA: ${{ github.event.client_payload.sha }}
+          P_SERVER: ${{ github.event.client_payload.server }}
+          P_APP: ${{ github.event.client_payload.app }}
+          P_VERSION: ${{ github.event.client_payload.version }}
+          IN_REF: ${{ inputs.ref }}
+          IN_SERVER: ${{ inputs.server }}
+          IN_APP: ${{ inputs.app }}
+          IN_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = repository_dispatch ]; then
+            ref="${P_SHA:-${P_REF:-master}}"
+            server="${P_SERVER:-true}"
+            app="${P_APP:-false}"
+            version="${P_VERSION:-}"
+          else
+            ref="${IN_REF:-master}"
+            server="${IN_SERVER:-true}"
+            app="${IN_APP:-false}"
+            version="${IN_VERSION:-}"
+          fi
+
+          if [ "$app" = true ] && [ -z "$version" ]; then
+            if [[ "$ref" == refs/tags/v* ]]; then
+              version="${ref#refs/tags/v}"
+            elif [[ "$ref" == v*.*.* ]]; then
+              version="${ref#v}"
+            else
+              echo "::error::构建安卓 App 必须填写版本号（如 0.4.2）"
+              exit 1
+            fi
+          fi
+
+          if [ -n "$version" ]; then
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::版本号格式需为 x.y.z，当前为 $version"; exit 1; }
+            release="v$version"
+            label="$version"
+          else
+            release="server-edge"
+            label="$(printf '%s' "$ref" | tr '/:' '--' | cut -c1-12)"
+          fi
+
+          {
+            echo "ref=$ref"
+            echo "server=$server"
+            echo "app=$app"
+            echo "version=$version"
+            echo "release=$release"
+            echo "label=$label"
+          } >> "$GITHUB_OUTPUT"
+          echo "构建计划 -> Private Ref: $ref | 服务端构建并直传部署: $server | 安卓 APK 构建并公开: $app | 版本: ${version:-edge}"
+
+  server_build_and_deploy:
+    needs: plan
+    if: needs.plan.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout private repository (l-collect/hgb-private)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.HGB_PRIVATE_REPO || 'l-collect/hgb-private' }}
+          ref: ${{ needs.plan.outputs.ref }}
+          token: ${{ secrets.HGB_PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and package the server
+        run: ./gradlew --no-daemon :core:protocol:test :core:engine:test :core:server:test :core:server:distTar
+
+      - name: Stream server package directly to production host over SSH (never uploaded to public artifacts/releases)
+        env:
+          SSH_KEY: ${{ secrets.HGB_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.HGB_DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.HGB_DEPLOY_HOST || '213.35.99.41' }}
+          LABEL: ${{ needs.plan.outputs.label }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/private-dist"
+          package="$RUNNER_TEMP/private-dist/server-$LABEL.tgz"
+          gzip -c core/server/build/distributions/server.tar > "$package"
+
+          if [ -z "$HOST" ] || [ -z "$SSH_KEY" ]; then
+            echo "未配置 HGB_DEPLOY_SSH_KEY，跳过远程主机部署（服务端产物仅在内存校验后销毁，不对外公开）。"
+            rm -rf "$RUNNER_TEMP/private-dist"
+            exit 0
+          fi
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+            STRICT_OPT="yes"
+          else
+            STRICT_OPT="accept-new"
+          fi
+
+          commit_sha="$(git rev-parse HEAD)"
+          deploy_id="${commit_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "正在通过 SSH 加密流将 server-$LABEL.tgz 直接部署至生产主机 $HOST (deploy_id=$deploy_id)..."
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking="$STRICT_OPT" -o ConnectTimeout=20 \
+            "hgb-deploy@$HOST" "deploy $deploy_id" < "$package"
+
+          rm -f ~/.ssh/deploy
+          rm -rf "$RUNNER_TEMP/private-dist"
+          echo "✓ 服务端部署完成，且已彻底清除临时产物！"
+
+  app_build_and_publish:
+    needs: plan
+    if: needs.plan.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout private repository (l-collect/hgb-private)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.HGB_PRIVATE_REPO || 'l-collect/hgb-private' }}
+          ref: ${{ needs.plan.outputs.ref }}
+          token: ${{ secrets.HGB_PRIVATE_REPO_TOKEN }}
+          persist-credentials: false
+
+      - name: Work out the version code
+        id: version
+        run: |
+          IFS=. read -r major minor patch <<< "${{ needs.plan.outputs.version }}"
+          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android SDK & NDK components
+        run: |
+          sdkmanager="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" --install "platforms;android-37.0" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1" > /dev/null
+
+      - name: Prepare the pinned Maa native libraries
+        run: python3 tools/qa/prepare_maa_inputs.py --native-only
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and build the signed APK
+        env:
+          KEYSTORE: ${{ secrets.HGB_ANDROID_KEYSTORE }}
+          HGB_SIGNING_STORE_PASSWORD: ${{ secrets.HGB_ANDROID_KEYSTORE_PASSWORD }}
+          HGB_API_URL: ${{ vars.HGB_API_URL }}
+          HGB_API_ADDRESS: ${{ vars.HGB_API_ADDRESS }}
+          HGB_SITE_URL: ${{ vars.HGB_SITE_URL }}
+          HGB_TASK_REPO: ${{ vars.HGB_TASK_REPO }}
+          HGB_GITHUB_CLIENT_ID: ${{ vars.HGB_GITHUB_CLIENT_ID }}
+          HGB_CODE_REPO: ${{ github.repository }}
+        run: |
+          export HGB_SIGNING_STORE_FILE="$RUNNER_TEMP/hgb-release.p12"
+          printf '%s' "$KEYSTORE" | base64 -d > "$HGB_SIGNING_STORE_FILE"
+          ./gradlew --no-daemon :core:engine:test :client:shared:desktopTest :client:android:app:testDebugUnitTest \
+            :client:android:app:assembleRelease \
+            -PappVersionName=${{ needs.plan.outputs.version }} -PappVersionCode=${{ steps.version.outputs.code }}
+          rm -f "$HGB_SIGNING_STORE_FILE"
+
+      - name: Verify APK signature and publish to l-collect/hgb Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          RELEASE: ${{ needs.plan.outputs.release }}
+        run: |
+          set -euo pipefail
+          apk=client/android/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" | grep -q "CN=HuGanBao"
+          name="hgb-${VERSION}.apk"
+          mkdir -p "$RUNNER_TEMP/apk-dist"
+          cp "$apk" "$RUNNER_TEMP/apk-dist/$name"
+          (cd "$RUNNER_TEMP/apk-dist" && sha256sum "$name" > "$name.sha256")
+
+          if ! gh release view "$RELEASE" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$RELEASE" -R "$GITHUB_REPOSITORY" --title "护肝宝 $VERSION" \
+              --notes "安卓客户端正式版：下载 hgb-$VERSION.apk 安装（需要 Android 11 及以上；单机模式永久免费，云端支持 Cloud Pro 多机协同与自动切号）。.sha256 文件用来核对下载是否完整。"
+          fi
+          gh release upload "$RELEASE" "$RUNNER_TEMP/apk-dist/$name" "$RUNNER_TEMP/apk-dist/$name.sha256" -R "$GITHUB_REPOSITORY" --clobber
+          rm -rf "$RUNNER_TEMP/apk-dist"
+          echo "✓ 已成功在公开库 $GITHUB_REPOSITORY 发布 $RELEASE ($name)！"
