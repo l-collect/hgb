@@ -241,7 +241,7 @@ jobs:
 
           if ! gh release view "$RELEASE" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create "$RELEASE" -R "$GITHUB_REPOSITORY" --title "护肝宝 $VERSION" \
-              --notes "安卓客户端正式版：下载 hgb-$VERSION.apk 安装（需要 Android 11 及以上；单机模式永久免费，云端支持 Cloud Pro 多机协同与自动切号）。.sha256 文件用来核对下载是否完整。"
+              --notes "安卓客户端正式版：下载 hgb-$VERSION.apk 安装（需要 Android 11 及以上）。.sha256 文件用来核对下载是否完整。"
           fi
           gh release upload "$RELEASE" "$RUNNER_TEMP/apk-dist/$name" "$RUNNER_TEMP/apk-dist/$name.sha256" -R "$GITHUB_REPOSITORY" --clobber
           rm -rf "$RUNNER_TEMP/apk-dist"
