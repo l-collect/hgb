@@ -33,7 +33,7 @@ ${colors("dark").join("\n")}
 }
 `;
 writeFileSync(here("../client/console/src/theme/tokens.css"), css);
-// The home page and docs use the same variables, and so does the admin when it is there.
+// The docs use the same variables, and so does the admin when it is there.
 writeFileSync(here("../client/docs/src/styles/tokens.css"), css);
 if (existsSync(here("../client/admin/src/theme"))) writeFileSync(here("../client/admin/src/theme/tokens.css"), css);
 

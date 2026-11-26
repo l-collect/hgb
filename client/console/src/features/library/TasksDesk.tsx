@@ -55,14 +55,6 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
   };
   const accountOptions = accounts.map((a): [string, string] => [a.id, a.nickname ? `${a.name} · ${a.nickname}` : a.name]);
   const placeOptions: [string, string][] = [["", "自动分配"], ...places.map((p): [string, string] => [p.value, p.label])];
-  const pickers = accounts.length === 0 ? <ButtonLink small to={paths.accounts}>＋ 添加账号</ButtonLink> : (
-    <span className={s.pickers}>
-      <span className={ui.tiny}>账号</span>
-      <TextSelect label="账号" value={account?.id ?? ""} onChange={pickAccount} options={accountOptions} />
-      <span className={ui.tiny}>设备</span>
-      <TextSelect label="设备" value={place ? where : ""} onChange={(next) => { setWhere(next); run.clear(); }} options={placeOptions} />
-    </span>
-  );
   const context = task && (
     <TaskContext game={game} task={task} account={account} plans={data.plans} pickers={accounts.length > 0 ? {
       account: <TextSelect label="账号" value={account?.id ?? ""} onChange={pickAccount} options={accountOptions} />,
@@ -72,7 +64,7 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
 
   return (
     <>
-      <PageHeader title="任务与日常" aside={pickers} />
+      <PageHeader title="任务与日常" />
       {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => { setChosenGame(id); run.clear(); navigate(paths.tasks); }} items={data.games.map((item) => [item.id, item.name])} />}
       <div className={join(d.cols, d.cols3)}>
         <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} />

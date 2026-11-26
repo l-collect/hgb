@@ -49,8 +49,8 @@ export function MePage() {
       <Card flush as="section" aria-label="帮助与关于">
         <a className={s.linkRow} href="/docs/"><span>使用文档</span><span className={ui.tiny}>›</span></a>
         <a className={s.linkRow} href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/issues`} target="_blank" rel="noreferrer"><span>反馈问题</span><span className={ui.tiny}>GitHub ↗</span></a>
-        <a className={s.linkRow} href="/privacy/"><span>隐私政策</span><span className={ui.tiny}>›</span></a>
-        <a className={s.linkRow} href="/terms/"><span>服务条款</span><span className={ui.tiny}>›</span></a>
+        <Link className={s.linkRow} to={paths.privacy}><span>隐私政策</span><span className={ui.tiny}>›</span></Link>
+        <Link className={s.linkRow} to={paths.terms}><span>服务条款</span><span className={ui.tiny}>›</span></Link>
       </Card>
     </div>
   );
@@ -130,7 +130,7 @@ export function MeAccountPage() {
             <MoreMenu label={`${device.name} 的操作`} actions={[["解绑", () => unbind(device.id, device.name), true]]} />
           </Row>
         ))}
-        {showDevices && <Row className={s.subRow}><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href="/#download">下载</a></Row>}
+        {showDevices && <Row className={s.subRow}><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/releases/latest`}>下载</a></Row>}
       </Card>
       {offer && <MergeCard token={offer.token} offer={offer} settled={(merged) => { setOffer(null); setBinding(false); if (merged) location.reload(); }} />}
       <Button variant="danger" className={s.wide} onClick={logout}>退出登录</Button>

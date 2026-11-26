@@ -76,4 +76,7 @@ export const paths = {
   me: "/me",
   meAccount: "/me/account",
   dev: "/dev",
+  login: "/login",
+  privacy: "/privacy",
+  terms: "/terms",
 };

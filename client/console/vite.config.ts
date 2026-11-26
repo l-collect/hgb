@@ -16,9 +16,9 @@ process.env.VITE_CODE_REPO = process.env.HGB_CODE_REPO || vercelRepo || instance
 
 export default defineConfig({
   plugins: [react()],
-  // The site's home page and docs own "/"; the console is served under /console (C42).
-  base: "/console/",
+  // The console owns the site's "/" (home page, privacy and terms included); the docs are under /docs and the admin
+  // under /admin, each its own app (C42).
+  base: "/",
   server: { port: 5173, proxy: { "/api": { target: server, changeOrigin: false } } },
-  // Built under dist/console, so a host serving dist sees the same /console/... paths the pages ask for.
-  build: { outDir: "dist/console", sourcemap: true },
+  build: { outDir: "dist", sourcemap: true },
 });

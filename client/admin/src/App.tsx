@@ -46,11 +46,11 @@ export function App() {
   switch (session.kind) {
     case "loading": return <Empty>正在加载…</Empty>;
     case "failed": return <Empty>{session.message}</Empty>;
-    case "signed-out": return <Gate title="护肝宝 · 管理" text="用控制台的账号登录"><a className={buttonClass("primary")} href="/console/">去登录</a></Gate>;
+    case "signed-out": return <Gate title="护肝宝 · 管理" text="用控制台的账号登录"><a className={buttonClass("primary")} href="/login">去登录</a></Gate>;
     case "denied": return (
       <Gate title="没有权限" text="当前账号不是管理员">
-        <a className={buttonClass("primary")} href="/console/">回控制台</a>
-        <Button onClick={() => { admin.logout().catch(() => {}).finally(() => { location.href = "/console/"; }); }}>换个账号</Button>
+        <a className={buttonClass("primary")} href="/">回控制台</a>
+        <Button onClick={() => { admin.logout().catch(() => {}).finally(() => { location.href = "/login"; }); }}>换个账号</Button>
       </Gate>
     );
     case "admin": return <Shell me={session.me} />;
@@ -86,7 +86,7 @@ function Shell({ me }: { me: Admin }) {
         {LINKS.map(([id, label, to, svg]) => (
           <Link key={id} to={to} className={s.link} aria-current={id === section ? "page" : undefined}>{svg}{label}</Link>
         ))}
-        <span className={s.me}><span className={s.meName}>{who(me)}</span><a href="/console/">← 控制台</a></span>
+        <span className={s.me}><span className={s.meName}>{who(me)}</span><a href="/">← 控制台</a></span>
       </nav>
       <main className={s.main}>{section === "users" ? <UsersPage me={me.userId} /> : <CodesPage />}</main>
     </div>
