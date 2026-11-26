@@ -6,6 +6,7 @@
 .row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 16px; border-bottom: 1px solid var(--color-line-soft); font-size: var(--text-sm); }
 .row:last-child { border-bottom: 0; }
 .issue { min-height: 32px; color: var(--color-danger); font-size: var(--text-xs); }
+.warn { min-height: 32px; color: var(--color-muted); font-size: var(--text-xs); }
 .mark { width: 22px; flex: none; font-weight: 700; }
 .mark[data-ok="true"] { color: var(--color-ok); } .mark[data-ok="false"] { color: var(--color-danger); } .mark[data-ok="wait"] { color: var(--color-muted); }
 .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }

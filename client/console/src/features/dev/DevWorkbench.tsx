@@ -4,8 +4,9 @@ import { ask } from "../../components/Confirm";
 import { Mark, Popover } from "../../components/ui";
 import { href, leave, Link, match, navigate, paths, usePath } from "../../router";
 import { useConsole } from "../../state/context";
-import { dev, type Capability, type DevMe, type DraftPatch, type DraftSummary, type DraftView, type Obj, type TrialRecord } from "./api";
-import { CONFLICT, DevContext, devPaths, EDIT_CONFLICT, failure, scriptPath, useDev, type Edit } from "./context";
+import { dev, type Capability, type DevMe, type DraftPatch, type DraftSummary, type DraftView, type Obj, type PatchConflict, type SyncResult, type TrialRecord } from "./api";
+import { CONFLICT, DevContext, devPaths, EDIT_CONFLICT, failure, PATCH_CONFLICT, scriptPath, useDev, type Edit } from "./context";
+import { PatchConflicts } from "./PatchConflicts";
 import { onDevRun, useDevRunStream } from "./events";
 import { ConfigPage } from "./ConfigPage";
 import { HomePage, standing } from "./HomePage";
@@ -44,6 +45,11 @@ export function DevWorkbench() {
   const basesNow = useRef(editBases); basesNow.current = editBases;
   const [pending, setPending] = useState(0);
   const [conflict, setConflict] = useState(false);
+  // A batch the server refused with both sides of each node: shown to choose from, never sent again by itself.
+  const [refused, setRefused] = useState<{ patches: DraftPatch[]; conflicts: PatchConflict[] } | null>(null);
+  // The node each unsaved script was when editing began: its digest is the patch's base, so only a change made
+  // elsewhere since then is a conflict.
+  const starts = useRef<Record<string, Obj>>({});
   // Leaving the workbench with typed scripts unsaved asks first: closing the tab, a link out of /dev (the top bar's
   // 「← 控制台」 among them) and the back button; moving around inside keeps the text and asks nothing.
   const unsaved = Object.keys(edits).length > 0;
@@ -79,6 +85,8 @@ export function DevWorkbench() {
     return () => { document.removeEventListener("click", click, true); window.removeEventListener("popstate", back); };
   }, []);
   const setEdit = useCallback((key: string, text: string | undefined, saved: string | undefined) => {
+    if (text === undefined) delete starts.current[key];
+    else if (!(key in starts.current) && latest.current) { const node = scriptNode(latest.current.body, key); if (node) starts.current[key] = node; }
     setEdits((all) => { const next = { ...all }; if (text === undefined) delete next[key]; else next[key] = text; return next; });
     setEditBases((all) => {
       if (text === undefined) { if (!(key in all)) return all; const next = { ...all }; delete next[key]; return next; }
@@ -163,7 +171,12 @@ export function DevWorkbench() {
         if (current.current !== game) return "已切换游戏，这次改动没保存";
         const result = await dev.patch(game, patches);
         await load(game);
-        if (result.conflicts.length) { setConflict(true); return CONFLICT; }
+        if (result.conflicts.length) {
+          setConflict(true);
+          // Both sides came back: the author chooses; an older server sends only the paths.
+          if (result.conflicts.some((c) => c.mine !== undefined || c.current !== undefined)) { setRefused({ patches, conflicts: result.conflicts }); return PATCH_CONFLICT; }
+          return CONFLICT;
+        }
         setConflict(false); return null;
       } catch (error) {
         await load(game);
@@ -174,17 +187,23 @@ export function DevWorkbench() {
     queue.current = run.catch(() => null);
     return run;
   }, [game, load]);
-  const syncRepo = useCallback(() => {
+  /** Replaces the draft from the server's side (a sync or a restore): unsaved text goes, the draft is read again. */
+  const replaceDraft = useCallback(<T,>(work: (id: string) => Promise<T>) => {
     setPending((n) => n + 1);
-    const run = queue.current.then(async (): Promise<string | null> => {
-      if (!game) return "没有选中游戏";
-      if (current.current !== game) return "已切换游戏，没有同步";
-      try { await dev.importLatest(game); setEdits({}); setEditBases({}); setConflict(false); await load(game); return null; }
-      catch (error) { return failure(error); }
+    const run = queue.current.then(async (): Promise<{ problem: string | null; result: T | null }> => {
+      if (!game) return { problem: "没有选中游戏", result: null };
+      if (current.current !== game) return { problem: "已切换游戏，没有做", result: null };
+      try {
+        const result = await work(game);
+        setEdits({}); setEditBases({}); starts.current = {}; setConflict(false); setRefused(null);
+        await load(game); return { problem: null, result };
+      } catch (error) { return { problem: failure(error), result: null }; }
     }).finally(() => setPending((n) => n - 1));
     queue.current = run.catch(() => null);
     return run;
   }, [game, load]);
+  const syncRepo = useCallback(() => replaceDraft<SyncResult>((id) => dev.importLatest(id, true)), [replaceDraft]);
+  const restoreSnapshot = useCallback(async (snapshot: string) => (await replaceDraft((id) => dev.restoreSnapshot(id, snapshot))).problem, [replaceDraft]);
 
   /**
    * Saves one script: held back when the draft's text is no longer the one editing began from (someone changed it
@@ -200,11 +219,15 @@ export function DevWorkbench() {
       const base = basesNow.current[key];
       const theirs = str(now.script) ?? "";
       if (!force && base !== undefined && theirs !== base && theirs !== normalized) { held = true; return []; }
-      return [{ op: "put", path: scriptPatchPath(key), expect: await nodeDigest(now), value: { ...now, script: normalized } }];
+      // The node as editing began is the base: changed elsewhere since (its name, say), the server sends both sides.
+      const start = force ? undefined : starts.current[key];
+      return [{ op: "put", path: scriptPatchPath(key), expect: await nodeDigest(now), ...(start ? { base: await nodeDigest(start) } : {}), value: { ...now, script: normalized } }];
     });
     if (held) return EDIT_CONFLICT;
     if (problem) return problem;
     const gone = editsNow.current[key] === raw || editsNow.current[key] === normalized;
+    if (gone) delete starts.current[key];
+    else if (latest.current) { const node = scriptNode(latest.current.body, key); if (node) starts.current[key] = node; }
     setEdits((all) => { if (!gone) return all; const next = { ...all }; delete next[key]; return next; });
     setEditBases((all) => { const next = { ...all }; if (gone) delete next[key]; else next[key] = normalized; return next; });
     return null;
@@ -269,11 +292,38 @@ export function DevWorkbench() {
   if (!loaded) body = <div className={w.empty}>正在加载…</div>;
   else if (!game) body = <div className={w.card}><div className={w.empty}>{problem}</div></div>;
   else body = <>{problem && <div className={w.message}>{problem}</div>}{draft ? route(path) : <NoDraft />}</>;
-  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, edits, setEdits, setEdit, editBases, conflicts, saveScript, device, setDevice } : null;
+  /** 用我的: the refused batch again, each conflicting node expected as it is now; 用线上的: dropped (the draft is read already). */
+  const resolve = async (mine: boolean) => {
+    const was = refused; if (!was) return null;
+    setRefused(null);
+    if (!mine) {
+      const paths = new Set(was.conflicts.map((c) => c.path));
+      setEdits((all) => Object.fromEntries(Object.entries(all).filter(([k]) => !paths.has(scriptPatchPath(k)))));
+      setEditBases((all) => Object.fromEntries(Object.entries(all).filter(([k]) => !paths.has(scriptPatchPath(k)))));
+      setConflict(false); return null;
+    }
+    const byPath = new Map(was.conflicts.map((c) => [c.path, c]));
+    const seen = new Set<string>();
+    const again = was.patches.map((p): DraftPatch => {
+      const c = byPath.get(p.path); const { base: _base, ...rest } = p; void _base;
+      if (!c || seen.has(p.path)) return rest;
+      seen.add(p.path);
+      return { ...rest, expect: (p.op === "set" ? c.shallowDigest : c.digest) ?? rest.expect };
+    });
+    const problem = await apply(again);
+    if (!problem) {
+      // A script saved this way is no longer unsaved.
+      const body = latest.current?.body;
+      if (body) setEdits((all) => Object.fromEntries(Object.entries(all).filter(([k, v]) => str(scriptNode(body, k)?.script) !== v.replace(/\r\n?/g, "\n").replace(/\n+$/, ""))));
+    }
+    return problem;
+  };
+  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, restoreSnapshot, edits, setEdits, setEdit, editBases, conflicts, saveScript, device, setDevice } : null;
   return (
     <div className={w.shell}>
       {top}
       <main className={w.main} data-full={workspaceAt(path) ? "true" : undefined}>
+        {refused && draft && <PatchConflicts conflicts={refused.conflicts} body={draft.body} onChoose={resolve} />}
         {value ? <DevContext.Provider value={value}>{body}</DevContext.Provider> : body}
       </main>
     </div>

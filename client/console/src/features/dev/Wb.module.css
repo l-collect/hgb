@@ -115,3 +115,12 @@ a.trow:hover { color: inherit; background: var(--color-bg); }
   .tasksGrid, .libGrid { grid-template-columns: 1fr; gap: 4px; }
   .thead { display: none; }
 }
+/* A refused patch's two sides, over whatever page is open. */
+.refused { position: fixed; right: 16px; bottom: 16px; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: min(70vh, 640px); overflow: auto;
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-color: var(--color-danger); box-shadow: 0 8px 28px rgba(0, 0, 0, .18); box-sizing: border-box; }
+.refusedRow { display: flex; gap: 8px; flex-wrap: wrap; }
+.refusedRow > button { flex: 1; justify-content: center; }
+/* 快照: the draft's kept copies, newest first. */
+.snapList { display: flex; flex-direction: column; gap: 2px; min-width: 260px; padding: 4px; }
+.snapItem { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: var(--text-sm); }
+.snapItem > span:first-child { flex: 1; min-width: 0; }

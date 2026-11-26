@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import { ApiFailure } from "../../api/client";
-import type { Capability, DevMe, DraftPatch, DraftView, Obj, TrialRecord } from "./api";
+import type { Capability, DevMe, DraftPatch, DraftView, Obj, SyncResult, TrialRecord } from "./api";
 
 /** Patches, or a function making them from the latest draft (when an edit must build on the one before it). */
 export type Edit = DraftPatch[] | ((body: Obj) => DraftPatch[] | Promise<DraftPatch[]>);
@@ -11,7 +11,10 @@ export interface DevContextValue {
   /** Each task's newest trial, and the current node digest of every task and snippet (`tasks/<id>`, `snippets/<id>`). */
   trials: TrialRecord[]; digests: Record<string, string>; reloadTrials: () => Promise<void>;
   reload: () => Promise<void>; apply: (edit: Edit) => Promise<string | null>;
-  syncRepo: () => Promise<string | null>;
+  /** 从仓库同步, keeping what was changed here; unsaved text is dropped. The problem in words, or what it kept. */
+  syncRepo: () => Promise<{ problem: string | null; result: SyncResult | null }>;
+  /** Puts a snapshot back as the draft (unsaved text is dropped); a problem in words, or null. */
+  restoreSnapshot: (id: string) => Promise<string | null>;
   /** Scripts typed but not saved, by script ("step:<task>/<id>" or "snippet:<id>"): kept while moving around the workbench. */
   edits: Record<string, string>; setEdits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   /** Puts (or, undefined, drops) the unsaved text of a script; the first edit remembers the saved text it started from. */
@@ -43,6 +46,8 @@ export const devPaths = {
 };
 /** What a refused patch batch says: 409 is the server's "a node changed since you read it". */
 export const CONFLICT = "别处改过了，已重新读取";
+/** The same, when the server sent both sides: the workbench shows them to choose from. */
+export const PATCH_CONFLICT = "别处改过了，先选用哪边";
 /** A script save held back: it changed elsewhere since editing began here. */
 export const EDIT_CONFLICT = "别处改过这段脚本，先选用哪边";
 /** The address of an unsaved script's key ("step:<task>/<step>" or "snippet:<id>"). */

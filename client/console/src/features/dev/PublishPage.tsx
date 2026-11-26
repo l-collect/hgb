@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "../../router";
 import { useConsole } from "../../state/context";
-import { dev, draftBase, type CheckResult, type Obj, type PublishResult } from "./api";
+import { dev, draftBase, queued, type CheckResult, type Obj, type PublishResult, type SyncResult } from "./api";
 import { failure, scriptPath, useDev } from "./context";
-import { Located, locate } from "./where";
+import { IssueText, Located, locate } from "./where";
+import { SyncConflicts, SyncTools } from "./SyncTools";
 import { standing } from "./HomePage";
 import { isObj, objs, requiredMinApp, snippets, str, target, tasks } from "./model";
 import { changedLines, lineDiff, wbPaths, type DiffLine } from "./wb";
 import w from "./Wb.module.css";
 import p from "./Publish.module.css";
 
+const RETRYING = " · 稍后自动重试";
 interface Check { ok: boolean | null; title: string; link?: [string, string] }
 interface Change { key: string; name: string; summary: string; diffs: { label: string; lines: DiffLine[] }[] }
 
@@ -30,6 +32,9 @@ export function PublishPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState<[string, boolean] | null>(null);
+  const [synced, setSynced] = useState<[string, boolean] | null>(null);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [allIssues, setAllIssues] = useState(false);
   // 两步发布：第一次点只是待确认，3 秒内再点才发布；改版本号或失去焦点就复原。
   const [armed, setArmed] = useState(false);
   useEffect(() => { setArmed(false); }, [version]);
@@ -38,8 +43,16 @@ export function PublishPage() {
     if (!draft) return;
     let live = true;
     setCheck(null); setCheckText(null);
-    dev.check(draft.body).then((c) => { if (live) setCheck(c); }, (e) => { if (live) setCheckText(failure(e)); });
-    return () => { live = false; };
+    const control = new AbortController();
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // The server's queue full: its words, and one more try a little later.
+    const send = (again: boolean) => dev.check(draft.body, control.signal).then((c) => { if (live) setCheck(c); }, (e) => {
+      if (!live) return;
+      if (queued(e) && !again) { setCheckText(`${failure(e)}${RETRYING}`); retry = setTimeout(() => { setCheckText(null); void send(true); }, 8000); return; }
+      setCheckText(failure(e));
+    });
+    void send(false);
+    return () => { live = false; clearTimeout(retry); control.abort(); };
   }, [draft]);
   useEffect(() => { let live = true; draftBase(game).then((b) => { if (live) setBase(b); }, () => { if (live) setBase(null); }); return () => { live = false; }; }, [game, draft?.baseVersion]);
   const maintainer = me?.maintainer === true;
@@ -89,7 +102,7 @@ export function PublishPage() {
   const checks: Check[] = [
     { ok: unsaved === 0, title: unsaved ? `全部保存 · ${unsaved} 处没保存` : "全部保存" },
     check ? { ok: check.ok, title: check.ok ? "结构与类型" : `结构与类型 · ${check.issues.length} 个问题` }
-      : { ok: checkText ? false : null, title: checkText ? `结构与类型 · ${checkText}` : "结构与类型 · 检查中…" },
+      : { ok: checkText && !checkText.endsWith(RETRYING) ? false : null, title: checkText ? `结构与类型 · ${checkText}` : "结构与类型 · 检查中…" },
     untried.length ? { ok: false, title: `改过的任务都试跑通过 · ${untried.length} 个没过` } : { ok: true, title: "改过的任务都试跑通过" },
     { ok: true, title: `最低 App ${minApp}（${why}）` },
   ];
@@ -114,7 +127,10 @@ export function PublishPage() {
       <div className={p.layout}>
         <div className={p.left}>
           <section className={w.card} aria-labelledby="ck">
-            <div className={p.head}><b id="ck">检查</b></div>
+            <div className={p.head}><b id="ck" className={p.grow}>检查</b>
+              <SyncTools changed={rows.filter((r) => r.changed).length} onDone={(said, result) => { setSynced(said); setSyncResult(result ?? null); }} /></div>
+            {synced && <div role="status" className={`${p.row} ${synced[1] ? w.muted : w.message}`}>{synced[0]}</div>}
+            {syncResult?.conflicts?.length ? <div className={p.row}><SyncConflicts result={syncResult} body={draft.body} /></div> : null}
             {checks.map((c, i) => <div key={i}>
               <div className={p.row}>
                 <span className={p.mark} data-ok={c.ok === null ? "wait" : String(c.ok)} aria-hidden="true">{c.ok === null ? "…" : c.ok ? "✓" : "✗"}</span>
@@ -128,7 +144,13 @@ export function PublishPage() {
               {i === 2 && untried.map((r) => <div key={r.task.id} className={`${p.row} ${p.issue}`}><span className={p.mark} />
                 <span className={p.grow}>{r.task.name} · {r.label}</span><Link to={`${wbPaths.task(r.task.id)}?scope=task`} className={p.link}>整任务试跑 ›</Link></div>)}
             </div>)}
-            {check && !check.ok && check.issues.slice(0, 5).map((i, k) => <div key={`i${k}`} className={`${p.row} ${p.issue}`}><span className={p.mark} /><span className={p.grow}><Located text={i.location} body={draft.body} />：{i.reason}</span></div>)}
+            {check && !check.ok && (allIssues ? check.issues : check.issues.slice(0, 5)).map((i, k) => <div key={`i${k}`} className={`${p.row} ${p.issue}`}><span className={p.mark} /><span className={p.grow}><IssueText issue={i} body={draft.body} /></span></div>)}
+            {check && check.issues.length > 5 && <div className={`${p.row} ${p.issue}`}><span className={p.mark} />
+              <button type="button" className={p.link} onClick={() => setAllIssues(!allIssues)}>{allIssues ? "收起" : `其余 ${check.issues.length - 5} 处 ›`}</button></div>}
+            {check && (check.warnings?.length ?? 0) > 0 && <>
+              <div className={p.row}><span className={p.mark} data-ok="wait" aria-hidden="true">!</span><span className={p.grow}>提醒 {check.warnings!.length} 条 · 不挡发布</span></div>
+              {check.warnings!.map((i, k) => <div key={`w${k}`} className={`${p.row} ${p.warn}`}><span className={p.mark} /><span className={p.grow}><IssueText issue={i} body={draft.body} /></span></div>)}
+            </>}
           </section>
           <section className={w.card} aria-labelledby="ch">
             <div className={p.head}><b id="ch" className={p.grow}>改动</b><span className={w.muted}>对比 {draft.baseVersion || "上个版本"}</span></div>

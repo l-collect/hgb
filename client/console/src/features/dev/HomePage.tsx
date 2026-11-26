@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useConsole } from "../../state/context";
 import { MoreMenu, Pill, Stepper } from "../../components/ui";
 import { Link, navigate } from "../../router";
-import { dev, type DriftWarning, type TrialRecord } from "./api";
+import { dev, type DriftWarning, type SyncResult, type TrialRecord } from "./api";
 import { devPaths, failure, useDev } from "./context";
 import { NameButton } from "./NameButton";
+import { SyncConflicts, SyncTools } from "./SyncTools";
 import { arr, childIds, isObj, nodeDigest, objs, requiredMinApp, shallowDigest, snippets, str, target, tasks, usedSnippets, type TaskDef } from "./model";
 import type { Obj } from "./api";
 import w from "./Wb.module.css";
@@ -16,13 +17,13 @@ type Editing = { id: string; kind: "name" | "category" | "priority" | "delete" }
 
 /** 任务: which tasks need attention (changed, failed, untried), and beside them the snippets, drift warnings and the phone. */
 export function HomePage() {
-  const { draft, game, trials, digests, apply, syncRepo, me, edits, device } = useDev();
+  const { draft, game, trials, digests, apply, me, device } = useDev();
   const { data } = useConsole();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [drifts, setDrifts] = useState<DriftWarning[]>([]);
   const [notice, setNotice] = useState<[string, boolean] | null>(null);
-  const [syncing, setSyncing] = useState(false);
+  const [synced, setSynced] = useState<SyncResult | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => { dev.driftWarnings(game).then(setDrifts, () => setDrifts([])); }, [game, trials]);
@@ -57,7 +58,6 @@ export function HomePage() {
   const say = (problem: string | null, ok?: string) => setNotice(problem ? [problem, false] : ok ? [ok, true] : null);
 
   const create = async (name: string, wanted: string) => {
-    if (syncing) return;
     const id = uniqueId(wanted || name, childIds(draft.body), "task");
     const problem = await apply([{ op: "insert", path: "", field: "tasks", after: list.at(-1)?.id ?? null,
       value: { id, targetId: game, name, category: "daily", priority: 50, steps: [] } }]);
@@ -78,16 +78,6 @@ export function HomePage() {
       return [{ op: "delete", path: `tasks:${id}`, expect: await nodeDigest(now.raw) }];
     }), "已删除");
   };
-  const syncFromRepo = async () => {
-    const parts: string[] = [];
-    if (changed.length) parts.push(`${changed.length} 个任务改过`);
-    const unsavedCount = Object.keys(edits).length;
-    if (unsavedCount) parts.push(`${unsavedCount} 处没保存`);
-    if (!confirm(parts.length ? `${parts.join("、")}，同步会用仓库版覆盖。继续？` : "用仓库最新版覆盖草稿？")) return;
-    setSyncing(true); setNotice(null);
-    say(await syncRepo(), "已同步");
-    setSyncing(false);
-  };
   const snippetUse = (id: string) => {
     const n = list.filter((t) => uses(draft.body, t, id)).length;
     return n ? `${n} 处` : guarded.includes(id) ? "干扰页" : graphed.includes(id) ? "页面图" : "没人用";
@@ -97,10 +87,11 @@ export function HomePage() {
       <div className={w.homeMain}>
         <div className={w.homeHead}>
           <h1 className={w.h1Small}>任务</h1>
-          <button type="button" className={w.btn} disabled={syncing} onClick={syncFromRepo}>{syncing ? "同步中…" : "从仓库同步"}</button>
+          <SyncTools changed={changed.length} onDone={(said, result) => { setNotice(said); setSynced(result ?? null); }} />
           <NameButton label="＋ 任务" placeholder="任务名" askId onName={create} />
         </div>
         {notice && <div role="status" className={notice[1] ? `${w.muted} ${w.okText}` : w.message}>{notice[0]}</div>}
+        <SyncConflicts result={synced} body={draft.body} />
         <div className={w.stats}>
           <button type="button" className={`${w.card} ${w.stat}`} onClick={() => setFilter("changed")}><span className={w.figure} data-tone={changed.length ? "warn" : undefined}>{changed.length}</span><span className={w.muted}>改过未发布</span></button>
           <button type="button" className={`${w.card} ${w.stat}`} onClick={() => setFilter("fail")}><span className={w.figure} data-tone={failed.length ? "bad" : undefined}>{failed.length}</span><span className={w.muted}>试跑失败</span></button>
@@ -143,7 +134,6 @@ export function HomePage() {
           }) : <div className={w.empty}>还没有片段</div>}
         </div>
         <NameButton label="＋ 片段" placeholder="片段编号（字母、数字、-）" onName={async (name) => {
-          if (syncing) return;
           const id = uniqueId(name, childIds(draft.body), "snippet");
           const problem = await apply([{ op: "insert", path: "", field: "snippets", after: str(lib.at(-1)?.id) ?? null, value: { id, script: "" } }]);
           if (problem) say(problem); else navigate(devPaths.snippet(id));

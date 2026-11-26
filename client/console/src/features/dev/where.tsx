@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Link } from "../../router";
-import type { Obj } from "./api";
+import type { CheckIssue, IssueWhere, Obj } from "./api";
 import { devPaths } from "./context";
 import { str, tasks } from "./model";
 
@@ -36,6 +36,32 @@ export function locate(location: string, body: Obj | null | undefined): Place | 
   const stepName = (step && str(step.name)) || stepId;
   if (step && str(step.use)) return { label: `${taskName} · ${stepName} · 片段 ${str(step.use)}${at}`, to: devPaths.step(taskId, stepId) + q };
   return { label: `${taskName} · ${stepName}${at}`, to: devPaths.step(taskId, stepId) + q };
+}
+
+/** The place the server's [where] names (task · step L12, or a snippet's line); null when it names none. */
+export function placeOf(where: IssueWhere | null | undefined, body: Obj | null | undefined): Place | null {
+  if (!where) return null;
+  const at = where.line ? ` L${where.line}` : "";
+  const q = where.line ? `?line=${where.line}` : "";
+  if (where.task) {
+    const task = body ? tasks(body).find((t) => t.id === where.task) : undefined;
+    const taskName = task?.name || where.task;
+    if (!where.step) return { label: taskName, to: devPaths.task(where.task) };
+    const step = task?.steps.find((s) => String(s.id) === where.step);
+    const stepName = (step && str(step.name)) || where.step;
+    const no = task && step ? `${task.steps.indexOf(step) + 1} ` : "";
+    if (where.snippet) return { label: `${taskName} · ${no}${stepName} · 片段 ${where.snippet}${at}`, to: devPaths.taskSnippet(where.task, where.snippet) + q };
+    return { label: `${taskName} · ${no}${stepName}${at}`, to: devPaths.step(where.task, where.step) + q };
+  }
+  if (where.snippet) return { label: `片段 ${where.snippet}${at}`, to: devPaths.snippet(where.snippet) + q };
+  return null;
+}
+
+/** One issue said with its place first: a link to 「任务 · 步骤 L12」, then the reason. */
+export function IssueText({ issue, body }: { issue: CheckIssue; body: Obj | null | undefined }) {
+  const place = placeOf(issue.where, body);
+  if (place) return <><Link to={place.to}>{place.label}</Link>：{issue.reason}</>;
+  return <><Located text={issue.location} body={body} />{issue.location ? "：" : ""}{issue.reason}</>;
 }
 
 /** [text] with every draft path in it turned into a link saying where it is. */

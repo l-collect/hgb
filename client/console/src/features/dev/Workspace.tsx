@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chips, MoreMenu, Pill, SegmentTabs } from "../../components/ui";
 import { Link, navigate, usePath, useQuery } from "../../router";
-import { dev, follow, type DevRun, type DevTrace, type Obj, type Sample } from "./api";
-import { devPaths, EDIT_CONFLICT, failure, useDev, type Edit } from "./context";
+import { dev, dropped, follow, issuesOf, queued, runId, type CheckIssue, type CheckRequest, type DevRun, type DevTrace, type IssueWhere, type Obj, type Sample } from "./api";
+import { devPaths, EDIT_CONFLICT, failure, PATCH_CONFLICT, useDev, type Edit } from "./context";
 import { startedHere, useDevRun } from "./events";
 import { FrameTools } from "./FrameTools";
 import { FrameView, useFrames } from "./FrameReplay";
@@ -13,7 +13,7 @@ import { openDirect, type DirectScreen } from "./direct";
 import { completed, failedAt, failReason, insertAfter, missBoxes, ok, ownerOfStep, placeOf, running, snippetKey, testValues, type OwnerKey } from "./runs";
 import type { InsertTarget } from "./sentence";
 import { lineDiff, useDevice } from "./wb";
-import { Located } from "./where";
+import { IssueText, Located } from "./where";
 import pub from "./Publish.module.css";
 import type { LineFailure, LineMark, ScriptNames, ScriptProblem, TemplateView } from "./ScriptEditor";
 import { lintSettings, readsAsNumber, settingView, type SettingView } from "./settingUse";
@@ -54,7 +54,7 @@ const HELP: [string, string][] = [
 ];
 
 type Tab = "run" | "problems" | "screen" | "help";
-type Issue = { line: number | null; reason: string; location: string; warning?: boolean };
+type Issue = { line: number | null; reason: string; location: string; where?: IssueWhere | null; warning?: boolean };
 
 /**
  * 工作区: a task (or, with no task, the snippet library) as one page — steps on the left, the script in the middle,
@@ -97,6 +97,8 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const textNow = useRef(text); textNow.current = text;
   const dirtyKeys = Object.keys(edits).filter((k) => savedOf(k) !== undefined && edits[k] !== savedOf(k));
   const dirty = !!key && dirtyKeys.includes(key);
+  // A refused save settled in the workbench's conflict panel: its message goes with it.
+  useEffect(() => { if (!dirty) setMessage((m) => (m?.[0] === PATCH_CONFLICT ? null : m)); }, [dirty]);
 
   /** Puts [insert] after line [after] of the open script, unsaved, and goes to it. */
   const insertAt = useCallback((insert: string, after: number) => {
@@ -162,43 +164,56 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   }, [edits, saveScript, scoped, key]);
   const openKeyRef = useRef<(k: OwnerKey) => void>(() => undefined);
 
-  // ---- checking: the draft as it would be with this text, a moment after typing stops
-  const [issues, setIssues] = useState<Issue[] | null>(null);
-  const [others, setOthers] = useState<Issue[]>([]);
-  const prefix = !key ? "" : key.startsWith("snippet:") ? `snippet/${key.slice(8)}` : `target/${String(task?.raw.targetId ?? "")}/task/${taskId}/step/${key.slice(5)}`;
+  // ---- checking: only this script, as it would be with this text, a moment after typing stops. A newer check
+  // cancels the one before (here and, by the revision, on the server); the last result stays, marked 可能过期, until
+  // the new one comes.
+  const [checked, setChecked] = useState<{ key: OwnerKey; issues: Issue[]; others: Issue[] } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkNote, setCheckNote] = useState<string | null>(null);
+  const issues = checked && checked.key === key ? checked.issues : null;
+  const others = checked && checked.key === key ? checked.others : [];
   useEffect(() => {
-    if (!body || !key || !isScript) { setIssues([]); setOthers([]); return; }
-    let live = true; setIssues(null);
-    const timer = setTimeout(async () => {
-      const copy = JSON.parse(JSON.stringify(body)) as Obj;
-      const mine = ownerIn(copy, key); if (!mine) return;
-      mine.script = text;
+    if (!body || !key || !isScript) { setChecked(key ? { key, issues: [], others: [] } : null); setChecking(false); return; }
+    let live = true; setChecking(true);
+    const control = new AbortController();
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const copy = JSON.parse(JSON.stringify(body)) as Obj;
+    const mine = ownerIn(copy, key);
+    if (!mine) { setChecking(false); return; }
+    mine.script = text;
+    const snippetId = key.startsWith("snippet:") ? key.slice(8) : null;
+    const request: CheckRequest = { bundle: copy, target: game, revision: draft?.revision, measure: false,
+      ...(snippetId ? { snippet: snippetId } : { task: taskId, step: key.slice(5) }) };
+    const send = async (again: boolean) => {
       try {
-        const result = await dev.check(copy);
+        const result = await dev.check(request, control.signal);
         if (!live) return;
-        // This script's, then the rest of the task's: its other steps and the snippets it uses.
-        const used = task ? usedSnippets(copy, task.raw).map((id) => `snippet/${id}`) : [];
-        const taskAt = task ? `target/${String(task.raw.targetId ?? "")}/task/${taskId}` : null;
-        const within = (loc: string, at: string) => loc === at || loc.startsWith(`${at}/`);
-        // Errors, then warnings (a separate list now; an issue's own severity is still read for older servers).
+        // This script's, then what it touches: its snippets, and for a snippet the steps that call it.
         const all = [...result.issues.map((x) => ({ ...x, warning: isWarning(x) })), ...(result.warnings ?? []).map((x) => ({ ...x, warning: true }))];
-        setIssues(all.filter((x) => within(x.location, prefix)).map((x) => {
-          const at = /\/script\/line\/(\d+)$/.exec(x.location);
-          const line = x.where?.line ?? (at ? Number(at[1]) : null);
-          return { line, reason: x.reason, location: x.location, warning: x.warning };
-        }));
-        setOthers(all.filter((x) => !within(x.location, prefix) && ((taskAt && within(x.location, taskAt)) || used.some((at) => within(x.location, at))))
-          .map((x) => ({ line: null, reason: x.reason, location: x.location, warning: x.warning })));
-      } catch (error) { if (live) { setIssues([{ line: null, reason: `检查没做成：${failure(error)}`, location: "" }]); setOthers([]); } }
-    }, 600);
-    return () => { live = false; clearTimeout(timer); };
+        const own = (x: CheckIssue) => { const at = whereOf(x); return snippetId ? at.snippet === snippetId && !at.task : at.task === taskId && at.step === key.slice(5) && !at.snippet; };
+        setChecked({ key,
+          issues: all.filter(own).map((x) => ({ line: whereOf(x).line ?? null, reason: x.reason, location: x.location, warning: x.warning })),
+          others: all.filter((x) => !own(x) && (!!whereOf(x).task || !!whereOf(x).snippet)).map((x) => ({ line: null, reason: x.reason, location: x.location, where: x.where, warning: x.warning })) });
+        setChecking(false); setCheckNote(null);
+      } catch (error) {
+        if (!live || control.signal.aborted) return;
+        // Given up for a newer check (from another window, say): nothing to show.
+        if (dropped(error)) { setChecking(false); return; }
+        // The server's queue is full: say so, and try once more a little later.
+        if (queued(error) && !again) { setCheckNote(`${failure(error)} · 稍后自动重试`); retry = setTimeout(() => void send(true), 8000); return; }
+        setCheckNote(null); setChecking(false);
+        setChecked({ key, issues: [{ line: null, reason: `检查没做成：${failure(error)}`, location: "" }], others: [] });
+      }
+    };
+    const timer = setTimeout(() => void send(false), 600);
+    return () => { live = false; clearTimeout(timer); clearTimeout(retry); control.abort(); };
   }, [text, body, key]); // eslint-disable-line react-hooks/exhaustive-deps
   // Settings read wrong, found on the spot while the server's check (half a minute) is still out; its answer then wins.
   const local = useMemo(() => isScript ? lintSettings(text, task ? task.fields : null, !!key?.startsWith("snippet:")) : [], [text, task, isScript, key]);
-  const problems = useMemo((): ScriptProblem[] => issues === null
+  const problems = useMemo((): ScriptProblem[] => issues === null || checking
     ? local.map((x) => ({ line: x.line, reason: x.reason, severity: x.severity, col: x.col, len: x.len }))
     : issues.flatMap((x) => x.line === null ? [] : [{ line: x.line, reason: x.reason, severity: x.warning ? "warning" as const : "error" as const,
-      ...placeIn(local, x.line) }]), [issues, local]);
+      ...placeIn(local, x.line) }]), [issues, local, checking]);
 
   // ---- completion and template pictures
   const names = useMemo((): ScriptNames => {
@@ -238,6 +253,8 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   // Starting: the server compiles the draft first (about half a minute), then the phone takes it.
   const [preparing, setPreparing] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  // A refused trial's issues (the draft did not pass its check), each a link to its place.
+  const [runIssues, setRunIssues] = useState<CheckIssue[]>([]);
   // The trial shown was started on the phone (or another window), not here.
   const [fromPhone, setFromPhone] = useState(false);
   const shown = useRef<string | null>(null);
@@ -266,24 +283,32 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const start = async () => {
     if (!task || !device || startingRef.current) return;
     startingRef.current = true; setStarting(true);
-    setMessage(null); setTab("run"); setRunError(null);
+    setMessage(null); setTab("run"); setRunError(null); setRunIssues([]);
     // The old result goes at once: what shows now is this trial's.
     shown.current = ""; setRun(null); setFromPhone(false);
     try {
       for (const k of dirtyKeys) if (!await save(k)) { setRunError("有脚本没保存成，没开始试跑"); return; }
       const only = scope === "step" && step && !snippetId ? String(step.id) : undefined;
+      // The id is made here, so the server's events (排队, 准备) are followed before it answers.
+      const id = runId();
+      startedHere.add(id); shown.current = id;
       setPreparing(true);
-      const started = await dev.startRun({ kind: "trial", target: game, device, task: task.id, step: only, configuration: values });
+      const started = await dev.startRun({ id, kind: "trial", target: game, device, task: task.id, step: only, configuration: values });
       startedHere.add(started.id);
       setPreparing(false);
-      shown.current = started.id; setRun(started);
+      shown.current = started.id; setRun((was) => was && was.id === started.id && was.updatedAt > started.updatedAt ? was : started);
       const done = await follow(started.id, show);
       await reloadTrials();
       if (done) for (let i = 0; i < 10 && shown.current === started.id && !(await dev.run(started.id).then((x) => {
         show(x); return (completed(done) || !!x.screen) && !!x.framesUploaded;
       }).catch(() => false)); i++)
         await new Promise((resolve) => setTimeout(resolve, 1500));
-    } catch (error) { setRunError(failure(error)); }
+    } catch (error) {
+      const listed = issuesOf(error);
+      setRunIssues(listed);
+      // Listed one by one below; the message then only says why.
+      setRunError(listed.length ? `没通过检查，${listed.length} 处问题` : failure(error));
+    }
     finally { startingRef.current = false; setStarting(false); setPreparing(false); }
   };
 
@@ -362,7 +387,9 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
             {task && step && !snippetId && <StepTools task={task} step={step} apply={apply} onMessage={say} onRemoved={() => setEdit(ownerOfStep(step), undefined)} />}
             {key.startsWith("snippet:") && <Pill>片段 · 用在 {uses(key.slice(8))} 处</Pill>}
             <span className={s.grow} />
-            {isScript && <span className={w.muted}>{issues === null ? "检查中…" : issues.length ? <button type="button" className={s.linkish} onClick={() => setTab("problems")}>{issues.length} 处问题</button> : "没问题"}</span>}
+            {isScript && <span className={w.muted}>{checkNote && checking ? checkNote : issues === null ? "检查中…" : <>
+              {issues.length ? <button type="button" className={s.linkish} onClick={() => setTab("problems")}>{issues.length} 处问题</button> : "没问题"}
+              {checking && <span title="新的检查还没回来"> · 可能过期</span>}</>}</span>}
             {dirty && <span className={s.unsaved}>{conflicted ? "冲突" : "未保存"}</span>}
             {isScript && <button type="button" className={`${w.btn} ${w.sm} ${dirty ? w.primary : ""}`} disabled={saving || !dirty || conflicted} onClick={() => void save(key)}>
               {saving ? "保存中…" : <>保存 <kbd className={s.kbd}>⌘S</kbd></>}</button>}
@@ -394,22 +421,23 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
           {task && tab === "run" && (
             <RunPanel task={task} step={step} snippetOpen={!!snippetId} run={run} busy={busy} device={device} offline={offline} failIndex={failIndex} places={places} savedOf={savedOf}
               why={why} scope={scope} setScope={setScope} presets={presets} custom={custom} preset={preset} setPreset={setPreset}
-              preparing={preparing} error={runError} fromPhone={fromPhone} body={body} onRefresh={(x) => { if (shown.current === x.id) setRun(x); }}
+              preparing={preparing} error={runError} issues={runIssues} fromPhone={fromPhone} body={body} onRefresh={(x) => { if (shown.current === x.id) setRun(x); }}
               onStart={() => void start()} onOpen={openKey} onMessage={(t) => setRunError(t)} target={insertTarget} backHere={backHere} />
           )}
+          {tab === "problems" && checkNote && checking && <span className={w.muted}>{checkNote}</span>}
           {tab === "problems" && (issues === null ? <>
             <span className={w.muted}>检查中…{local.length ? " 先看本地查到的：" : ""}</span>
             {local.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && setGoTo({ key, line: x.line, at: Date.now() })}>
               <span className={s.ln}>L{x.line}</span>{x.severity === "warning" && <span className={s.warnTag}>提醒</span>}{x.reason}</button>)}
           </> : <>
-            <div className={s.group}>本脚本</div>
+            <div className={s.group}>本脚本{checking ? " · 可能过期" : ""}</div>
             {issues.length === 0 ? <span className={w.muted}>没问题</span>
               : issues.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && x.line !== null && setGoTo({ key, line: x.line, at: Date.now() })}>
                 {x.line !== null && <span className={s.ln}>L{x.line}</span>}{x.warning && <span className={s.warnTag}>提醒</span>}{x.reason}</button>)}
-            {task && <>
-              <div className={s.group}>这个任务用到的</div>
+            {(task || others.length > 0) && <>
+              <div className={s.group}>{key?.startsWith("snippet:") ? "调用它的地方" : "用到的片段"}</div>
               {others.length === 0 ? <span className={w.muted}>没问题</span>
-                : others.map((x, i) => <div key={i} className={s.problem}><Located text={x.location} body={body} />：{x.reason}</div>)}
+                : others.map((x, i) => <div key={i} className={s.problem}>{x.warning && <span className={s.warnTag}>提醒</span>}<IssueText issue={x} body={body} /></div>)}
             </>}
           </>)}
           {tab === "screen" && (device
@@ -538,7 +566,7 @@ function StepTools({ task, step, apply, onMessage, onRemoved }: { task: TaskDef;
 function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolean; run: DevRun | null; busy: boolean; device: string | null; offline: boolean; failIndex: number;
   places: { key: OwnerKey; line: number }[][]; savedOf: (k: OwnerKey) => string | undefined; why: string;
   scope: "step" | "task"; setScope: (v: "step" | "task") => void; presets: [string, Obj][]; custom: Obj | null; preset: number; setPreset: (i: number) => void;
-  preparing: boolean; error: string | null; fromPhone: boolean; body: Obj; onRefresh: (run: DevRun) => void;
+  preparing: boolean; error: string | null; issues: CheckIssue[]; fromPhone: boolean; body: Obj; onRefresh: (run: DevRun) => void;
   onStart: () => void; onOpen: (k: OwnerKey, line?: number) => void; onMessage: (text: string | null) => void;
   target: InsertTarget | null; backHere: string }) {
   const { task, step, run, busy, failIndex, places } = p;
@@ -569,28 +597,50 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
     return r.key === ownerOfStep(st) ? `L${r.line}` : `${r.key.slice(8)} L${r.line}`;
   };
   const failRow = rows.find((r) => r.bad);
+  /** Where a trial stopped, said whole: 「2 领奖 · L12」, or 「2 领奖 · 片段 open L3」. */
+  const stopPlace = (r: (typeof rows)[number]) => {
+    const i = task.steps.findIndex((x) => x.id === r.step);
+    const st = task.steps[i];
+    const name = st ? `${i + 1} ${str(st.name) ?? String(st.id)}` : `步 ${i + 1}`;
+    if (!r.key || !st) return name;
+    return r.key === ownerOfStep(st) ? `${name} · L${r.line}` : `${name} · 片段 ${r.key.slice(8)} L${r.line}`;
+  };
   const stopped = run && !busy && !completed(run);
   const halted = run && (run.facts.some((f) => f.type === "stopped") || run.detail === "在控制台停止");
   const now = busy && run?.state === "RUNNING" ? rows.at(-1) : undefined;
-  const [pill, tone]: [string, "ok" | "bad" | "info" | ""] = p.preparing ? ["服务器准备中（约 30 秒）", "info"]
-    : busy ? [!run ? "开始中…" : run.state === "SENT" ? "等手机…" : `试跑中${now ? ` · ${where(now)}` : ""}`, "info"]
+  // Where it is: 排队 · 前面 N 个 → 准备 → 已发到手机 → 运行中 → the result.
+  const phase = run?.phase ?? "";
+  const [pill, tone]: [string, "ok" | "bad" | "info" | ""] = busy && run && run.state === "SENT" && phase === "queued"
+      ? [run.queuePosition && run.queuePosition > 1 ? `排队 · 前面 ${run.queuePosition - 1} 个` : "排队 · 下一个", "info"]
+    : busy && (!run || (run.state === "SENT" && phase === "preparing")) ? ["准备中", "info"]
+    : busy && run?.state === "SENT" ? ["已发到手机", "info"]
+    : busy ? [`运行中${now ? ` · ${where(now)}` : ""}`, "info"]
     : !run ? ["还没试跑", ""] : completed(run) ? ["通过", "ok"] : halted ? ["已停止", ""]
-    : failRow ? [`停在 ${where(failRow)}`, "bad"] : ["没通过", "bad"];
+    : failRow ? [`停在 ${stopPlace(failRow)}`, "bad"] : ["没通过", "bad"];
   const secs = run ? Math.max(0, Math.round((run.updatedAt - run.createdAt) / 1000)) : 0;
   // The screen a failed trial stopped on comes a moment after the result: wait for it a while, then offer to ask again.
   const [late, setLate] = useState(false);
   const [asking, setAsking] = useState(false);
-  const waitingScreen = !!run && !busy && !completed(run) && !run.screen;
+  const [asked, setAsked] = useState<string | null>(null);
+  // Refused before it reached the phone (the server's compile): there is no screen to wait for.
+  const unsent = !!run && run.phase === "done" && !run.traces.length && !run.facts.length;
+  const waitingScreen = !!run && !busy && !completed(run) && !run.screen && !unsent;
   useEffect(() => {
-    setLate(false);
+    setLate(false); setAsked(null);
     if (!waitingScreen) return;
     const t = setTimeout(() => setLate(true), 15_000);
     return () => clearTimeout(t);
   }, [run?.id, waitingScreen]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** 重传画面: the phone sends the screen again; it arrives as a dev-run event (screen=true), read once more a little later too. */
   const askAgain = async () => {
     if (!run) return;
-    setAsking(true);
-    try { const x = await dev.run(run.id); p.onRefresh(x); if (!x.screen) setLate(true); } catch (error) { p.onMessage(failure(error)); }
+    setAsking(true); setAsked(null);
+    try {
+      await dev.resendScreen(run.id);
+      setAsked("已请手机重传");
+      const id = run.id;
+      setTimeout(() => { dev.run(id).then(p.onRefresh, () => undefined); }, 6000);
+    } catch (error) { setAsked(failure(error)); }
     setAsking(false);
   };
   // A 7×4 lineup alone makes 28 variants: show a few, the chosen one always among them, the rest behind ＋N.
@@ -631,8 +681,12 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
     </div>
     {scope === "step" && step && task.steps.indexOf(step) > 0 && !busy && <span className={w.muted}>本步会先跑第 1 步</span>}
     {p.error && <div role="alert" className={w.message}><Located text={p.error} body={p.body} /></div>}
+    {p.issues.length > 0 && <div className={`${w.card} ${s.rows}`}>
+      {p.issues.map((x, i) => <div key={i} className={s.problem}><IssueText issue={x} body={p.body} /></div>)}
+    </div>}
     {(run || p.preparing || busy) && <div className={s.line}>
-      {p.fromPhone && run && <Pill tone="soft">{busy ? "来自手机 · 进行中" : "来自手机"}</Pill>}
+      {run && (run.source === "phone" || (p.fromPhone && run.source !== "web")) ? <Pill tone="soft">{busy ? "来自手机 · 进行中" : "来自手机"}</Pill>
+        : run && p.fromPhone ? <Pill tone="soft">来自别的窗口</Pill> : null}
       {failRow?.key && !busy ? <button type="button" className={s.linkish} onClick={() => p.onOpen(failRow.key!, failRow.line)}><Pill tone={tone || undefined}>{pill}</Pill></button>
         : <Pill tone={tone || undefined}>{pill}</Pill>}
       {run && <span className={w.muted}>{secs} 秒{run.frameCount ? ` · ${run.frameCount} 帧` : ""}</span>}
@@ -643,14 +697,15 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
       </>}
     </div>}
     {stopped && p.why && <div className={s.why}>{p.why}</div>}
+    {stopped && !p.why && !halted && !p.issues.length && run?.detail && <div className={s.why}><Located text={run.detail} body={p.body} /></div>}
     {frame ? <>
       <FrameView frame={frame} />
       <span className={w.muted}>帧 {view! + 1}/{frames.length}{frame.lookMs > 0 ? ` · ${frame.lookMs}ms` : ""}{frame.matched.length ? ` · 命中 ${frame.matched.join("、")}` : ""}</span>
     </> : stopped && (stopPicture
       ? <FrameTools key={run!.id} picture={stopPicture} target={p.target} assets={p.backHere} makeSample={() => dev.keepRunScreen(run!.id)} />
-      : !halted && (late
-        ? <div className={s.line}><span className={w.muted}>停下画面没传上来</span>
-            <button type="button" className={`${w.btn} ${w.sm}`} disabled={asking} onClick={() => void askAgain()}>{asking ? "获取中…" : "重新获取"}</button></div>
+      : !halted && !unsent && (late
+        ? <div className={s.line}><span className={w.muted}>{asked ?? "停下画面没传上来"}</span>
+            <button type="button" className={`${w.btn} ${w.sm}`} disabled={asking} onClick={() => void askAgain()}>{asking ? "请求中…" : "重传画面"}</button></div>
         : <span className={w.muted}>停下画面：等手机传上来…</span>))}
     {rows.length > 0 && (
       <div className={`${w.card} ${s.rows}`}>
@@ -817,6 +872,14 @@ function RunCondition({ step, fields, editing, setEditing, onChange }: { step: O
   );
 }
 
+/** Where an issue is: the server's [CheckIssue.where], or for an older server read from its location. */
+function whereOf(x: CheckIssue): IssueWhere {
+  if (x.where) return x.where;
+  const loc = x.location;
+  const after = (word: string) => { const parts = loc.split("/"); const i = parts.indexOf(word); return i >= 0 ? parts[i + 1] : undefined; };
+  const line = /\/script\/line\/(\d+)$/.exec(loc)?.[1];
+  return { task: after("task") ?? null, step: after("step") ?? null, snippet: loc.startsWith("snippet/") ? loc.split("/")[1] : null, line: line ? Number(line) : null };
+}
 /** A server issue that only warns (it does not stop a publish). */
 const isWarning = (x: { severity?: string }) => x.severity === "warning" || x.severity === "warn";
 /** The server's issue narrowed to the part of the line the local check found for the same thing, when it did. */

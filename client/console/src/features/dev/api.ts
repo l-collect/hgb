@@ -11,9 +11,20 @@ export interface DraftView { target: string; baseVersion: string; revision: numb
 /** A task's newest finished trial; [digest] is the task's node digest when it ran. */
 export interface TrialRecord { task: string; step: string | null; device: string; state: string; detail: string; startedAt: number; endedAt: number; digest: string }
 export interface DriftWarning { state: string; kind: string; subject: string; observed: string; threshold: string; hits: number; lastSeenAt: number; source: string }
-export interface DraftPatch { op: "set" | "put" | "delete" | "insert"; path: string; value?: Json; field?: string; after?: string | null; expect?: string }
-export interface PatchConflict { path: string; reason: string }
-export interface PatchResult { revision: number; conflicts: PatchConflict[] }
+/**
+ * [base]: the node's digest when editing it began (shallowDigest for set, nodeDigest for put and delete); given, the
+ * server judges the conflict by it instead of [expect]. A second patch on the same node in one batch takes [expect].
+ */
+export interface DraftPatch { op: "set" | "put" | "delete" | "insert"; path: string; value?: Json; field?: string; after?: string | null; expect?: string; base?: string }
+/** [current]: the node as stored now (with its [digest] and [shallowDigest]); [mine]: what the patch wanted to write. */
+export interface PatchConflict { path: string; reason: string; current?: Json; digest?: string | null; shallowDigest?: string | null; mine?: Json }
+export interface PatchResult { revision: number; conflicts: PatchConflict[]; message?: string | null }
+/** What 从仓库同步 did: with keepMine, [kept] are the nodes left as the author had them, [conflicts] those the repository changed too. */
+export interface SyncResult { revision: number; kept?: string[]; conflicts?: { path: string; reason: string }[]; snapshot?: string | null }
+/** A copy of the draft kept before a sync or restore ([reason] sync | restore | manual). */
+export interface DraftSnapshot { id: string; target: string; revision: number; baseVersion: string; reason: string; at: number; tasks: number; snippets: number }
+/** One script checked ([task] with [step], or [snippet]); [target] + [revision] let a newer check make an older one give up. */
+export interface CheckRequest { bundle: Obj; task?: string; step?: string; snippet?: string; target?: string; revision?: number; measure?: boolean }
 export interface Capability { id: string; version: number; inputs: Record<string, string>; outputs: Record<string, string>; role: string; sendsInput: boolean; optional: string[] }
 /** Where an issue is, as the server reads its location: what the editor can jump to; [line] is the script's line (1-based). */
 export interface IssueWhere { target?: string | null; task?: string | null; step?: string | null; snippet?: string | null; line?: number | null }
@@ -43,10 +54,45 @@ export interface DevFrame {
   conditions: Json[]; referenceWidth: number; referenceHeight: number; frameWidth: number; frameHeight: number;
   tap?: number[] | null; tapRegion?: number[] | null; thumb?: string | null;
 }
+/**
+ * [phase]: queued (the server's queue, [queuePosition] 1 = next) → preparing (compiling) → sent (on its way to the phone)
+ * → running → done; older servers leave it empty. [source]: web | phone, whoever started it.
+ */
 export interface DevRun { id: string; kind: string; device: string; target: string; state: string; detail: string; createdAt: number; updatedAt: number; task?: string | null; step?: string | null; sample?: string | null; screen?: boolean; frameCount?: number; framesUploaded?: boolean; stopping?: boolean;
-  facts: { type: string; detail: string }[]; traces: DevTrace[] }
+  facts: { type: string; detail: string }[]; traces: DevTrace[]; source?: string; phase?: string; queuePosition?: number | null }
 export interface PublishResult { version: string; published: boolean; bundleBytes: number; uploads: { id: string; assetName: string; bytes: number }[];
   reused: { id: string; assetName: string; bytes: number; release?: string }[]; uploadBytes: number; commitSha?: string | null }
+
+/** A refused request with everything the server said ([data]: an IssuesError's issues, a 409's conflicts…). */
+export class DevFailure extends ApiFailure {
+  constructor(status: number, code: string, message: string, readonly data: Obj | null) { super(status, code, message); }
+}
+/** Like [api], keeping the whole refusal and taking a [signal] to give up; a request given up throws the AbortError as it is. */
+async function call<T>(path: string, options: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+  const { method = "GET", body, signal } = options;
+  const headers: Record<string, string> = { "X-YYS-Request": "1" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  let reply: Response;
+  try { reply = await fetch(apiUrl(path), { method, headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: "include", signal }); }
+  catch (error) { if (signal?.aborted) throw error; throw new ApiFailure(0, "network", "无法连接服务器，请检查网络"); }
+  const data = reply.status === 204 ? null : await reply.json().catch(() => null);
+  if (!reply.ok) throw new DevFailure(reply.status, data?.code ?? "error", data?.message ?? "操作失败，请稍后再试", data && typeof data === "object" ? data : null);
+  return data as T;
+}
+/** A fresh id for a run, so its events can be followed before the server answers. */
+export function runId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+/** The check's queue was full or took too long (503 queue_full / queue_timeout): worth one more try a little later. */
+export const queued = (error: unknown) => error instanceof ApiFailure && error.status === 503 && (error.code === "queue_full" || error.code === "queue_timeout" || error.code === "busy");
+/** A check given up for a newer one (409 superseded / stale, or aborted here): nothing to show. */
+export const dropped = (error: unknown) => (error instanceof DOMException && error.name === "AbortError")
+  || (error instanceof ApiFailure && error.status === 409 && (error.code === "superseded" || error.code === "stale"));
+/** The issues a refused trial (400 invalid_draft) listed, each with where it is. */
+export const issuesOf = (error: unknown): CheckIssue[] => error instanceof DevFailure && Array.isArray(error.data?.issues) ? error.data!.issues as unknown as CheckIssue[] : [];
 
 export const dev = {
   me: () => api<DevMe>("/api/dev/me"),
@@ -54,9 +100,21 @@ export const dev = {
   drafts: () => api<DraftSummary[]>("/api/dev/drafts"),
   draft: (target: string) => api<DraftView>(`/api/dev/drafts/${enc(target)}`),
   waits: (target: string) => api<CompiledWait[]>(`/api/dev/drafts/${enc(target)}/waits`),
-  importLatest: (target: string) => api<PatchResult>(`/api/dev/drafts/${enc(target)}/import-latest`, { method: "POST", body: {} }),
-  patch: (target: string, patches: DraftPatch[]) => api<PatchResult>(`/api/dev/drafts/${enc(target)}/patches`, { method: "POST", body: { source: "web", patches } }),
-  check: (body: Obj) => api<CheckResult>("/api/dev/check", { method: "POST", body }),
+  /** [keepMine]: tasks, snippets and the rest changed here stay as they are (a snapshot is kept first either way). */
+  importLatest: (target: string, keepMine = true) => api<SyncResult>(`/api/dev/drafts/${enc(target)}/import-latest`, { method: "POST", body: { keepMine } }),
+  snapshots: (target: string) => api<DraftSnapshot[]>(`/api/dev/drafts/${enc(target)}/snapshots`),
+  saveSnapshot: (target: string) => api<DraftSnapshot>(`/api/dev/drafts/${enc(target)}/snapshots`, { method: "POST", body: {} }),
+  restoreSnapshot: (target: string, id: string) => api<SyncResult>(`/api/dev/drafts/${enc(target)}/snapshots/${enc(id)}/restore`, { method: "POST", body: {} }),
+  /** A refused batch (409) comes back as its result, with each conflict's two sides. */
+  patch: async (target: string, patches: DraftPatch[]) => {
+    try { return await call<PatchResult>(`/api/dev/drafts/${enc(target)}/patches`, { method: "POST", body: { source: "web", patches } }); }
+    catch (error) {
+      if (error instanceof DevFailure && error.status === 409 && Array.isArray(error.data?.conflicts)) return error.data as unknown as PatchResult;
+      throw error;
+    }
+  },
+  /** A bare bundle checks everything; a [CheckRequest] one script. */
+  check: (body: Obj | CheckRequest, signal?: AbortSignal) => call<CheckResult>("/api/dev/check", { method: "POST", body, signal }),
   trials: (target: string) => api<TrialRecord[]>(`/api/dev/games/${enc(target)}/trials`),
   driftWarnings: (target: string) => api<DriftWarning[]>(`/api/dev/games/${enc(target)}/drift-warnings`),
   clearDriftWarnings: (target: string, item?: { state: string; kind: string; subject: string }) =>
@@ -83,14 +141,17 @@ export const dev = {
   cut: (target: string, cut: { id: string; sample: string; rect: number[]; confirmedTexts: string[]; reason?: string; maskBackground?: boolean; maskTolerance?: number }) =>
     api<Template>(`/api/dev/games/${enc(target)}/templates`, { method: "POST", body: cut }),
   deleteTemplate: (target: string, id: string) => api(`/api/dev/games/${enc(target)}/templates/${enc(id)}`, { method: "DELETE" }),
-  startRun: (start: { kind: string; target: string; device: string; task?: string; step?: string; sample?: string; states?: Json[]; name?: string; configuration?: Obj }) =>
-    api<DevRun>("/api/dev/runs", { method: "POST", body: start }),
+  /** [id]: made here ([runId]) to follow the run's events before this answers; a refused trial throws its issues ([issuesOf]). */
+  startRun: (start: { id?: string; kind: string; target: string; device: string; task?: string; step?: string; sample?: string; states?: Json[]; name?: string; configuration?: Obj }) =>
+    call<DevRun>("/api/dev/runs", { method: "POST", body: start }),
   run: (id: string) => api<DevRun>(`/api/dev/runs/${enc(id)}`),
   /** The author's recent commands, newest first (kept for a few hours, across restarts of the server). */
   runs: () => api<DevRun[]>("/api/dev/runs"),
   /** The screen an unfinished trial stopped on, kept with the run for a few hours. */
   runScreen: (id: string) => apiUrl(`/api/dev/runs/${enc(id)}/screen`),
   runFrames: (id: string) => api<DevFrame[]>(`/api/dev/runs/${enc(id)}/frames`),
+  /** Asks the phone to send the stopped-on screen again; it comes as a dev-run event (409 still_running / device_offline). */
+  resendScreen: (id: string) => api(`/api/dev/runs/${enc(id)}/screen/resend`, { method: "POST", body: {} }),
   keepRunScreen: (id: string) => api<Sample>(`/api/dev/runs/${enc(id)}/screen/keep`, { method: "POST" }),
   /** Tells the phone to update its App now (silently once it has updated itself before; otherwise it asks on the phone). */
   updateApp: (device: string) => api(`/api/dev/devices/${enc(device)}/app-update`, { method: "POST", body: {} }),
