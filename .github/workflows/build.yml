@@ -121,6 +121,8 @@ jobs:
           ref: ${{ needs.plan.outputs.ref }}
           token: ${{ secrets.HGB_PRIVATE_REPO_TOKEN }}
           persist-credentials: false
+          # public/ is this repository (design tokens, instance config), a submodule of the private one.
+          submodules: true
 
       - uses: actions/setup-java@v4
         with:
@@ -182,6 +184,14 @@ jobs:
           ref: ${{ needs.plan.outputs.ref }}
           token: ${{ secrets.HGB_PRIVATE_REPO_TOKEN }}
           persist-credentials: false
+          # public/ is this repository (design tokens, instance config), a submodule of the private one.
+          submodules: true
+
+      - name: Check the App theme was generated from public/design/tokens.json
+        run: |
+          node tools/tokens-kotlin.mjs
+          git diff --exit-code client/shared/src/commonMain/kotlin/io/github/yysassist/shared/theme/DesignTokens.kt \
+            || { echo "::error::DesignTokens.kt is stale: run node tools/tokens-kotlin.mjs after updating public/"; exit 1; }
 
       - name: Work out the version code
         id: version
