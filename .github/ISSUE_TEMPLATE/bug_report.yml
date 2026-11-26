@@ -1,0 +1,26 @@
+name: 问题反馈 / Bug 报告
+description: 反馈客户端安装、游戏界面识别或任务脚本运行中的问题
+title: "[反馈] "
+labels: ["bug"]
+body:
+  - type: input
+    id: app_version
+    attributes:
+      label: 客户端版本与任务包版本
+      placeholder: "例如：App v0.4.2 / 任务包 v2.1.0-demon-quiz"
+    validations:
+      required: true
+  - type: input
+    id: device_info
+    attributes:
+      label: 手机型号、分辨率与 Android 版本
+      placeholder: "例如：Samsung S21 (2400×1080) / Android 14 / 官服或渠道服"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题详细描述
+      placeholder: "请描述在运行哪个任务的哪一步时遇到了什么现象"
+    validations:
+      required: true
