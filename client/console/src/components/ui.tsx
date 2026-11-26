@@ -170,10 +170,19 @@ export function snapNumber(n: number, { min, max, step = 1 }: { min?: number; ma
  * allows them), committed on blur or Enter, snapped to the step; Escape puts back what was there; ↑↓ step,
  * PageUp/PageDown ten steps. An emptied number goes back to the value, or to none when [clearable].
  */
-export function Stepper({ value, onChange, label, min, max, step = 1, unit, disabled, clearable, small, placeholder }: {
-  value: number | undefined; onChange: (value: number | undefined) => void; label: string; min?: number; max?: number; step?: number; unit?: string;
+/** A number, or text that is one ("10", " 60 "), as a number; undefined for anything else (blank text too). */
+export function toNumber(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const n = Number(value.trim());
+  return Number.isFinite(n) ? n : undefined;
+}
+/** [value] may be numeric text (a number once saved as a choice, "10"): it is shown and stepped as that number. */
+export function Stepper({ value: given, onChange, label, min, max, step = 1, unit, disabled, clearable, small, placeholder }: {
+  value: number | string | null | undefined; onChange: (value: number | undefined) => void; label: string; min?: number; max?: number; step?: number; unit?: string;
   disabled?: boolean; clearable?: boolean; small?: boolean; placeholder?: string;
 }) {
+  const value = toNumber(given);
   const places = placesOf(step);
   const [draft, setDraft] = useState<string | null>(null);
   // The value a held button counts from: the parent's answer may not have come back between two ticks.

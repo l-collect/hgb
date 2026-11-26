@@ -189,7 +189,7 @@ function Preview({ field: x, value, onChange }: { field: Obj; value: Json | unde
     control = <div className={ui.chips}>{options.map((o) => { const on = cur.includes(o.value as Json);
       return <button key={str(o.value)} type="button" aria-pressed={on} className={join(ui.chip, on && ui.chipOn)}
         onClick={() => onChange(on ? cur.filter((v) => v !== o.value) : [...cur, o.value as Json])}>{str(o.label)}</button>; })}</div>;
-  } else if (x.widget === "NUMBER" || x.widget === "RANGE") control = <Stepper label={label} value={typeof value === "number" ? value : undefined}
+  } else if (x.widget === "NUMBER" || x.widget === "RANGE") control = <Stepper label={label} value={typeof value === "number" || typeof value === "string" ? value : undefined}
     min={typeof x.minimum === "number" ? x.minimum : undefined} max={typeof x.maximum === "number" ? x.maximum : undefined} step={typeof x.step === "number" && x.step > 0 ? x.step : 1} unit={str(x.unit)} clearable={x.required !== true} onChange={(v) => onChange(v ?? null)} />;
   else if (x.widget === "TIME") control = <TimePicker label={label} value={typeof value === "string" ? value : ""} clearable={x.required !== true} onChange={(v) => onChange(v || null)} />;
   else control = <input className={c.input} aria-label={label} value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} />;

@@ -12,7 +12,7 @@ import { clockText, cycleText, jobStatus, nextTime, PLAN_RUN_STATES, shortTime, 
 import { leave, Link, navigate, paths, useLeaveGuard } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
-import { formatSettingValue, resolveTaskDefaults, StepGroupedFieldsets, TaskStepsList } from "./Settings";
+import { formatSettingValue, numbersOf, resolveTaskDefaults, StepGroupedFieldsets, TaskStepsList } from "./Settings";
 import { DrawerBody, DrawerField, DrawerFoot, DrawerGrid, DrawerHead, drawerStyles } from "../../components/Drawer";
 import s from "./Accounts.module.css";
 
@@ -242,7 +242,9 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
       coopPartnerIds: form.coop === "custom" ? peerAccounts.filter((a) => form.partners.includes(a.id)).map((a) => a.id).slice(0, 2) : [],
       enabled, revision: plan?.revision ?? 0,
       // Only what the plan changed; a task left out follows the account.
-      taskConfigs: Object.fromEntries(Object.entries(form.configs).filter(([tid, values]) => form.tasks.includes(tid) && hasOwn(values))),
+      // Numbers kept as text by an older save ("10") go back as numbers.
+      taskConfigs: Object.fromEntries(Object.entries(form.configs).filter(([tid, values]) => form.tasks.includes(tid) && hasOwn(values))
+        .map(([tid, values]) => [tid, numbersOf(taskMap.get(tid)?.fieldsSchema, values)])),
     };
     saving.current = true;
     try {

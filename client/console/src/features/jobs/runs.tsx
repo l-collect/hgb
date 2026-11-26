@@ -189,10 +189,23 @@ export function useJobPages(query: JobQuery) {
   if (loaded) {
     const live = new Map(data.jobs.map((job) => [job.id, job]));
     const have = new Set(loaded.items.map((job) => job.id));
-    const oldest = loaded.nextBefore ? loaded.items[loaded.items.length - 1]?.createdAt ?? 0 : 0;
-    const fresh = data.jobs.filter((job) => !have.has(job.id) && job.createdAt >= oldest && matches(query, job));
+    // With more pages to come, a streamed job as old as the last one read belongs to (or ties with) the next page:
+    // it is left to that page, so 加载更多 does not move it.
+    const oldest = loaded.nextBefore ? loaded.items[loaded.items.length - 1]?.createdAt ?? 0 : null;
+    const fresh = data.jobs.filter((job) => !have.has(job.id) && (oldest === null || job.createdAt > oldest) && matches(query, job));
+    // The server orders by created, then its own sequence, then id. Jobs created in the same millisecond keep the order
+    // they came in (the pages', or the stream's); between a read and a streamed one, id decides, as on the server.
+    const pageAt = new Map(loaded.items.map((job, index) => [job.id, index]));
+    const freshAt = new Map(fresh.map((job, index) => [job.id, index]));
+    const tie = (a: Job, b: Job) => {
+      const pa = pageAt.get(a.id), pb = pageAt.get(b.id);
+      if (pa !== undefined && pb !== undefined) return pa - pb;
+      const fa = freshAt.get(a.id), fb = freshAt.get(b.id);
+      if (fa !== undefined && fb !== undefined) return fa - fb;
+      return a.id === b.id ? 0 : a.id < b.id ? 1 : -1;
+    };
     items = [...fresh, ...loaded.items.map((job) => live.get(job.id) ?? job)].filter((job) => matches(query, job))
-      .sort((a, b) => b.createdAt - a.createdAt);
+      .sort((a, b) => b.createdAt - a.createdAt || tie(a, b));
   }
   const more = loaded?.nextBefore ? async () => {
     const before = loaded.nextBefore!;

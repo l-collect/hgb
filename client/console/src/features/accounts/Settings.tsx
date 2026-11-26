@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiFailure, enc } from "../../api/client";
 import { settingVisible, type CloudTask, type ConfigView, type GameAccount, type GameTask, type SettingField, type TaskStepDetail } from "../../api/types";
-import { Button, Card, CardHead, Check, Chips, Choices, Empty, ErrorCard, FootBar, Loading, Pill, Row, Stepper, Switch, ui } from "../../components/ui";
+import { Button, Card, CardHead, Check, Chips, Choices, Empty, ErrorCard, FootBar, Loading, Pill, Row, Stepper, Switch, toNumber, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
 import { TimePicker } from "../../components/TimePicker";
 import { useAction } from "../../components/useAction";
@@ -36,14 +36,32 @@ export function formatSettingValue(def: SettingField | undefined, value: unknown
     return `${labels.join("、")}${arr.length > 3 ? ` 等${arr.length}项` : ""}`;
   }
   if (def.widget === "NUMBER" || def.widget === "RANGE") {
-    return def.unit ? `${String(value)} ${def.unit.trim()}` : String(value);
+    const text = String(toNumber(value) ?? value).trim();
+    if (!text) return null;
+    return def.unit ? `${text} ${def.unit.trim()}` : text;
   }
   return String(value) || null;
 }
 
+/**
+ * NUMBER/RANGE values given as numeric text become numbers ("10" → 10), blank text becomes unset; the rest is kept.
+ * Settings saved before a field became a number (the 阴阳师 rounds were once the choice "10") are read and saved this way.
+ */
+export function numbersOf(fields: SettingField[] | undefined, values: Record<string, unknown>): Record<string, unknown> {
+  const numeric = new Set((fields ?? []).filter((f) => f.widget === "NUMBER" || f.widget === "RANGE").map((f) => f.id));
+  if (!numeric.size) return values;
+  const out: Record<string, unknown> = {};
+  for (const [id, value] of Object.entries(values)) {
+    if (!numeric.has(id) || typeof value !== "string") { out[id] = value; continue; }
+    if (value.trim() === "") continue;
+    out[id] = toNumber(value) ?? value;
+  }
+  return out;
+}
+
 export function resolveTaskDefaults(detail: GameTask | undefined, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const schema = detail?.fieldsSchema ?? [];
-  const merged: Record<string, unknown> = { ...overrides };
+  const merged: Record<string, unknown> = numbersOf(schema, overrides);
   for (let pass = 0; pass < 2; pass++) {
     for (const f of schema) {
       if ((merged[f.id] === undefined || merged[f.id] === null) && f.recommended !== undefined && f.recommended !== null && settingVisible(f, merged)) {
@@ -263,7 +281,7 @@ export function SettingsForm({
       if (Object.prototype.hasOwnProperty.call(loaded.values, def.id)) start[def.id] = loaded.values[def.id];
       else if (def.recommended != null) start[def.id] = def.recommended;
     }
-    return start;
+    return numbersOf(loaded.fields, start);
   };
   const take = (loaded: ConfigView) => { revision.current = loaded.revision; setView(loaded); setValues(startOf(loaded)); setDirty(false); setNewer(null); };
 
@@ -292,7 +310,7 @@ export function SettingsForm({
   const persist = async () => {
     if (!view) return;
     const shown = new Set(view.fields.filter((def) => settingVisible(def, values)).map((def) => def.id));
-    const body = Object.fromEntries(Object.entries(values).filter(([id, value]) => value !== undefined && shown.has(id)));
+    const body = numbersOf(view.fields, Object.fromEntries(Object.entries(values).filter(([id, value]) => value !== undefined && shown.has(id))));
     try {
       const saved = await api<ConfigView>(path, { method: "PUT", body: { values: body, revision: view.revision } });
       revision.current = saved.revision; setView(saved); setDirty(false); setNewer(null);
@@ -491,7 +509,7 @@ function SettingInput({ def, value, change }: { def: SettingField; value: unknow
     case "SWITCH": return <Switch label={def.label} disabled={disabled} checked={value === true} onChange={change} />;
     case "NUMBER": case "RANGE":
       return <Stepper label={def.label} disabled={disabled} clearable={!def.required} min={def.minimum} max={def.maximum} step={def.step ?? 1} unit={def.unit?.trim() || undefined}
-        value={typeof value === "number" ? value : undefined} onChange={change} />;
+        value={toNumber(value)} onChange={change} />;
     case "TIME":
       return <TimePicker label={def.label} disabled={disabled} clearable={!def.required}
         value={typeof value === "string" ? value : ""} onChange={(next) => change(next || undefined)} />;
