@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef } from "react";
 import { api, ApiFailure, apiUrl } from "../api/client";
-import type { ConsoleSnapshot, Device, GameAccount, Game, Job, LoginReportEvent, Plan } from "../api/types";
+import type { Account, ConsoleSnapshot, Device, GameAccount, Game, Job, LoginReportEvent, Plan } from "../api/types";
 
 /** Everything the console shows, as the server's event stream last described it. */
 export interface ConsoleData {
@@ -68,11 +68,13 @@ export function awaitLoginReport(requestId: string, listen: (report: LoginReport
  * but not after an error status (a proxy's 502 during a deploy); then it is opened again here, a little later each time.
  * [signedOut] is called when the session turns out to be gone.
  */
-export function useConsoleStream(signedOut: () => void): { data: ConsoleData; connection: Connection; loaded: boolean; retry: () => void } {
+/** [accountChanged]: the server pushed a newer copy of the account (a code redeemed elsewhere, an admin changing the tier). */
+export function useConsoleStream(signedOut: () => void, accountChanged: (account: Account) => void = () => {}): { data: ConsoleData; connection: Connection; loaded: boolean; retry: () => void } {
   const [data, dispatch] = useReducer(reduce, empty);
   const [connection, setConnection] = useReducer((_: Connection, next: Connection) => next, "connecting" as Connection);
   const [loaded, setLoaded] = useReducer(() => true, false);
   const leave = useRef(signedOut); leave.current = signedOut;
+  const changed = useRef(accountChanged); changed.current = accountChanged;
   const again = useRef(() => {});
 
   useEffect(() => {
@@ -95,6 +97,7 @@ export function useConsoleStream(signedOut: () => void): { data: ConsoleData; co
       current.addEventListener("time-zone", (event) => dispatch({ type: "time-zone", timeZone: json(event).timeZone }));
       current.addEventListener("job-log", (event) => dispatch({ type: "job-log", id: json(event).id }));
       current.addEventListener("login-report", (event) => heardLoginReport(json(event)));
+      current.addEventListener("account", (event) => changed.current(json(event)));
       current.addEventListener("notice", () => dispatch({ type: "notices" }));
       current.addEventListener("rules", () => dispatch({ type: "notices" }));
       current.addEventListener("delivery", () => dispatch({ type: "notices" }));

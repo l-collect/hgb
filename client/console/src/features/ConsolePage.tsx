@@ -25,8 +25,9 @@ import { MeDesk } from "./me/MeDesk";
 import { useWide } from "../shell/useWidth";
 
 export function ConsolePage({ account, admin, signedOut }: { account: Account; admin: boolean; signedOut: () => void }) {
-  const { data, connection, loaded, retry } = useConsoleStream(signedOut);
   const [me, setMe] = useState(account);
+  // A tier change pushed by the server (redeemed in the App, set by an admin) clears or sets the locks here too.
+  const { data, connection, loaded, retry } = useConsoleStream(signedOut, setMe);
   useEffect(() => { setMe(account); }, [account]);
   // The first connection taking more than about five seconds: say so and offer 重试, instead of 读取中… for ever.
   const [slow, setSlow] = useState(false);
