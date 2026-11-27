@@ -90,6 +90,16 @@ export function shortTime(value: number | null | undefined): string {
   if (days === 1) return `昨天 ${hm}`;
   return at.getFullYear() === now.getFullYear() ? `${at.getMonth() + 1}月${at.getDate()}日 ${hm}` : `${at.getFullYear()}年${at.getMonth() + 1}月${at.getDate()}日`;
 }
+/** A time ahead in two parts: the clock, and the day when it is not today (「明天」, 「12月3日」); for the hero card. */
+export function nextParts(value: number): { day: string; hm: string } {
+  const at = new Date(value); const now = new Date();
+  const hm = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(at) - day(now)) / 86400000);
+  if (days <= 0) return { day: "", hm };
+  if (days === 1) return { day: "明天", hm };
+  return { day: at.getFullYear() === now.getFullYear() ? `${at.getMonth() + 1}月${at.getDate()}日` : `${at.getFullYear()}年${at.getMonth() + 1}月${at.getDate()}日`, hm };
+}
 /** A time ahead: today shows the clock, then 明天, then the date. */
 export function nextTime(value: number): string {
   const at = new Date(value); const now = new Date();

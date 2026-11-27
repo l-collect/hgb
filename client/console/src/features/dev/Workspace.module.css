@@ -1,7 +1,7 @@
 /* 工作区 (v7 V7WbEdit): steps | script | trial, filling the window under the top bar; each column scrolls on its own. */
 .layout { display: grid; grid-template-columns: 200px minmax(0, 1fr) 400px; flex: 1; height: 100%; min-height: 0; }
 @media (max-width: 1100px) {
-  .layout { grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: minmax(520px, calc(100vh - 52px)) auto; height: auto; }
+  .layout { grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: minmax(520px, 1fr) auto; height: 100%; }
   .aside { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--color-line); }
 }
 @media (max-width: 700px) {

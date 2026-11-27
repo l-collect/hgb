@@ -3,8 +3,7 @@ import { BREAKPOINT } from "../theme/tokens";
 
 /**
  * The desktop widths of the design (网页桌面 · 断点): from BREAKPOINT.wide (1024) lists and details sit side by side,
- * and from DESK (1440) a third column holds the context; 1024–1439 keep two columns, with 在哪跑 in the title row (at
- * 1280 the full sidebar and a third column together squeezed the middle until names broke a letter a line). Below wide
+ * and from DESK (1440) a third column holds the context; 1024–1439 keep two columns, with 在哪跑 in the title row. Below wide
  * the pages stay one screen at a time, as on the App. Media queries in CSS repeat these numbers, since they cannot read
  * variables.
  */
@@ -21,7 +20,5 @@ function useMedia(query: string): boolean {
 export const useWide = () => useMedia(`(min-width: ${BREAKPOINT.wide}px)`);
 /** ≥1440: the third column (context) beside the detail. */
 export const useDesk = () => useMedia(`(min-width: ${DESK}px)`);
-/** ≥1280: the full sidebar with names (below it the rail of icons). */
-export const useFull = () => useMedia("(min-width: 1280px)");
 /** <600: the top bar and the four tabs at the bottom. */
 export const useNarrow = () => useMedia(`(max-width: ${BREAKPOINT.medium - 1}px)`);

@@ -218,7 +218,7 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
             : <Button small variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>{adding ? "收起" : "＋ 添加账号"}</Button>}
         </span>
       } />
-      <NextPlanHero />
+      <NextPlanHero gameId={gameId} />
       {isOnmyoji && <RootBanner devices={data.devices} />}
       {isOnmyoji && <RootDevicesCard devices={data.devices} />}
       {!isOnmyoji && adding && <AddAccount games={data.games} gameId={gameId} done={() => setAdding(false)} />}

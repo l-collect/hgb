@@ -72,7 +72,7 @@ function Items({ wanted, onPick, alwaysOpen }: { wanted: boolean; onPick?: () =>
   );
 }
 
-/** The full sidebar's 开发 group, under the main navigation; folded or not is kept in this browser. */
+/** The workbench's 开发 group, in a column on its left from 1024; folded or not is kept in this browser. */
 export function DevGroup() {
   const [open, setOpen] = useState(() => read(OPEN_KEY, true));
   const toggle = () => { const next = !open; setOpen(next); write(OPEN_KEY, next); };
@@ -88,20 +88,9 @@ export function DevGroup() {
 export function DevMenu({ current }: { current: boolean }) {
   return (
     <Popover label="开发" plain role="dialog" trigger={
-      <span className={s.navIcon} data-current={current ? "true" : undefined} title="开发">{RAIL_ICON}</span>
-    }>
-      {(close) => <div className={s.devFloat}><Items wanted onPick={close} alwaysOpen /></div>}
-    </Popover>
-  );
-}
-
-/** The rail's 开发: one icon; the same items float beside it. */
-export function DevRail({ current }: { current: boolean }) {
-  return (
-    <Popover label="开发" plain side="right" role="dialog" trigger={
-      <span className={s.link} data-current={current ? "true" : undefined} title="开发">
-        <span className={s.linkIcon}>{RAIL_ICON}</span><span className={s.linkShort}>开发</span>
-      </span>
+      current
+        ? <span className={s.navPill} aria-current="page">{RAIL_ICON}<span>开发</span></span>
+        : <span className={s.navIcon} title="开发">{RAIL_ICON}</span>
     }>
       {(close) => <div className={s.devFloat}><Items wanted onPick={close} alwaysOpen /></div>}
     </Popover>

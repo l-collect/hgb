@@ -57,7 +57,7 @@ export function Shell({ section, connection, full, admin, stale, children }: { s
       {/* Medium and wide (UI v8): one row on top — the logo, the current section as a black pill with its name, the
           others as round icons, 开发 for developers, then 后台 and the connection. */}
       <header className={s.deskTop}>
-        <Link to={paths.tasks} className={s.navBrand}><Mark size={32} /><span className={s.brandName}>护肝宝</span></Link>
+        <Link to={paths.tasks} className={s.navBrand} aria-label="护肝宝"><Mark size={32} /><span className={s.brandName} aria-hidden="true">护肝宝</span></Link>
         <nav className={s.deskLinks} aria-label="主导航">
           {LINKS.map(([id, label, , to, svg]) => id === current ? (
             <Link key={id} to={to} className={s.navPill} aria-current="page">{svg}<span>{label}</span></Link>
@@ -67,7 +67,7 @@ export function Shell({ section, connection, full, admin, stale, children }: { s
           {developer && !narrow && <DevMenu current={section === "dev"} />}
         </nav>
         <span className={s.deskSpacer} />
-        {admin && <Link className={s.adminPill} to="/admin">{ADMIN_ICON}<span>后台管理</span></Link>}
+        {admin && <Link className={s.adminPill} to="/admin" aria-label="后台管理">{ADMIN_ICON}<span aria-hidden="true">后台管理</span></Link>}
         <div className={s.live} role="status" title={LIVE[connection]}>{live}</div>
       </header>
       <nav className={s.nav} aria-label="主导航">

@@ -40,6 +40,6 @@ writeFileSync(here("../client/docs/src/styles/tokens.css"), css);
 
 const { medium, wide } = tokens.breakpoint;
 writeFileSync(here("../client/console/src/theme/tokens.ts"), `${header}
-/** Window widths where the layout changes: below medium is narrow (bottom bar), from wide on the full sidebar. */
+/** Window widths where the layout changes: below medium is narrow (bottom bar), from wide lists and details side by side. */
 export const BREAKPOINT = { medium: ${medium}, wide: ${wide} } as const;
 `);

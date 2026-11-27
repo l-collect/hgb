@@ -18,7 +18,7 @@
 /* Medium and wide: the row on top. */
 .deskTop {
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); width: 100%; max-width: calc(1280px + 2 * var(--space-8)); margin: 0 auto;
-  padding: var(--space-5) var(--space-8) var(--space-1); position: relative; z-index: 3;
+  padding: var(--space-5) var(--space-8) var(--space-1);
 }
 .shell[data-wide="true"] .deskTop { max-width: none; }
 .shell[data-dev="true"] .deskTop { padding-bottom: var(--space-3); }
@@ -56,6 +56,7 @@
 }
 .linkIcon { display: grid; place-items: center; flex: none; }
 .linkLabel { display: none; }
+.linkShort { display: inline; }
 
 .body { flex: 1 1 auto; display: flex; width: 100%; min-height: 0; }
 /* The workbench's 开发 items in a column of their own, on its left. */
@@ -108,7 +109,7 @@
 .shell[data-dev="true"] .main { padding: 0; gap: 0; height: 100vh; box-sizing: border-box; overflow: hidden; }
 .devFrame { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--color-bg); color: var(--color-ink); }
 
-.shell[data-dev="true"] { height: 100vh; }
+.shell[data-dev="true"] { height: 100dvh; }
 .shell[data-dev="true"] .main { padding: 0; gap: 0; height: auto; min-height: 0; box-sizing: border-box; overflow: hidden; }
 .shell[data-wide="true"] .main { max-width: none; }
 
