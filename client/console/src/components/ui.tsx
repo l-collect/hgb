@@ -59,8 +59,8 @@ export function CategoryTile({ category, small }: { category?: string; small?: b
   );
 }
 /** A label that is not a state (a setting, a kind, 自建): a grey capsule with no dot, so it never reads as a status. */
-export function Tag({ className, children }: { className?: string; children: ReactNode }) {
-  return <span className={join(s.tag, className)}>{children}</span>;
+export function Tag({ className, title, children }: { className?: string; title?: string; children: ReactNode }) {
+  return <span className={join(s.tag, className)} title={title}>{children}</span>;
 }
 /** Result text in a list, coloured by tone. */
 export function Result({ tone = "", children }: { tone?: Tone; children: ReactNode }) {

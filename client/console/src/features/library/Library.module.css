@@ -19,7 +19,9 @@
 .taskLink:hover { color: inherit; background: color-mix(in srgb, var(--color-ink) 4%, transparent); }
 .titleLine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .titleText { font-weight: 600; }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
+/* A long summary never runs past its row (the narrow column beside a task's detail): it ends in …, whole on hover. */
+.chips > * { display: block; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .starMark { color: var(--color-ink); }
 .star { flex: none; width: 40px; height: 40px; border: 0; border-radius: var(--radius-md); background: none; font-size: 20px; line-height: 1; color: var(--color-control); padding: 0; border-radius: 50%; }
 .star[aria-pressed="true"] { color: var(--color-ink); }

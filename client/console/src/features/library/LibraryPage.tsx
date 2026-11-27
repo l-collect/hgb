@@ -81,7 +81,7 @@ export function RunTaskRows({
                 {favorites?.has(favKey(task.targetId, task.taskId)) && <span className={s.starMark} aria-label="常用">★</span>}
                 {state && <Pill tone={state[1]}>{state[0]}</Pill>}
               </span>
-              {chips.length > 0 && <span className={s.chips}>{chips.map((chip) => <Tag key={chip}>{chip}</Tag>)}</span>}
+              {chips.length > 0 && <span className={s.chips}>{chips.map((chip) => <Tag key={chip} title={chip}>{chip}</Tag>)}</span>}
               <Note note={notes[task.taskId]} />
             </Link>
             {locked ? <ProLockButton name={`切号运行${task.name}`} />
