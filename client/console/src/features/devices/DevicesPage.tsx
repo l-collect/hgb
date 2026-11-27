@@ -10,6 +10,7 @@ import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
 import { FILTER_STATES, lastFinished, PagedRuns } from "../jobs/runs";
 import { useWide } from "../../shell/useWidth";
 import { RunsDesk } from "./RunsDesk";
+import { RootLine } from "./root";
 import s from "./Devices.module.css";
 
 type RunFilter = "all" | "active" | "done" | "bad" | "waiting";
@@ -147,9 +148,10 @@ function DeviceCard({ device, accounts, jobs }: { device: Device; accounts: Game
   const queued = jobs.filter((job) => job.deviceId === device.id && job.state === "QUEUED").length;
   const after = [queued ? `排队 ${queued}` : null, last ? `上次 ${shortTime(last.updatedAt)} ${last.taskName} ${JOB_STATES[last.state][0]}` : null].filter(Boolean).join(" · ");
   return (
-    <Link to={paths.device(device.id)} className={s.deviceCard}>
+    // A card, not a link, so 怎么开 Root › can sit in it: the name's link covers the card.
+    <article className={s.deviceCard} aria-labelledby={`device-${device.id}`}>
       <div className={s.cardHead}>
-        <span className={s.cardName}><b>{device.name}</b><span>{platformName(device.platform)}</span></span>
+        <span className={s.cardName}><Link to={paths.device(device.id)} className={s.cardLink}><b id={`device-${device.id}`}>{device.name}</b></Link><span>{platformName(device.platform)}</span></span>
         <Pill tone={tone} dot>{status}</Pill>
       </div>
       <div className={running && device.online ? `${s.now} ${s.nowBusy}` : s.now}>
@@ -157,6 +159,7 @@ function DeviceCard({ device, accounts, jobs }: { device: Device; accounts: Game
         {waiting && waitNext(waiting) && <p className={s.waitNext}>{waitNext(waiting)}</p>}
       </div>
       {after && <Muted>{after}</Muted>}
-    </Link>
+      <RootLine device={device} />
+    </article>
   );
 }

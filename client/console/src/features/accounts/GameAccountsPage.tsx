@@ -12,6 +12,7 @@ import { useConsole } from "../../state/context";
 import { Drawer } from "../../components/Drawer";
 import { goPro, ProCount, ProLimitButton, ProLockRow, usePro } from "../../components/Pro";
 import { InstallAppCard } from "../onboarding/Onboarding";
+import { RootBanner, RootDevicesCard, rootDocs } from "../devices/root";
 import { useWide } from "../../shell/useWidth";
 import { PlanList } from "./Plans";
 import { PlanTable } from "./PlansDesk";
@@ -216,6 +217,8 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
             : <Button small variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>{adding ? "收起" : "＋ 添加账号"}</Button>}
         </span>
       } />
+      {isOnmyoji && <RootBanner devices={data.devices} />}
+      {isOnmyoji && <RootDevicesCard devices={data.devices} />}
       {!isOnmyoji && adding && <AddAccount games={data.games} gameId={gameId} done={() => setAdding(false)} />}
       {noDevice && <InstallAppCard />}
       {data.games.length === 0 ? !noDevice && <Card><Empty>先连一台设备</Empty></Card> : (
@@ -227,8 +230,23 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
               {isOnmyoji ? (
                 <div className={s.emptyHow}>
                   <b>还没有阴阳师账号</b>
-                  <Muted>在手机护肝宝里进游戏，会自动识别角色</Muted>
-                  {!noDevice && <span className={s.emptyAlt}><span className={ui.tiny}>手机已 Root？</span><ReportDeviceLoginAction gameId={gameId} label="读取设备登录" link /></span>}
+                  {(() => {
+                    // As the App says it: some phone has Root → the account comes in on its own; only ones without → Root first; none reporting → as before.
+                    const reported = data.devices.filter((device) => device.root);
+                    if (reported.some((device) => device.root?.state === "ready")) return (
+                      <>
+                        <Muted>打开游戏登录就会自动出现</Muted>
+                        <span className={s.emptyAlt}><ReportDeviceLoginAction gameId={gameId} label="读取设备登录" link /></span>
+                      </>
+                    );
+                    if (reported.length) return (
+                      <>
+                        <Muted>需要 Root 才能自动识别角色</Muted>
+                        <span className={s.emptyAlt}><a className={ui.link} href={rootDocs()}>怎么开 Root ›</a></span>
+                      </>
+                    );
+                    return <Muted>在手机护肝宝里进游戏，会自动识别角色</Muted>;
+                  })()}
                 </div>
               ) : <Empty>还没有账号</Empty>}
             </Card>

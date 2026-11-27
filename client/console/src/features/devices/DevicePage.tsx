@@ -11,6 +11,7 @@ import { RunTaskRows } from "../library/LibraryPage";
 import { AccountMenu, useAppAccounts } from "./appAccounts";
 import { AppDetail } from "./AppPage";
 import { deviceStatus } from "./DevicesPage";
+import { RootLine } from "./root";
 import s from "./Devices.module.css";
 
 /** A phone goes straight to its first app; a device with several app instances (Windows) lists them first. */
@@ -38,6 +39,7 @@ function DeviceDetail({ device }: { device: Device }) {
         <Pill tone={tone} dot>{status}</Pill>
         <Muted as="span">{platformName(device.platform)} · {device.apps.length} 个应用</Muted>
       </header>
+      <RootLine device={device} className={s.under} />
       {device.apps.length === 0 ? <Card><Empty>{device.online ? "这台设备上还没有护肝宝支持的游戏。" : "设备离线，上线后会显示它的应用。"}</Empty></Card> : (
         <>
           {gameIds.length > 1 && <Segments role="radiogroup" label="游戏" value={gameId} onChange={setChosen}

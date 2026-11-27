@@ -1,7 +1,7 @@
 ---
 title: Windows：安装和多开
 description: Windows 版在计划中，会支持游戏多开。
-sidebar: { order: 4 }
+sidebar: { order: 5 }
 ---
 
 :::note[计划中]

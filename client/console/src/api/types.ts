@@ -41,7 +41,14 @@ export interface Device {
   currentTask: string | null; queued: number; tasks: CloudTask[]; apps: App[]; concurrency: number;
   /** The App version it reported since the server started; "" until then. */
   appVersion?: string;
+  /** Root as the phone last found it; null (or missing) from an App too old to report it, which shows nothing. */
+  root?: DeviceRoot | null;
 }
+/**
+ * none: no su; denied: su there but refused or timed out; ready: su gives uid 0. [manager] names the Root tool when the
+ * phone knows it (Magisk, KernelSU …); [emulator] when it runs in one.
+ */
+export interface DeviceRoot { state: "none" | "denied" | "ready"; manager?: string | null; emulator?: boolean }
 export type JobState = "WAITING" | "QUEUED" | "LEASED" | "RUNNING" | "COMPLETED" | "FAILED" | "UNKNOWN" | "CANCELLED" | "SKIPPED";
 export interface Job {
   id: string; deviceId: string | null; deviceName: string | null; targetId: string; taskId: string; taskName: string;

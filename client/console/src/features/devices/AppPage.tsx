@@ -10,6 +10,7 @@ import { NotFound } from "../ConsolePage";
 import { appJobs, JobControls, RunRows, switchNote, useRunNow } from "../jobs/runs";
 import { RunTaskRows } from "../library/LibraryPage";
 import { AccountMenu, Observed, useAppAccounts } from "./appAccounts";
+import { RootLine } from "./root";
 import s from "./Devices.module.css";
 
 /** 应用详情 at its own address; a phone's device page shows this for its first app. */
@@ -50,6 +51,7 @@ export function AppDetail({ device, app, base }: { device: Device; app: App; bas
         <AccountMenu app={app} accounts={accounts} current={current} fallback={fallback} setCurrent={setCurrent} setDefault={setDefault} />
         <span className={s.end}><Pill tone={tone} dot>{status}</Pill></span>
       </header>
+      <RootLine device={device} className={s.under} />
       {waiting && <WaitBanner waiting={waiting} />}
       <Observed app={app} accounts={accounts} />
       <PageTabs label="应用内容" value={tab} tabs={[["run", "运行", base], ["runs", "战报", `${base}?tab=runs`]]} />
