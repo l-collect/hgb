@@ -1,0 +1,54 @@
+client/console/src/features/devices/DevicePage.tsx
+  s_75c1698e4ed8c2::t_f01dc1f814c204 14,42
+client/docs/src/content/docs/start/android.md
+  s_75c1698e4ed8c2::t_76c55b68370b3b 11
+client/console/src/features/accounts/GameAccountsPage.tsx
+  s_75c1698e4ed8c2::t_079b72664b7171 15,220-221,233-249
+client/docs/src/content/docs/start/root.md
+  s_75c1698e4ed8c2::t_1b243df90a1ed5 7-8
+  s_75c1698e4ed8c2::t_5f5fbd2b784b34 1-6,9-43,46-52
+  s_75c1698e4ed8c2::t_079b72664b7171 44-45
+client/docs/src/content/docs/start/what.md
+  s_75c1698e4ed8c2::t_76c55b68370b3b 7
+client/docs/src/content/docs/use/accounts.md
+  s_75c1698e4ed8c2::t_76c55b68370b3b 13
+client/console/src/api/types.ts
+  s_75c1698e4ed8c2::t_cfe683a63943c9 44-45,47-51
+client/console/src/features/devices/root.tsx
+  s_75c1698e4ed8c2::t_4dc7413ac1af49 3-4,52-64,66-82
+  s_75c1698e4ed8c2::t_41d36561997df3 65
+  s_75c1698e4ed8c2::t_0dc018530b7052 39
+  s_75c1698e4ed8c2::t_079b72664b7171 15,40-43,47
+  s_75c1698e4ed8c2::t_a06c7beeb0bac7 1-2,5-14,16-38,44-46,48-51,83-84
+client/console/src/features/devices/Root.module.css
+  s_75c1698e4ed8c2::t_079b72664b7171 16,25-26
+  s_75c1698e4ed8c2::t_0dc018530b7052 1-13
+  s_75c1698e4ed8c2::t_4dc7413ac1af49 14-15,17-24,27-30
+client/console/src/features/devices/AppPage.tsx
+  s_75c1698e4ed8c2::t_f01dc1f814c204 13,54
+client/docs/src/content/docs/start/windows.md
+  s_75c1698e4ed8c2::t_76c55b68370b3b 4
+client/docs/src/content/docs/games/onmyoji.md
+  s_75c1698e4ed8c2::t_76c55b68370b3b 38
+client/console/src/features/devices/Devices.module.css
+  s_75c1698e4ed8c2::t_f01dc1f814c204 17-22
+client/console/src/features/devices/DevicesPage.tsx
+  s_75c1698e4ed8c2::t_f01dc1f814c204 13,151,162-163
+  s_75c1698e4ed8c2::t_079b72664b7171 152,154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5f42e25d3b7d34afb20ed161391e8e70423ccce",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "unknown"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
