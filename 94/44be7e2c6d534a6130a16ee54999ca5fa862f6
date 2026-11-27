@@ -1,0 +1,50 @@
+client/console/src/features/dev/Workspace.tsx
+  s_f7a95e158ed057::t_7ebb3f1afbc2bc 39-43
+client/console/src/features/dev/Game.module.css
+  s_f7a95e158ed057::t_0ccbed5094a88b 11
+client/console/src/features/dev/Config.module.css
+  s_f7a95e158ed057::t_b6018d715edd55 34-35
+client/console/src/features/dev/Workspace.module.css
+  s_f7a95e158ed057::t_b6018d715edd55 3,7
+client/console/src/features/admin/Admin.module.css
+  s_f7a95e158ed057::t_7ebb3f1afbc2bc 27-28
+client/console/src/features/dev/DevWorkbench.tsx
+  s_f7a95e158ed057::t_7ebb3f1afbc2bc 280
+client/console/src/features/dev/Publish.module.css
+  s_f7a95e158ed057::t_0ccbed5094a88b 30
+client/console/src/features/jobs/Jobs.module.css
+  s_f7a95e158ed057::t_b6018d715edd55 18,64
+client/console/src/features/devices/RunsDesk.tsx
+  s_f7a95e158ed057::t_7ebb3f1afbc2bc 37
+client/console/src/features/dev/States.module.css
+  s_f7a95e158ed057::t_b6018d715edd55 36
+client/console/src/features/accounts/Accounts.module.css
+  s_f7a95e158ed057::t_7ebb3f1afbc2bc 97-98
+client/console/src/features/library/TasksDesk.tsx
+  s_f7a95e158ed057::t_7ebb3f1afbc2bc 24,67
+client/console/src/shell/Shell.tsx
+  s_f7a95e158ed057::t_7ebb3f1afbc2bc 33
+client/console/src/features/dev/Samples.module.css
+  s_f7a95e158ed057::t_b6018d715edd55 67-68
+client/console/src/features/dev/Wb.module.css
+  s_f7a95e158ed057::t_b6018d715edd55 62
+  s_f7a95e158ed057::t_0ccbed5094a88b 68,115
+client/console/src/shell/Shell.module.css
+  s_f7a95e158ed057::t_b6018d715edd55 110-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9444be7e2c6d534a6130a16ee54999ca5fa862f6",
+  "prompts": {},
+  "sessions": {
+    "s_f7a95e158ed057": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4027ed01-4d57-4a0f-b74b-45d11e560dcb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
