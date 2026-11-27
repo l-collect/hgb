@@ -36,8 +36,11 @@ import s from "./Workspace.module.css";
 const ScriptEditor = lazy(() => import("./ScriptEditor").then((m) => ({ default: m.ScriptEditor })));
 // 画板 (React Flow) too, only when it is opened.
 const Canvas = lazy(() => import("./canvas/Canvas"));
-/** 画板 needs a window this wide; narrower, the script shows (and ?view=canvas stays, to come back when it widens). */
-const CANVAS_MIN = 1280;
+/**
+ * 画板 needs the workbench's wide tier: a content area of 1024 (spec 七·4) beside the 240 group column. Narrower, the
+ * script shows (and ?view=canvas stays, to come back when it widens).
+ */
+const CANVAS_MIN = 1024 + 240;
 function useWide(min: number) {
   const [wide, setWide] = useState(() => typeof window === "undefined" || window.innerWidth >= min);
   useEffect(() => { const on = () => setWide(window.innerWidth >= min); window.addEventListener("resize", on); return () => window.removeEventListener("resize", on); }, [min]);

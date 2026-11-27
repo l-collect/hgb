@@ -33,4 +33,4 @@
 .err { color: var(--color-danger); text-align: left !important; }
 .foot { display: flex; align-items: center; gap: 10px; }
 .linkish { border: 0; background: none; padding: 0; color: var(--color-ink); font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; white-space: nowrap; }
-@media (max-width: 767px) { .layout { grid-template-columns: minmax(0, 1fr); } .rows { max-height: 260px; } }
+@container dev (max-width: 599px) { .layout { grid-template-columns: minmax(0, 1fr); } .rows { max-height: 260px; } }

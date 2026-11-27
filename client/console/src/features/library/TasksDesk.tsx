@@ -21,7 +21,7 @@ type Place = { value: string; label: string; device: Device; app: App };
 
 /**
  * 任务与日常 on a wide window (网页桌面 · 任务): the tasks on the left, the chosen one's settings in the middle, and from
- * 1280 where it runs, its runs and the plans that use it on the right (below the settings when narrower). Choosing a
+ * 1440 (DESK) where it runs, its runs and the plans that use it on the right (below the settings when narrower). Choosing a
  * task changes the address, so each task can still be opened directly.
  */
 export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string }) {
@@ -64,7 +64,7 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
     account: <TextSelect label="账号" value={account?.id ?? ""} onChange={pickAccount} options={accountOptions} />,
     place: <TextSelect label="设备" value={place ? where : ""} onChange={(next) => { setWhere(next); run.clear(); }} options={placeOptions} />,
   } : null;
-  // Two columns (1024–1279): 在哪跑 sits in the title row, where it is seen before ▶; with three it heads the right column.
+  // Two columns (1024–1439): 在哪跑 sits in the title row, where it is seen before ▶; with three it heads the right column.
   const lockRow = switchLocked ? <ProLockRow compact name="自动切号" label={`切到${account?.name ?? "这个账号"}跑`} /> : null;
   const context = task && <TaskContext game={game} task={task} account={account} plans={data.plans} pickers={desk ? pickers : null} lock={lockRow} />;
 

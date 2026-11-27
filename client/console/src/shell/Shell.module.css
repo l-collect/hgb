@@ -107,7 +107,8 @@
 
 /* The workbench fills the main area: its own bar on top, its parts below, no padding of the frame's. */
 .shell[data-dev="true"] .main { padding: 0; gap: 0; height: 100vh; box-sizing: border-box; overflow: hidden; }
-.devFrame { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--color-bg); color: var(--color-ink); }
+/* The workbench pages switch tiers on this frame's width (spec 七·4: 600 / 1024), since from 1024 the window also holds the 240 group column. */
+.devFrame { container: dev / inline-size; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--color-bg); color: var(--color-ink); }
 
 .shell[data-dev="true"] { height: 100dvh; }
 .shell[data-dev="true"] .main { padding: 0; gap: 0; height: auto; min-height: 0; box-sizing: border-box; overflow: hidden; }

@@ -34,7 +34,7 @@ const COLUMNS: [Column, string][] = [["task", "任务"], ["account", "账号"], 
 
 /**
  * 战报 on a wide window (网页桌面 · 设备与战报): a table sorted by any column, filtered by state, time and account. From
- * 1280 a row opens beside the table (its address keeps ?job=); narrower it opens the run's own page.
+ * 1440 (DESK) a row opens beside the table (its address keeps ?job=); narrower it opens the run's own page.
  */
 export function RunsDesk() {
   const { data } = useConsole();

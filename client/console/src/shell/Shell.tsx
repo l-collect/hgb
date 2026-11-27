@@ -30,7 +30,7 @@ const PRIMARY = new Set<string>([paths.tasks, "/library", paths.accounts, paths.
  * The frame every console page sits in (UI v8): from 600 one row on top with the logo and the sections as pills (the
  * current one black with its name, the others round icons), below 600 a top bar with the section's name and the four
  * tabs floating at the bottom.
- * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1200. [admin] adds
+ * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1280. [admin] adds
  * 后台管理 (/admin, with a frame of its own) beside the connection. A page that fails while drawing shows 「这页出错了」
  * in its place; the frame and its navigation stay. A developer also gets 开发, a round icon whose items float under it
  * (nothing on the bottom bar); in the workbench (section dev) those items also stand in a column on its left from 1024,

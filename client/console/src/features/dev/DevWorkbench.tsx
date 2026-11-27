@@ -277,7 +277,7 @@ export function DevWorkbench() {
   useEffect(() => () => publishWorkbench(null), []);
   const developer = useDeveloper();
   const narrow = useNarrow();
-  // The rail (600–1279) floats the same items from its 开发 icon; narrow has no group at all.
+  // The rail (600–1023) floats the same items from its 开发 icon; narrow has no group at all.
   const tabs = !developer || narrow;
 
   // Old addresses (样本库, 游戏设置, 状态库) land on the part that has them now.

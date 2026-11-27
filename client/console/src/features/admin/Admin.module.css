@@ -24,7 +24,8 @@
 .gateTitle { font-size: 16px; }
 .gateActions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
 
-@media (max-width: 767px) {
+/* Narrow and medium (spec 七·4): the navigation runs along the top. */
+@media (max-width: 1023px) {
   .shell { flex-direction: column; }
   .nav { position: static; height: auto; flex: none; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: 0; border-bottom: 1px solid var(--color-line); }
   .brand { padding: 0 var(--space-2); }

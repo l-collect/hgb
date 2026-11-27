@@ -27,7 +27,7 @@ input.input { min-height: var(--control-height); box-sizing: border-box; }
 .confirm { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .confirm > :first-child { flex: 1; margin-top: 0; white-space: nowrap; }
 .done { padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-sunken); color: var(--color-ok); font-weight: 600; }
-@media (max-width: 1023px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+@container dev (max-width: 1023px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 /* 发布's last question: which version, what changed, who gets it. */
 .dialog { width: min(440px, calc(100vw - 32px)); box-sizing: border-box; padding: 18px 20px; border: 1px solid var(--color-line); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--color-ink); }
 .dialog[open] { display: flex; flex-direction: column; gap: 12px; }
