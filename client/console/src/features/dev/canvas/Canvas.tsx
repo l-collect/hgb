@@ -133,14 +133,19 @@ function Inner(p: CanvasProps) {
 
   // The stop card beside the card the trial stopped on.
   const failNode = run?.failure && !run.busy ? built.nodes.find((n) => (n.data as StmtData).line === stmtAt(shown, run.failure!.line)?.line) : undefined;
+  // The stop card's buttons call the newest handlers given; the card is redrawn only when what it shows changes
+  // (whether 再试一次 shows among it), not on every render of the page around the board.
+  const onScriptNow = useRef(p.onScript); onScriptNow.current = p.onScript;
+  const onRetryNow = useRef(p.onRetry); onRetryNow.current = p.onRetry;
+  const canRetry = !!p.onRetry;
   const allNodes = useMemo((): Node[] => {
     if (!failNode || !run?.failure) return built.nodes;
     let x = failNode.position.x, y = failNode.position.y; let at = failNode.parentId;
     while (at) { const par = built.nodes.find((n) => n.id === at); if (!par) break; x += par.position.x; y += par.position.y; at = par.parentId; }
     const line = run.failure.line;
-    const data: StopData = { src: run.screen, why: run.failure.text, line, onScript: () => p.onScript(line), onRetry: p.onRetry };
+    const data: StopData = { src: run.screen, why: run.failure.text, line, onScript: () => onScriptNow.current(line), onRetry: canRetry ? () => onRetryNow.current?.() : null };
     return [...built.nodes, { id: "stopcard", type: "stop", position: { x, y: y + (failNode.height ?? 80) + 28 }, data, width: 260, style: { width: 260 }, draggable: false, selectable: false, zIndex: 20 }];
-  }, [built, failNode, run, p]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [built, failNode, run, canRetry]);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(allNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   useEffect(() => { setNodes(allNodes); }, [allNodes, setNodes]);

@@ -6,13 +6,13 @@ import { ToScript } from "./canvas/ToScript";
 import { ConfigTab } from "./config/ConfigTab";
 import { useTestValues } from "./config/testValues";
 import { Link, navigate, usePath, useQuery } from "../../router";
-import { dev, dropped, follow, issuesOf, queued, runId, sampleNow, type CheckIssue, type CheckRequest, type DevRun, type DevTrace, type IssueWhere, type Obj, type Sample, type Template } from "./api";
+import { dev, dropped, follow, issuesOf, queued, runId, sampleNow, type CheckIssue, type CheckRequest, type DevRun, type DevTrace, type IssueWhere, type Json, type Obj, type Sample, type Template } from "./api";
 import { devPaths, EDIT_CONFLICT, failure, PATCH_CONFLICT, useDev, type Edit } from "./context";
 import { startedHere, useDevRun } from "./events";
 import { FrameTools } from "./FrameTools";
 import { FrameView, useFrames } from "./FrameReplay";
 import { uniqueId } from "./HomePage";
-import { isObj, nodeDigest, objs, snippets, str, target, tasks, usedSnippets, type TaskDef } from "./model";
+import { arr, isObj, nodeDigest, objs, snippets, str, target, tasks, usedSnippets, type TaskDef } from "./model";
 import { NameButton } from "./NameButton";
 import { openDirect, type DirectScreen } from "./direct";
 import { completed, failedAt, failReason, insertAfter, missBoxes, ok, ownerOfStep, placeOf, running, snippetKey, testValues, type OwnerKey } from "./runs";
@@ -84,6 +84,20 @@ const tally = (xs: { warning: boolean }[]) => { const e = xs.filter((x) => !x.wa
 const helpInsert = ([sayIt, , insert]: [string, string, string?]) => insert ?? sayIt.replace(/\s*\[[^\]]*\]/g, "").split(" / ")[0];
 
 /**
+ * [body] with the script of the step or snippet [key] names (as Workspace's ownerIn finds it: the first of that id)
+ * set to [text]: new objects only on the way down to it (as config/uses withEdits), the rest the draft's own.
+ */
+function withScript(body: Obj, key: OwnerKey, taskId: string | undefined, text: string): Obj {
+  const replaceFirst = (list: Json | undefined, hit: (o: Obj) => boolean, change: (o: Obj) => Obj): Json[] => {
+    let done = false;
+    return arr(list).map((x) => { if (done || !isObj(x) || !hit(x)) return x; done = true; return change(x); });
+  };
+  if (!key.startsWith("step:")) return { ...body, snippets: replaceFirst(body.snippets, (sn) => sn.id === key.slice(8), (sn) => ({ ...sn, script: text })) };
+  return { ...body, tasks: replaceFirst(body.tasks, (t) => (str(t.id) ?? "") === taskId,
+    (t) => ({ ...t, steps: replaceFirst(t.steps, (st) => st.id === key.slice(5), (st) => ({ ...st, script: text })) })) };
+}
+
+/**
  * 工作区: a task (or, with no task, the snippet library) as one page — steps on the left, the script in the middle,
  * and on the right the trial: where it stopped and why, the screen it stopped on with the tools to make the missing
  * condition there, and every line it ran. The loop write → check → run → fix → run again stays on this page.
@@ -94,16 +108,34 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const path = usePath();
   const query = useQuery();
   const body = draft?.body;
-  const task = body && taskId ? tasks(body).find((t) => t.id === taskId) : undefined;
-  const allSnippets = body ? snippets(body) : [];
+  // Worked out once per draft read: a new object each render would redo all that is made from them.
+  const taskList = useMemo(() => body ? tasks(body) : [], [body]);
+  const task = useMemo(() => taskId ? taskList.find((t) => t.id === taskId) : undefined, [taskList, taskId]);
+  const allSnippets = useMemo(() => body ? snippets(body) : [], [body]);
+  // Which snippets each task calls (directly or through others), and so in how many tasks each snippet is used.
+  const usedBy = useMemo(() => {
+    const counts = new Map<string, number>();
+    const byTask = new Map<TaskDef, string[]>();
+    if (body) for (const t of taskList) {
+      const used = usedSnippets(body, t.raw);
+      byTask.set(t, used);
+      for (const id of used) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return { counts, byTask };
+  }, [body, taskList]);
+  const taskUsed = useMemo(() => task ? usedBy.byTask.get(task) ?? [] : [], [task, usedBy]);
+  const uses = useCallback((id: string) => usedBy.counts.get(id) ?? 0, [usedBy]);
   const step = task && !snippetId ? task.steps.find((st) => st.id === stepId) ?? task.steps[0] : undefined;
   const snippetOnly = !taskId ? snippetId ?? String(allSnippets[0]?.id ?? "") : undefined;
   const key: OwnerKey | null = snippetId ? snippetKey(snippetId) : step ? ownerOfStep(step) : snippetOnly ? snippetKey(snippetOnly) : null;
 
   /** The step or snippet a key names, in [b]. */
-  const ownerIn = useCallback((b: Obj, k: OwnerKey): Obj | undefined => k.startsWith("step:")
-    ? tasks(b).find((t) => t.id === taskId)?.steps.find((st) => st.id === k.slice(5))
-    : snippets(b).find((sn) => sn.id === k.slice(8)), [taskId]);
+  const ownerIn = useCallback((b: Obj, k: OwnerKey): Obj | undefined => {
+    if (!k.startsWith("step:")) return snippets(b).find((sn) => sn.id === k.slice(8));
+    // As tasks(b).find(…).steps, without making every task's view to look at one.
+    const t = objs(b.tasks).find((x) => (str(x.id) ?? "") === taskId);
+    return t ? objs(t.steps).find((st) => st.id === k.slice(5)) : undefined;
+  }, [taskId]);
   const savedOf = useCallback((k: OwnerKey) => body ? str(ownerIn(body, k)?.script) : undefined, [body, ownerIn]);
 
   // Unsaved text, per script, kept in the workbench while moving around it. A step's key is the task's own.
@@ -260,16 +292,15 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     let live = true; setChecking(true);
     const control = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const copy = JSON.parse(JSON.stringify(body)) as Obj;
-    const mine = ownerIn(copy, key);
-    if (!mine) { setChecking(false); return; }
-    mine.script = text;
+    if (!ownerIn(body, key)) { setChecking(false); return; }
     const snippetId = key.startsWith("snippet:") ? key.slice(8) : null;
-    const request: CheckRequest = { bundle: copy, target: game, revision: draft?.revision, measure: false,
+    // Made when it is sent, not on every key: the draft with this script's text, only the way down to it copied.
+    let request: CheckRequest | null = null;
+    const requestNow = (): CheckRequest => request = request ?? { bundle: withScript(body, key, taskId, text), target: game, revision: draft?.revision, measure: false,
       ...(snippetId ? { snippet: snippetId } : { task: taskId, step: key.slice(5) }) };
     const send = async (again: boolean) => {
       try {
-        const result = await dev.check(request, control.signal);
+        const result = await dev.check(requestNow(), control.signal);
         if (!live) return;
         // This script's, then what it touches: its snippets, and for a snippet the steps that call it.
         const all = [...result.issues.map((x) => ({ ...x, warning: isWarning(x) })), ...(result.warnings ?? []).map((x) => ({ ...x, warning: true }))];
@@ -532,7 +563,6 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   };
   openKeyRef.current = (k) => openKey(k);
   const lines = (k: OwnerKey) => (savedOf(k) ?? "").split("\n").length;
-  const uses = (id: string) => tasks(body).filter((t) => usedSnippets(body, t.raw).includes(id)).length;
   const label = !key ? "" : step && !snippetId ? str(step.name) ?? String(step.id) : key.startsWith("snippet:") ? key.slice(8) : key.slice(5);
   const stepNo = step && !snippetId ? task!.steps.indexOf(step) + 1 : null;
   // Where a made condition goes: the failed line when it is in this script, else the cursor's.
@@ -582,8 +612,8 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
               if (problem) say(problem); else navigate(devPaths.step(task.id, sid) + (wantCanvas ? "?view=canvas" : ""));
             }} />
         </> : <div className={s.taskHead}><b>片段</b><span className={w.muted}>{allSnippets.length} 个</span></div>}
-        <SnippetList ids={task ? usedSnippets(body, task.raw) : allSnippets.map((sn) => String(sn.id))} title={task ? "用到的片段" : ""} current={key} dirty={dirtyKeys} uses={uses} onOpen={openKey} />
-        {task && <AllSnippets ids={allSnippets.map((sn) => String(sn.id)).filter((id) => !usedSnippets(body, task.raw).includes(id))} current={key} uses={uses} onOpen={openKey} />}
+        <SnippetList ids={task ? taskUsed : allSnippets.map((sn) => String(sn.id))} title={task ? "用到的片段" : ""} current={key} dirty={dirtyKeys} uses={uses} onOpen={openKey} />
+        {task && <AllSnippets ids={allSnippets.map((sn) => String(sn.id)).filter((id) => !taskUsed.includes(id))} current={key} uses={uses} onOpen={openKey} />}
       </nav>
 
       <section aria-label="脚本" className={s.editor}>

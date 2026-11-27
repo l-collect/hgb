@@ -13,7 +13,7 @@ import { PatchConflicts } from "./PatchConflicts";
 import { onDevRun, useDevRunStream } from "./events";
 import { ConfigPage } from "./ConfigPage";
 import { HomePage, standing } from "./HomePage";
-import { nodeDigest, snippets, str, target, tasks, trialDigest } from "./model";
+import { nodeDigest, readDigest, snippets, str, target, tasks, trialDigester } from "./model";
 import { PagesPage } from "./PagesPage";
 import { PublishPage } from "./PublishPage";
 import { SamplesPage } from "./SamplesPage";
@@ -162,8 +162,10 @@ export function DevWorkbench() {
       ...snippets(draft.body).map((sn) => [`snippets/${String(sn.id)}`, sn] as const),
       ...(game && target(draft.body, game) ? [[`targets/${game}`, target(draft.body, game)!] as const] : []),
     ];
-    Promise.all([...nodes.map(async ([key, node]) => [key, await nodeDigest(node)] as const),
-      ...tasks(draft.body).map(async (t) => [`trial/${t.id}`, await trialDigest(draft.body, t.raw)] as const)])
+    // By node of this read (kept with the node); the pages, graph and snippets a trial runs worked out once, not per task.
+    const trial = trialDigester(draft.body);
+    Promise.all([...nodes.map(async ([key, node]) => [key, await readDigest(node)] as const),
+      ...tasks(draft.body).map(async (t) => [`trial/${t.id}`, await trial(t.raw)] as const)])
       .then((pairs) => { if (live) setDigests(Object.fromEntries(pairs)); });
     return () => { live = false; };
   }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps

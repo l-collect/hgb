@@ -12,6 +12,8 @@ import w from "./Wb.module.css";
 import p from "./Publish.module.css";
 
 const RETRYING = " · 稍后自动重试";
+/** The least time between two dry runs of the publish (ms). */
+const PREVIEW_GAP = 3000;
 interface Check { ok: boolean | null; title: string; link?: [string, string] }
 interface Change { key: string; name: string; summary: string; diffs: { label: string; lines: DiffLine[] }[] }
 
@@ -44,7 +46,8 @@ export function PublishPage() {
     const control = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
     // The server's queue full: its words, and one more try a little later.
-    const send = (again: boolean) => dev.check(draft.body, control.signal).then((c) => { if (live) { setCheck(c); setCheckFailed(!c.ok); } }, (e) => {
+    // Sizes are not shown here: measure:false spares the server writing out the whole expanded bundle to count it.
+    const send = (again: boolean) => dev.check({ bundle: draft.body, measure: false }, control.signal).then((c) => { if (live) { setCheck(c); setCheckFailed(!c.ok); } }, (e) => {
       if (!live) return;
       if (queued(e) && !again) { setCheckText(`${failure(e)}${RETRYING}`); retry = setTimeout(() => { setCheckText(null); void send(true); }, 8000); return; }
       setCheckText(failure(e));
@@ -63,14 +66,21 @@ export function PublishPage() {
   const isVersion = (v: string) => /^v?[0-9]+(\.[0-9]+){1,3}$/.test(v.trim());
   const validVersion = isVersion(version);
   const previewed = isVersion(settled);
+  // A dry run costs the server a whole publish but the upload: one per draft revision (and version), and at least
+  // PREVIEW_GAP apart while saves come quickly one after another.
+  const previewAt = useRef(0);
+  const previewDone = useRef<{ key: string; plan: PublishResult } | null>(null);
   useEffect(() => {
     if (!draft || !maintainer || !previewed) { setPlan(null); return; }
+    const key = JSON.stringify([game, draft.revision, settled.trim(), minApp]);
+    if (previewDone.current?.key === key) { setPlan(previewDone.current.plan); return; }
     let live = true;
     const t = setTimeout(() => {
       setPlan(null);
+      previewAt.current = Date.now();
       dev.publish(game, { version: settled.trim(), changelog: changelog.trim() || "预演", minApp, dryRun: true })
-        .then((r) => { if (live) setPlan(r); }, (e) => { if (live) setPlan(failure(e)); });
-    }, 300);
+        .then((r) => { previewDone.current = { key, plan: r }; if (live) setPlan(r); }, (e) => { if (live) setPlan(failure(e)); });
+    }, Math.max(300, previewAt.current + PREVIEW_GAP - Date.now()));
     return () => { live = false; clearTimeout(t); };
   }, [draft?.revision, settled, maintainer, minApp, game]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!draft) return null;

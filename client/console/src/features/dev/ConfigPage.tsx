@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, navigate, useQuery } from "../../router";
 import { dev, type SettingUse } from "./api";
 import { devPaths, useDev } from "./context";
@@ -17,7 +17,7 @@ export { findUses } from "./config/UsesView";
 
 /** 配置项 (v7 V7WbConfig): fields | the selected one's whole form (config/ConfigForm) | what the player sees, with the test values a trial takes. */
 export function ConfigPage({ id }: { id: string }) {
-  const { draft } = useDev();
+  const { draft, game } = useDev();
   const [pick, setPick] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   // ?field=<id> (the editor's 去配置项) opens on that setting.
@@ -29,12 +29,17 @@ export function ConfigPage({ id }: { id: string }) {
   // answers, or when it is an older server: then the scripts are read here.
   const [served, setServed] = useState<SettingUse[] | null>(null);
   const body = draft?.body;
+  // The whole draft goes up (the task's scripts read snippets and the game's library), so once per revision of it,
+  // a moment after the last change; the same revision read back again keeps the answer it has.
+  const asked = useRef<string | null>(null);
   useEffect(() => {
-    setServed(null);
-    if (!body || !task) return;
+    const key = JSON.stringify([game, draft?.revision, id]);
+    if (!body || !task) { asked.current = null; setServed(null); return; }
+    if (asked.current === key) return;
+    asked.current = null; setServed(null);
     let live = true;
     const timer = setTimeout(() => {
-      dev.check({ bundle: body, task: id, measure: false }).then((r) => { if (live) setServed(r.settingUses ?? null); }, () => undefined);
+      dev.check({ bundle: body, task: id, measure: false }).then((r) => { if (live) { asked.current = key; setServed(r.settingUses ?? null); } }, () => undefined);
     }, 400);
     return () => { live = false; clearTimeout(timer); };
   }, [body, id]); // eslint-disable-line react-hooks/exhaustive-deps

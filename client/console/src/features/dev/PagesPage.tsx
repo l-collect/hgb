@@ -37,10 +37,15 @@ export function PagesPage() {
   // Which table the running pass fills: a wait's table belongs to the state picked, so changing it drops that pass.
   const passInto = useRef<"pages" | "wait" | null>(null);
   useEffect(() => { dev.samples(game).then(setSamples, () => {}); }, [game]);
+  // The server's waits are the draft's, compiled: once per revision (a draft read back again at the same one keeps them).
+  const waitsOf = useRef<string | null>(null);
   useEffect(() => {
     if (!draft) return;
+    const key = JSON.stringify([game, draft.revision]);
+    if (waitsOf.current === key) return;
+    waitsOf.current = null;
     let live = true;
-    dev.waits(game).then((x) => { if (live) setServerWaits(x); }, () => { if (live) setServerWaits(null); });
+    dev.waits(game).then((x) => { if (live) { waitsOf.current = key; setServerWaits(x); } }, () => { if (live) setServerWaits(null); });
     return () => { live = false; };
   }, [game, draft?.revision]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

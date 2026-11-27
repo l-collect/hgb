@@ -14,6 +14,35 @@ async function digestOf(value: Json): Promise<string> {
 }
 /** What put and delete expect: the node with everything under it. */
 export const nodeDigest = (node: Json) => digestOf(node);
+
+// A draft as read back is never changed in place (an edit is a patch, then a new read): what was worked out for a
+// node of it is kept by the node itself, and goes with it.
+const canonicals = new WeakMap<object, string>();
+const digests = new WeakMap<object, Promise<string>>();
+/** JSON.stringify(sorted(node)), kept by node. */
+function canonical(node: Json): string {
+  if (!node || typeof node !== "object") return JSON.stringify(sorted(node));
+  let text = canonicals.get(node);
+  if (text === undefined) { text = JSON.stringify(sorted(node)); canonicals.set(node, text); }
+  return text;
+}
+async function hashOf(text: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
+/** [nodeDigest] of a node of a draft as read back (never changed in place), worked out once per node. */
+export function readDigest(node: Obj): Promise<string> {
+  let digest = digests.get(node);
+  if (!digest) { digest = hashOf(canonical(node)); digests.set(node, digest); }
+  return digest;
+}
+/** An object's JSON with its keys in the order JSON.stringify(sorted(...)) puts them, each value's text given. */
+function objectText(parts: [string, string][]): string {
+  const byKey = new Map(parts);
+  // sorted() sorts the keys, but an object lists integer-like keys first whatever their order: the same object says which.
+  const order = Object.keys(Object.fromEntries(parts.map(([k]) => k).sort().map((k) => [k, 0])));
+  return `{${order.map((k) => `${JSON.stringify(k)}:${byKey.get(k)}`).join(",")}}`;
+}
 /** What set expects: the node's own fields, without lists and without the nodes under it. */
 export const shallowDigest = (node: Obj) =>
   digestOf(Object.fromEntries(Object.entries(node).filter(([, v]) => !Array.isArray(v) && !(v && typeof v === "object" && idOf(v as Obj) !== null))));
@@ -137,20 +166,39 @@ export function usedSnippets(body: Obj, root: Json): string[] {
 
 /** What a trial of [task] ran: the task, its game's interruption pages, page graph, and the snippets they call, by id (DevRuns.trialDigest). */
 export function trialDigest(body: Obj, task: Obj): Promise<string> {
+  return trialDigester(body)(task);
+}
+/**
+ * [trialDigest] for many tasks of one draft as read back: the snippets, each game's pages and graph and what they call
+ * are worked out once, not once per task. The digest is the same: the text hashed is built from the same parts.
+ */
+export function trialDigester(body: Obj): (task: Obj) => Promise<string> {
   const all = new Map(snippets(body).map((sn) => [String(sn.id), sn]));
-  const game = target(body, String(task.targetId ?? ""));
-  const lib = isObj(game?.library) ? game!.library : {};
-  const pages = arr(lib.interruptions);
-  const graph: Obj = {};
-  for (const k of ["pages", "routes", "fallbacks"] as const) {
-    const list = arr(lib[k]);
-    if (list.length) graph[k] = list;
-  }
-  const used = Object.fromEntries(usedSnippets(body, [task, pages, graph]).filter((id) => all.has(id)).map((id) => [id, all.get(id)!]));
-  const payload: Obj = { task, snippets: used };
-  if (pages.length) payload.interruptions = pages;
-  if (Object.keys(graph).length) payload.graph = graph;
-  return nodeDigest(payload);
+  const games = new Map<string, { pages: Json[]; graph: Obj; used: string[]; pagesText: string; graphText: string }>();
+  const gameOf = (id: string) => {
+    let g = games.get(id);
+    if (g) return g;
+    const game = target(body, id);
+    const lib = isObj(game?.library) ? game!.library : {};
+    const pages = arr(lib.interruptions);
+    const graph: Obj = {};
+    for (const k of ["pages", "routes", "fallbacks"] as const) {
+      const list = arr(lib[k]);
+      if (list.length) graph[k] = list;
+    }
+    // What the task calls and what the pages and graph call: one scan each, the same ids together (reached from either).
+    g = { pages, graph, used: usedSnippets(body, [pages, graph]), pagesText: pages.length ? canonical(pages) : "", graphText: Object.keys(graph).length ? canonical(graph) : "" };
+    games.set(id, g);
+    return g;
+  };
+  return (task) => {
+    const g = gameOf(String(task.targetId ?? ""));
+    const ids = [...new Set([...usedSnippets(body, task), ...g.used])].filter((id) => all.has(id));
+    const parts: [string, string][] = [["task", canonical(task)], ["snippets", objectText(ids.map((id) => [id, canonical(all.get(id)!)]))]];
+    if (g.pages.length) parts.push(["interruptions", g.pagesText]);
+    if (Object.keys(g.graph).length) parts.push(["graph", g.graphText]);
+    return hashOf(objectText(parts));
+  };
 }
 
 /** Ids of the nodes directly under [node], through id-less objects (Drafts.kt Nodes.children): what an insert must not repeat. */
