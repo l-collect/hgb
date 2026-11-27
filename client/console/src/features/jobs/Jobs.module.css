@@ -20,7 +20,7 @@
 .jobHeader { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
 .jobTitle { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .titleLine { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.titleLine h1 { font-size: var(--text-title); font-weight: 700; line-height: 1.3; }
+.titleLine h1 { font-size: var(--text-title); font-weight: 500; line-height: 1.3; }
 .jobActions { display: flex; flex-wrap: wrap; gap: 10px; }
 .jobActions > * { min-height: var(--control-height-lg); }
 .big { padding: 0 var(--space-4); border-radius: var(--radius-lg); }
@@ -32,20 +32,20 @@
 .why_neutral { background: var(--color-neutral-bg); border-color: var(--color-line); color: var(--color-ink); }
 .why_neutral svg { color: var(--color-muted); }
 .why div { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-.why h2 { font-size: var(--text-lg); font-weight: 700; }
+.why h2 { font-size: var(--text-lg); font-weight: 600; }
 .stepsSection { display: flex; flex-direction: column; gap: 10px; }
 .stepsHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.stepsHead h2 { font-size: var(--text-xl); font-weight: 600; }
+.stepsHead h2 { font-size: var(--text-xl); font-weight: 500; }
 .steps { padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.step { border-radius: var(--radius-xl); background: var(--color-surface); border: 1px solid var(--color-line); min-width: 0; }
+.step { border-radius: var(--radius-xl); background: var(--color-surface); border: 0; box-shadow: var(--shadow-sm); min-width: 0; }
 .stepStop_warn { border-color: var(--color-warn-line); }
 .stepStop_bad { border-color: var(--color-danger-line); }
 .stepStop_neutral, .stepStop_info, .stepStop_ok { border-color: var(--color-line); }
 .stepButton { width: 100%; display: flex; align-items: center; gap: var(--space-3); min-height: 64px; padding: var(--space-3) var(--space-4); border: 0; background: transparent; text-align: left; color: inherit; border-radius: var(--radius-xl); }
-.stepMark { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-sm); font-weight: 700; }
-.mark_done { background: var(--color-ok-bg); color: var(--color-ok); }
-.mark_stop_warn { background: var(--color-warn-bg); color: var(--color-warn); }
-.mark_stop_bad { background: var(--color-danger-bg); color: var(--color-danger); }
+.stepMark { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-sm); font-weight: 600; }
+.mark_done { background: var(--color-ok); color: var(--color-on-status); }
+.mark_stop_warn { background: var(--color-warn); color: var(--color-on-status); }
+.mark_stop_bad { background: var(--color-danger); color: var(--color-on-status); }
 .mark_stop_neutral, .mark_stop_info, .mark_stop_ok { background: var(--color-neutral-bg); color: var(--color-neutral); }
 .mark_running { background: var(--color-run-bg); color: var(--color-run); }
 .mark_plain { background: var(--color-neutral-bg); color: var(--color-neutral); }

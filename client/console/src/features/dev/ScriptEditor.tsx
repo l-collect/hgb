@@ -559,7 +559,7 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
             ".cm-run-failed": { background: "var(--color-danger-bg)" },
             ".cm-run-why": { margin: "2px 0 6px", padding: "6px 10px", borderRadius: "8px", background: "var(--color-danger-bg)", color: "var(--color-danger)", fontFamily: "inherit", whiteSpace: "pre-wrap", lineHeight: "20px" },
             ".cm-template-tip": { display: "flex", gap: "10px", alignItems: "center", padding: "8px", maxWidth: "320px" },
-            ".cm-template-tip img": { maxWidth: "96px", maxHeight: "72px", borderRadius: "6px", background: "#2e2a3a", imageRendering: "pixelated" },
+            ".cm-template-tip img": { maxWidth: "96px", maxHeight: "72px", borderRadius: "6px", background: "#2A2522", imageRendering: "pixelated" },
             ".cm-template-tip div": { display: "flex", flexDirection: "column", fontSize: "12px" },
             ".cm-setting-tip": { display: "flex", flexDirection: "column", gap: "3px", padding: "10px 12px", background: "var(--color-surface)", color: "var(--color-ink)", borderRadius: "10px", maxWidth: "360px", fontSize: "12px", lineHeight: "18px", fontFamily: "var(--font-body)" },
             ".cm-setting-head": { display: "flex", gap: "8px", alignItems: "baseline" },

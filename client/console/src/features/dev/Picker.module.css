@@ -14,7 +14,7 @@
 .mine img { max-width: 84px; max-height: 72px; image-rendering: pixelated; }
 .caption { font-size: 11px; color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .screen { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.canvas { position: relative; line-height: 0; border-radius: var(--radius-md); overflow: hidden; background: #2e2a3a; user-select: none; touch-action: none; }
+.canvas { position: relative; line-height: 0; border-radius: var(--radius-md); overflow: hidden; background: #2A2522; user-select: none; touch-action: none; }
 .canvas[data-draw] { cursor: crosshair; }
 .canvas img { width: 100%; display: block; pointer-events: none; }
 .box { position: absolute; border: 2px solid var(--color-warn); border-radius: 3px; box-sizing: border-box; pointer-events: none; }
@@ -35,7 +35,7 @@
 .newCell { justify-content: center; border-style: dashed; color: var(--color-muted); }
 .newCell b { font-size: 18px; line-height: 40px; }
 /* 在画面上选 */
-.viewport { max-height: 300px; overflow: auto; border-radius: var(--radius-md); background: #2e2a3a; }
+.viewport { max-height: 300px; overflow: auto; border-radius: var(--radius-md); background: #2A2522; }
 .stage { position: relative; line-height: 0; user-select: none; touch-action: none; cursor: crosshair; min-width: 100%; }
 .stage img { width: 100%; display: block; pointer-events: none; }
 .rect { position: absolute; border: 2px solid var(--color-primary); background: color-mix(in srgb, var(--color-primary) 16%, transparent); box-sizing: border-box; cursor: move; }

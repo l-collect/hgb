@@ -9,7 +9,7 @@
 .top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--color-bg) 92%, transparent); border-bottom: 1px solid var(--color-line);
   backdrop-filter: blur(8px); }
 .bar { max-width: 1200px; margin: 0 auto; padding: 0 24px; min-height: 64px; display: flex; align-items: center; gap: 24px; }
-.home .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; color: var(--color-ink); text-decoration: none; font-size: 19px; font-weight: 900; letter-spacing: 1px; }
+.home .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; color: var(--color-ink); text-decoration: none; font-size: 19px; font-weight: 600; letter-spacing: 1px; }
 .home .brand:hover { color: var(--color-ink); }
 .home .brandSmall { font-size: 15px; margin-right: 8px; }
 .home .docs { color: var(--color-nav); text-decoration: none; font-weight: 500; }
@@ -20,13 +20,13 @@
 .foot .row { padding-top: 28px; padding-bottom: 28px; }
 
 .legal { padding-top: 48px; padding-bottom: 64px; max-width: 800px; display: flex; flex-direction: column; gap: 16px; }
-.legal h1 { font-size: clamp(28px, 4vw, 36px); font-weight: 900; }
-.legal h2 { margin-top: 16px; font-size: 22px; font-weight: 800; }
+.legal h1 { font-size: clamp(28px, 4vw, 36px); font-weight: 600; }
+.legal h2 { margin-top: 16px; font-size: 22px; font-weight: 600; }
 .legal ul { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 6px; }
 .tableWrap { overflow-x: auto; }
 .legal table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .legal th, .legal td { padding: 8px 10px; border-bottom: 1px solid var(--color-line); text-align: left; vertical-align: top; }
-.legal th { font-weight: 700; background: var(--color-surface); }
+.legal th { font-weight: 600; background: var(--color-surface); }
 
 @media (max-width: 599px) {
   .bar { gap: 12px; padding: 0 16px; }

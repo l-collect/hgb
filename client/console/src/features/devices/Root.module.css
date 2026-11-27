@@ -9,7 +9,7 @@
   background: var(--color-warn-soft); border: 1px solid var(--color-warn-line);
 }
 .bannerText { flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.bannerTitle { color: var(--color-warn); font-weight: 700; }
+.bannerTitle { color: var(--color-warn); font-weight: 600; }
 .bannerNote { color: var(--color-warn-ink); font-size: var(--text-sm); }
 
 /* 设备 / 在线 / Root / 说明 as a table; on a narrow window each device wraps onto one line, with no header. */
@@ -18,7 +18,7 @@
 .tr > * { min-width: 0; }
 .th { color: var(--color-muted); font-size: var(--text-sm); font-weight: 600; }
 .name { overflow-wrap: anywhere; }
-.nameLink { color: var(--color-ink); font-weight: 700; text-decoration: none; }
+.nameLink { color: var(--color-ink); font-weight: 600; text-decoration: none; }
 .nameLink:hover { color: var(--color-primary); }
 .note { font-size: var(--text-sm); overflow-wrap: anywhere; }
 @media (max-width: 599px) {

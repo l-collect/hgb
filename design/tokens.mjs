@@ -8,9 +8,12 @@ const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 const tokens = JSON.parse(readFileSync(here("./tokens.json"), "utf8"));
 const header = "/* Generated from design/tokens.json by design/tokens.mjs. Do not edit. */\n";
 
-const scale = ["font", "text", "space", "radius", "control"]
+const scale = ["font", "text", "space", "radius", "control", "motion"]
   .flatMap((group) => Object.entries(tokens[group]).filter(([key]) => !key.startsWith("$")).map(([key, value]) => `  --${group}-${key}: ${value};`));
-const colors = (mode) => Object.entries(tokens.color).map(([key, value]) => `  --color-${key}: ${value[mode]};`);
+const colors = (mode) => [
+  ...Object.entries(tokens.color).map(([key, value]) => `  --color-${key}: ${value[mode]};`),
+  ...Object.entries(tokens.shadow).filter(([key]) => !key.startsWith("$")).map(([key, value]) => `  --shadow-${key}: ${value[mode]};`),
+];
 const dark = colors("dark").map((line) => `  ${line}`).join("\n");
 
 const css = `${header}

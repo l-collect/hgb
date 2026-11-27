@@ -42,7 +42,7 @@
 .topSync [data-tone="bad"] { color: var(--color-danger); font-weight: 600; }
 .topPublish { min-height: 32px; padding: 0 12px; position: relative; gap: 6px; }
 .topBad { width: 7px; height: 7px; border-radius: 50%; background: var(--color-danger); flex: none; display: inline-block; }
-.dotOnline { width: 7px; height: 7px; border-radius: 50%; background: var(--color-faint, #A9A7B5); flex: none; display: inline-block; }
+.dotOnline { width: 7px; height: 7px; border-radius: 50%; background: var(--color-faint, #ABA39D); flex: none; display: inline-block; }
 .dotOnline[data-on] { background: var(--color-ok); }
 .menu { display: flex; flex-direction: column; padding: 4px 0; min-width: 200px; }
 .menuItem { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 0; background: transparent; color: var(--color-ink); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; white-space: nowrap; }

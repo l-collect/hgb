@@ -29,7 +29,7 @@
 .table thead th { background: var(--color-surface-head); color: var(--color-muted); font-weight: 600; font-size: var(--text-xs); }
 .table tbody th { font-weight: 500; }
 .table tr:last-child td, .table tr:last-child th { border-bottom: 0; }
-.dash { color: var(--color-faint, #a9a7b5); }
+.dash { color: var(--color-faint, #ABA39D); }
 .err { color: var(--color-danger); text-align: left !important; }
 .foot { display: flex; align-items: center; gap: 10px; }
 .linkish { border: 0; background: none; padding: 0; color: var(--color-nav-current); font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer; white-space: nowrap; }
