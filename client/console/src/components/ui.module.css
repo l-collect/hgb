@@ -32,6 +32,10 @@
 .field input, .field select { min-height: var(--control-height); color: var(--color-ink); font-size: var(--text-md); width: 100%; }
 .inline { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-muted); flex-wrap: wrap; }
 .inline select, .inline input { color: var(--color-ink); font-size: var(--text-md); }
+.password { position: relative; display: block; }
+.password input { padding-right: 52px; }
+.reveal { position: absolute; top: 0; right: 0; bottom: 0; padding: 0 12px; border: 0; background: none; color: var(--color-primary); font-size: var(--text-sm); cursor: pointer; }
+.reveal:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; border-radius: 6px; }
 .check { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; }
 .choices { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
 

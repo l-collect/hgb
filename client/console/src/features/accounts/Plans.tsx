@@ -364,7 +364,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
     )}
   </Card>
   );
-  const deviceChecks = data.devices.map((device) => <Check key={device.id} label={device.name} checked={form.where.includes(device.id)} onChange={(on) => change({ where: flip(form.where, device.id, on) })} />);
+  const deviceChecks = data.devices.map((device) => <Check key={device.id} label={device.online ? device.name : `${device.name}（离线）`} checked={form.where.includes(device.id)} onChange={(on) => change({ where: flip(form.where, device.id, on) })} />);
   // 跟随账号 / 不带, or up to two partners of the plan's own; taking the last one off follows the account again.
   const pickPartner = (id: string, on: boolean) => {
     const now = form.coop === "custom" ? form.partners : [];
@@ -406,7 +406,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
             <DrawerField label="名称"><input type="text" required maxLength={40} aria-label="名称" value={form.name} onChange={(e) => change({ name: e.target.value })} /></DrawerField>
             <DrawerField label="时间"><TimePicker required label="时间" value={form.at} onChange={(at) => change({ at })} /></DrawerField>
             <DrawerField label="浮动"><Stepper label="浮动" unit="±分" min={0} max={60} value={form.jitter} onChange={(jitter) => change({ jitter })} /></DrawerField>
-            <DrawerField label="补跑窗口"><Stepper label="补跑窗口" unit="分" min={1} max={1440} step={5} value={form.late} onChange={(late) => change({ late })} /></DrawerField>
+            <DrawerField label="补跑窗口"><Stepper label="补跑窗口" unit="分" min={1} max={1440} step={5} value={form.late} onChange={(late) => change({ late })} /><span className={ui.tiny}>错过时间后，这么久内仍补跑</span></DrawerField>
             <DrawerField label="周期" wide>{dayPicks}</DrawerField>
           </DrawerGrid>
           {tasksCard}
@@ -448,7 +448,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
         </Row>
         {dayPicks}
         <Row>
-          <span style={{ flex: 1 }}>补跑窗口</span>
+          <span style={{ flex: 1, display: "grid" }}>补跑窗口<span className={ui.tiny}>错过时间后，这么久内仍补跑</span></span>
           <Stepper label="补跑窗口" unit="分" min={1} max={1440} step={5} value={form.late} onChange={(late) => change({ late })} />
         </Row>
       </Card>

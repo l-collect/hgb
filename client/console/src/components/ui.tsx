@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type FormEvent, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type CSSProperties, type FormEvent, type HTMLAttributes, type ReactNode } from "react";
 import type { Tone } from "../format";
 import { Link } from "../router";
 import { useOptimistic } from "./useAction";
@@ -36,6 +36,16 @@ export function Result({ tone = "", children }: { tone?: Tone; children: ReactNo
 
 export function Field({ label, children, inline, className }: { label: string; children: ReactNode; inline?: boolean; className?: string }) {
   return <label className={join(inline ? s.inline : s.field, className)}><span>{label}</span>{children}</label>;
+}
+/** A password box with 显示 / 隐藏 at its end. */
+export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [shown, setShown] = useState(false);
+  return (
+    <span className={s.password}>
+      <input {...props} type={shown ? "text" : "password"} />
+      <button type="button" className={s.reveal} aria-pressed={shown} aria-label={shown ? "隐藏密码" : "显示密码"} onClick={() => setShown(!shown)}>{shown ? "隐藏" : "显示"}</button>
+    </span>
+  );
 }
 export function Check({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) {
   return <label className={s.check}><input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} /><span>{label}</span></label>;

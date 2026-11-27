@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, githubStart, herePath } from "../../api/client";
 import type { AuthOptions } from "../../api/types";
-import { Brand, Button, Field, Form, Mark, Message, Tabs, ui } from "../../components/ui";
+import { Brand, Button, Field, Form, Mark, Message, PasswordInput, Tabs, ui } from "../../components/ui";
 import { useAction, useCountdown } from "../../components/useAction";
 import { Link, paths } from "../../router";
 import s from "./AuthPage.module.css";
@@ -83,7 +83,7 @@ function PasswordForm({ signedIn, forgot }: { signedIn: () => void; forgot: (ema
   return (
     <Form onSubmit={() => run(async () => { await api("/api/auth/login", { method: "POST", body: { email, password } }); signedIn(); })}>
       <Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-      <Field label="密码"><input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+      <Field label="密码"><PasswordInput required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
       <Button variant="primary" className={s.submit} type="submit" disabled={busy}>登录</Button>
       <Message text={message?.text} ok={message?.ok} />
       <Button variant="link" onClick={() => forgot(email)}>忘记密码</Button>
@@ -109,7 +109,7 @@ function RegisterForm({ registered }: { registered: (email: string) => void }) {
   return (
     <Form onSubmit={() => run(async () => { await api("/api/auth/register", { method: "POST", body: { email, password } }); registered(email); })}>
       <Field label="邮箱"><input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-      <Field label="密码（至少 10 位）"><input type="password" required minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+      <Field label="密码（至少 10 位）"><PasswordInput required minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
       <Button variant="primary" className={s.submit} type="submit" disabled={busy}>注册</Button>
       <Message text={message?.text} ok={message?.ok} />
     </Form>
@@ -132,7 +132,7 @@ function CodeForm({ email, purpose, signedIn, reset, back }: { email: string; pu
   return (
     <Form onSubmit={submit}>
       <Field label="验证码"><input required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} /></Field>
-      {purpose === "reset" && <Field label="新密码（至少 10 位）"><input type="password" required minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>}
+      {purpose === "reset" && <Field label="新密码（至少 10 位）"><PasswordInput required minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>}
       <Button variant="primary" className={s.submit} type="submit" disabled={busy}>{purpose === "reset" ? "重置密码" : purpose === "verify" ? "完成注册" : "登录"}</Button>
       <Message text={message?.text} ok={message?.ok} />
       <div className={s.codeLinks}>
