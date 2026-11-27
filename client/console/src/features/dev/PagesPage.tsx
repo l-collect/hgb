@@ -9,6 +9,7 @@ import { childIds, inlineStates, isObj, objs, states, str, target } from "./mode
 import { judge, pageProbe, PageDefForm, RouteForm, serverIdOf, useLibrarySave, type Cell, type Column, type JudgeTable } from "./PageGraph";
 import { conditionsOf, entryId, pageWaits, recognitionLine, type Wait } from "./StatesPage";
 import { useDevice } from "./wb";
+import { useQuery } from "../../router";
 import w from "./Wb.module.css";
 import g from "./Game.module.css";
 import st from "./States.module.css";
@@ -21,7 +22,8 @@ export function PagesPage() {
   const phone = useDevice();
   const save = useLibrarySave();
   const [tab, setTab] = useState<Tab>("pages");
-  const [pick, setPick] = useState<string | null>(null);
+  // ?page=<id> (the script editor's 在「页面」里打开): that page picked.
+  const [pick, setPick] = useState<string | null>(useQuery().get("page"));
   const [samples, setSamples] = useState<Sample[]>([]);
   const [serverWaits, setServerWaits] = useState<Wait[] | null>(null);
   const [table, setTable] = useState<JudgeTable | null>(null);

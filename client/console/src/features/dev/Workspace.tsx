@@ -21,6 +21,11 @@ import { lineDiff, useDevice } from "./wb";
 import { IssueText, Located, locate, placeOf as placeAt } from "./where";
 import pub from "./Publish.module.css";
 import type { LineFailure, LineMark, ScriptNames, ScriptProblem, TemplateView } from "./ScriptEditor";
+import type { FailHost, SpotHost } from "./SpotPanels";
+import { judgeOnServer } from "./api";
+import { useReference } from "./coords";
+import { serverIdOf } from "./PageGraph";
+import { conditionsOf, entryId } from "./StatesPage";
 import { braceFit, lintSettings, readsAsNumber, settingView, slotWhileTyping, spanOf, valuesOf, type SettingView } from "./settingUse";
 import { PatchConflicts } from "./PatchConflicts";
 import type { PickerHost } from "./TemplatePicker";
@@ -397,6 +402,62 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     };
   }, [body, task, library, sizes, game, apply]);
   // ---- completion and template pictures
+  // 文字条件 and 页面引用 (the script editor's popovers): the game's samples (read once, newest first), its regions,
+  // pages and routes, and judging one page on one sample on the server.
+  const reference = useReference();
+  const samplesOf = useRef<{ game: string; list: Promise<Sample[]> } | null>(null);
+  const spotHost = useMemo((): SpotHost | null => {
+    if (!body) return null;
+    const g = objs(body.targets).find((t) => t.id === (task?.raw.targetId ?? objs(body.targets)[0]?.id));
+    const lib = isObj(g?.library) ? g.library : {};
+    const pages = objs(lib.pages), routes = objs(lib.routes), known = objs(lib.states);
+    const regions = isObj(lib.regions) ? lib.regions : {};
+    const pageOf = (word: string): Obj | undefined => pages.find((x) => x.id === word) ?? pages.find((x) => str(x.name) === word);
+    const stateOf = (p: Obj): Obj | undefined => {
+      const st = p.state;
+      if (typeof st === "string") return known.find((x) => x.id === st);
+      if (!isObj(st)) return undefined;
+      const base = str(st.state) ? known.find((x) => x.id === str(st.state)) : undefined;
+      return base ? { ...base, ...st } : st;
+    };
+    return {
+      reference,
+      samples: () => {
+        if (samplesOf.current?.game !== game) {
+          // A failed read is not kept: the next panel asks again.
+          const list = dev.samples(game).then((all) => [...all].sort((a, b) => b.createdAt - a.createdAt), (error) => { samplesOf.current = null; throw error; });
+          samplesOf.current = { game, list };
+        }
+        return samplesOf.current.list;
+      },
+      sampleSrc: (id) => dev.sampleImage(id),
+      recognize: async (id) => { const read = await dev.recognizeSample(id); samplesOf.current = null; return read; },
+      region: (name) => { const r = arr(regions[name]).map(Number); return r.length === 4 && r.every(Number.isFinite) ? r : null; },
+      page: (word) => {
+        // Scripts write a page's name (`去 结界突破`) or its id (`等 页 courtyard`).
+        const p = pageOf(word); if (!p) return null;
+        const id = String(p.id);
+        const st = stateOf(p);
+        const to = Array.from(new Set(routes.filter((r) => r.from === id).map((r) => String(r.to))));
+        return { id, name: str(p.name) ?? id,
+          conditions: st ? conditionsOf(st).map(([k, , l]) => k === "有" ? l : `没有${l}`) : [],
+          templates: st ? arr(st.present).map((c) => typeof c === "string" ? c : isObj(c) ? str(c.template) : undefined).filter((x): x is string => !!x) : [],
+          to: to.map((t) => ({ id: t, name: str(pages.find((x) => x.id === t)?.name) ?? t })) };
+      },
+      templateSample: (name) => library.find((t) => t.id.split("@")[0] === name && t.sample)?.sample ?? null,
+      judge: async (word, sample) => {
+        const p = pageOf(word); if (!p) return "phone";
+        // What the server can judge pages by, as 页面 counts it: library states and every wait's candidates.
+        const waits = await dev.waits(game).catch(() => []);
+        const sid = serverIdOf(p, new Set([...known.map((x) => String(x.id)), ...waits.flatMap((x) => x.states.map(entryId)).filter((x): x is string => !!x)]));
+        if (!sid) return "phone";
+        const got = await judgeOnServer(game, [sid], [sample]);
+        if (!got) return "server";
+        return got.rows[0]?.results.find((c) => c.page === sid) ?? "phone";
+      },
+      openPage: (word) => { const p = pageOf(word); navigate(`${devPaths.pages}?page=${encodeURIComponent(p ? String(p.id) : word)}`); },
+    };
+  }, [body, task, library, game, reference]); // eslint-disable-line react-hooks/exhaustive-deps
   const names = useMemo((): ScriptNames => {
     const b = body ?? {};
     const models = new Set(objs(b.visionProfiles).flatMap((p) => isObj(p.models) ? Object.values(p.models).map(String) : []));
@@ -416,9 +477,10 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       }).sort((a, b) => Number(!!a.bad) - Number(!!b.bad)),
       values: (id) => { const f = task?.fields.find((x) => String(x.id) === id); return f ? valuesOf(f).map((v) => ({ word: v.word, label: v.label })) : null; },
       picker: pickerHost,
+      spots: spotHost,
       pages: objs(library.pages).map((p) => str(p.name) ?? String(p.id)),
     };
-  }, [body, task, key, pickerHost]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, task, key, pickerHost, spotHost]); // eslint-disable-line react-hooks/exhaustive-deps
   const setting = useCallback((id: string): SettingView | null => {
     const f = task?.fields.find((x) => String(x.id) === id);
     return f && task ? settingView(f, task.steps, `${devPaths.config(task.id)}?field=${encodeURIComponent(id)}`) : null;
@@ -459,7 +521,8 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   // The first choice is the test values shared with 配置项 and 画板 (set there by hand, else each default).
   const presets: [string, Obj][] = task ? testValues(task.fields).map(([name, v], i) => [i === 0 ? "测试值" : name, v] as [string, Obj]) : [];
   const values = preset === -1 && custom ? custom : preset === 0 ? tv.trial : presets[preset]?.[1] ?? tv.trial;
-  const start = async () => {
+  /** [stepOnly]: this step whatever 范围 says (失败行现场的「重跑这一步」). */
+  const start = async (stepOnly = false) => {
     if (!task || !device || startingRef.current) return;
     startingRef.current = true; setStarting(true);
     setMessage(null); setTab("run"); setRunError(null); setRunIssues([]);
@@ -468,7 +531,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     try {
       if (refused || dirtyKeys.some((k) => conflicts.includes(scoped(k)))) { setRunError("先在左边选用哪边，再试跑"); return; }
       for (const k of dirtyKeys) if (!await save(k)) { setRunError("有脚本没保存成，没开始试跑"); return; }
-      const only = scope === "step" && step && !snippetId ? String(step.id) : undefined;
+      const only = (stepOnly || scope === "step") && step && !snippetId ? String(step.id) : undefined;
       // The id is made here, so the server's events (排队, 准备) are followed before it answers.
       const id = runId();
       startedHere.add(id); shown.current = id;
@@ -513,6 +576,23 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const typing = !!key && edits[key] !== undefined && edits[key] !== saved;
   if (!typing || shownMarks.current.key !== key) shownMarks.current = { key, value: fresh };
   const { marks, failed } = shownMarks.current.value;
+  // 失败行现场: the failed trial's frames at the failing action (read when opened), and what can be done from there.
+  const actions = useRef({ start, tab: setTab }); actions.current = { start, tab: setTab };
+  const failHost = useMemo((): FailHost | null => {
+    if (!run || !failTrace) return null;
+    const at = new Date(run.updatedAt), two = (n: number) => String(n).padStart(2, "0");
+    return {
+      time: `${two(at.getHours())}:${two(at.getMinutes())}`, why,
+      frames: () => dev.runFrames(run.id).then((all) => {
+        const mine = all.filter((f) => f.step === failTrace.step && f.action === failTrace.action);
+        return mine.length ? mine : all.slice(-5);
+      }),
+      rerun: () => void actions.current.start(true),
+      // The kept sample shows in 文字条件 and 页面引用 next time they open.
+      keep: run.screen ? () => dev.keepRunScreen(run.id).then((x) => { samplesOf.current = null; return x; }) : null,
+      replay: () => actions.current.tab("run"),
+    };
+  }, [run?.id, run?.screen, run?.framesUploaded, failTrace?.step, failTrace?.action, why]); // eslint-disable-line react-hooks/exhaustive-deps
   // The same trial for 画板: by line of this script, how it went there, the lines it went through one after another.
   const boardRun = useMemo((): CanvasRun | null => {
     if (!key || !run || !run.traces.length && !running(run)) return null;
@@ -658,7 +738,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
             <div ref={setEditorRoot} className={`${w.card} ${s.script}`} style={showCanvas ? { display: "none" } : undefined}>
               <Suspense fallback={<div className={w.empty}>正在打开编辑器…</div>}>
                 <ScriptEditor key={key} value={text} onChange={(v) => setEdit(key, v === saved ? undefined : v)} onSave={() => { if (!conflicted) void save(key); }} onCursor={setCursor}
-                  problems={problems} names={names} goTo={!showCanvas && goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)} marks={marks} failure={failed} template={template} setting={setting} />
+                  problems={problems} names={names} goTo={!showCanvas && goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)} marks={marks} failure={failed} fail={failHost} template={template} setting={setting} />
               </Suspense>
             </div>
             {showCanvas && <Suspense fallback={<div className={`${w.card} ${w.empty}`}>正在打开画板…</div>}>

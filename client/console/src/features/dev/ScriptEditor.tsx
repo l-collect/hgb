@@ -23,6 +23,7 @@ import w2 from "./Wb.module.css";
 import { atText } from "./coords";
 import { ScreenPick } from "./ScreenPick";
 import { TemplatePicker, type PickerHost } from "./TemplatePicker";
+import { FailPanel, PagePanel, TextPanel, type FailHost, type SpotHost } from "./SpotPanels";
 import ps from "./Picker.module.css";
 
 /**
@@ -31,11 +32,14 @@ import ps from "./Picker.module.css";
  */
 type Spot =
   | { kind: "image"; key: string; line: number; anchor: number; nameFrom: number; nameTo: number; name: string; regionFrom: number | null; regionTo: number | null; region: number[] | null; threshold: string | null }
-  | { kind: "at"; key: string; line: number; anchor: number; from: number; to: number; values: number[]; point: boolean; comma: string }
-  | { kind: "insert"; key: string; line: number; anchor: number; point: boolean };
-const NUMS = /@(-?\d+)([,，])\s*(-?\d+)(?:[,，]\s*(\d+)[,，]\s*(\d+))?/g;
-/** The spot at [pos] of [state], when there is one (the 图 part only with [images]). */
-function spotAt(state: EditorState, pos: number, images: boolean): Spot | null {
+  | { kind: "at"; key: string; line: number; anchor: number; from: number; to: number; values: number[]; point: boolean; comma: string; lead: string }
+  | { kind: "insert"; key: string; line: number; anchor: number; point: boolean }
+  | { kind: "text"; key: string; line: number; anchor: number; text: string; textFrom: number; textTo: number; region: string; regionFrom: number; regionTo: number; whole: boolean; absent: boolean }
+  | { kind: "page"; key: string; line: number; anchor: number; page: string }
+  | { kind: "fail"; key: string; line: number; anchor: number };
+const NUMS = /@((?:[左中右]:)?)(-?\d+)([,，])\s*(-?\d+)(?:[,，]\s*(\d+)[,，]\s*(\d+))?/g;
+/** The spot at [pos] of [state], when there is one (the 图 part only with [images]; `"字"@区域` and pages only with [rich]). */
+function spotAt(state: EditorState, pos: number, images: boolean, rich = false): Spot | null {
   const line = state.doc.lineAt(pos);
   const text = stripComment(line.text);
   const at = pos - line.from;
@@ -56,11 +60,30 @@ function spotAt(state: EditorState, pos: number, images: boolean): Spot | null {
       regionFrom: regionFrom === null ? null : line.from + regionFrom, regionTo: regionTo === null ? null : line.from + regionTo,
       region: nums && nums.length === 4 && nums.every((n) => Number.isFinite(n)) ? nums : null, threshold };
   }
+  if (rich) for (const m of text.matchAll(/(["“])([^"”]*)["”]@((?:[左中右]:)?(?:-?\d+(?:[,，]\s*-?\d+){3}|[^\s"“”]+))/g)) {
+    // 文字条件: the quoted text and its region. On numbers after the @, the cursor keeps 在画面上选 (that @ is a region
+    // like any other); on the text, or on a named region, this.
+    const from = m.index!, to = from + m[0].length;
+    const numbers = /^(?:[左中右]:)?-?\d/.test(m[3]);
+    if (at < from || at > (numbers ? to - m[3].length - 1 : to)) continue;
+    const textFrom = from + 1, textTo = textFrom + m[2].length, regionFrom = to - m[3].length;
+    return { kind: "text", key: `text:${line.number}:${from}`, line: line.number, anchor: line.from + from, text: m[2], textFrom: line.from + textFrom, textTo: line.from + textTo,
+      region: m[3], regionFrom: line.from + regionFrom, regionTo: line.from + to, whole: /^\s+整行(?=\s|$)/.test(text.slice(to)),
+      absent: /(没有|没看到|如果没看到)\s*$/.test(text.slice(0, from)) };
+  }
+  if (rich) for (const m of text.matchAll(/(^|\s)(页|去)\s+([^\s"“”@]+)/g)) {
+    // 页面引用: `等 页 courtyard`, `去 结界突破` (a page's id or name; 去 only as the line's statement, nothing in quotes).
+    if (inQuote(text, m.index!) || m[2] === "去" && text.slice(0, m.index! + m[1].length).trim()) continue;
+    const from = m.index! + m[0].length - m[3].length, to = from + m[3].length;
+    if (at < from || at > to) continue;
+    return { kind: "page", key: `page:${line.number}:${from}`, line: line.number, anchor: line.from + from, page: m[3] };
+  }
   for (const m of text.matchAll(NUMS)) {
     const from = m.index!, to = from + m[0].length;
     if (at < from || at > to) continue;
-    const values = [m[1], m[3], m[4], m[5]].filter((x) => x !== undefined).map(Number);
-    return { kind: "at", key: `at:${line.number}:${from}`, line: line.number, anchor: line.from + from, from: line.from + from, to: line.from + to, values, point: values.length === 2, comma: m[2] };
+    const values = [m[2], m[4], m[5], m[6]].filter((x) => x !== undefined).map(Number);
+    // [lead]: an anchor written before the numbers (`@右:`), kept when they are written again.
+    return { kind: "at", key: `at:${line.number}:${from}`, line: line.number, anchor: line.from + from, from: line.from + from, to: line.from + to, values, point: values.length === 2, comma: m[3], lead: m[1] };
   }
   return null;
 }
@@ -134,6 +157,8 @@ export interface ScriptNames { templates: string[]; regions: string[]; snippets:
   values?: (field: string) => ValueOption[] | null;
   /** 选图's library and picture; given, the cursor on `图 …` opens it (and the template list yields to it). */
   picker?: PickerHost | null;
+  /** 文字条件 and 页面引用's samples and page library; given, the cursor on `"字"@区域` or a page opens them. */
+  spots?: SpotHost | null;
   /** Set by the editor: opens 在画面上框一个 for an `@` just typed at [at]. */
   onPick?: (at: number, point: boolean) => void;
   /** Set by the editor in a task's step: opens 新建配置项 from a completion (after `{`, or after `按设置 `). */
@@ -180,7 +205,10 @@ const runField = StateField.define<{ dots: RangeSet<GutterMarker>; deco: Decorat
   },
   provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
 });
-const runGutter = gutter({ class: "cm-run-gutter", markers: (view) => view.state.field(runField).dots });
+/** What a click on a line's run mark does, per editor (失败行现场 opens on the failed line's). */
+const gutterClicks = new WeakMap<EditorView, (line: number) => boolean>();
+const runGutter = gutter({ class: "cm-run-gutter", markers: (view) => view.state.field(runField).dots,
+  domEventHandlers: { mousedown: (view, block) => gutterClicks.get(view)?.(view.state.doc.lineAt(block.from).number) ?? false } });
 
 /** A template's picture when the pointer rests on its name after 图. */
 function templateHover(look: () => ((name: string) => TemplateView | null)) {
@@ -437,9 +465,11 @@ function branchAbove(doc: EditorState["doc"], lineNo: number, indent: number): s
  * The script editor: [value] edited in place, [onChange] on every edit, Ctrl/⌘+S calls [onSave]. [problems] (line,
  * reason) are drawn as wavy underlines on their lines. [names] feeds completion and is read when it is asked for.
  */
-export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, onJumped, onCursor, marks = [], failure = null, template = () => null, setting = () => null }: { value: string; onChange: (text: string) => void; onSave: () => void;
+export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, onJumped, onCursor, marks = [], failure = null, fail = null, template = () => null, setting = () => null }: { value: string; onChange: (text: string) => void; onSave: () => void;
   problems: ScriptProblem[]; names: ScriptNames; goTo: { line: number; at: number } | null;
   marks?: LineMark[]; failure?: LineFailure | null; template?: (name: string) => TemplateView | null; onJumped?: () => void;
+  /** 失败行现场: what a click on the failed line's mark shows. */
+  fail?: FailHost | null;
   /** What hovering a setting's name shows; null when there is no such setting. */
   setting?: (id: string) => SettingView | null;
   /** The line the cursor is on, as it moves. */
@@ -463,9 +493,12 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
   const [, setScrolled] = useState(0);
   const close = () => { const v = view.current; if (spotNow.current) dismissed.current = spotNow.current.key; setSpot(null); v?.focus(); };
   const closeRef = useRef(close); closeRef.current = close;
+  // 失败行现场 goes with its trial: a new one started (重跑这一步) or none to show closes it, no empty frame left.
+  useEffect(() => { if (!fail && spotNow.current?.kind === "fail") setSpot(null); }, [fail]); // eslint-disable-line react-hooks/exhaustive-deps
   const follow = (state: EditorState, moved: boolean, mapped: number | null) => {
     if (moved) setNotice(null);
-    const found = spotAt(state, state.selection.main.head, !!latest.current.names.picker);
+    const rich = !!latest.current.names.spots;
+    const found = spotAt(state, state.selection.main.head, !!latest.current.names.picker, rich);
     const open = spotNow.current;
     if (found) {
       // A spot closed before stays closed, and the panel of another spot does not stay open over it.
@@ -477,17 +510,20 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     // Typed elsewhere: an open spot follows its text, or closes when it is gone (or another one now stands there).
     if (!open || mapped === null) return;
     if (open.kind === "insert") { setSpot({ ...open, anchor: mapped, line: state.doc.lineAt(mapped).number, key: `insert:${mapped}` }, true); return; }
-    const again = spotAt(state, mapped, true);
+    // 失败行现场 stays open while typing elsewhere, following its line.
+    if (open.kind === "fail") { setSpot({ ...open, anchor: mapped, line: state.doc.lineAt(mapped).number }, true); return; }
+    // Found again as what is open: an @ opened from 改区域 stays an @, not the text condition around it.
+    const again = spotAt(state, mapped, true, open.kind === "text" || open.kind === "page");
     setSpot(again && again.kind === open.kind && again.anchor === mapped ? again : null, true);
   };
   const followRef = useRef(follow); followRef.current = follow;
   const view = useRef<EditorView | null>(null);
-  const latest = useRef({ onChange, onSave, names, template, onCursor, setting });
+  const latest = useRef({ onChange, onSave, names, template, onCursor, setting, failure, fail });
   latest.current = { onChange, onSave, names: { ...names, onPick: (at: number, point: boolean) => {
     const v = view.current; if (!v) return;
     const line = v.state.doc.lineAt(at);
     setSpot({ kind: "insert", key: `insert:${at}`, line: line.number, anchor: at, point });
-  } }, template, onCursor, setting };
+  } }, template, onCursor, setting, failure, fail };
 
   // ---- 配置项: in a task's own step, {x} are tags with their test values, a fixed number can become one, and `{` /
   // `按设置 ` offer a new one. The task and step are the page's (/dev/tasks/<task>/steps/<step>).
@@ -596,6 +632,17 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
       }),
     });
     view.current = created;
+    // 失败行现场: the failed line's red mark opens what the screen was there.
+    gutterClicks.set(created, (n) => {
+      // The marks move with the text while it is typed in: the click goes by the red mark at this line, not the number.
+      if (!latest.current.fail || n > created.state.doc.lines) return false;
+      const at = created.state.doc.line(n).from;
+      let bad = false;
+      created.state.field(runField).dots.between(at, at, (_f, _t, mark) => { if (mark instanceof Dot && mark.tone === "bad") bad = true; });
+      if (!bad) return false;
+      setSpot({ kind: "fail", key: "fail", line: n, anchor: at });
+      return true;
+    });
     const scrolled = () => setScrolled((n) => n + 1);
     created.scrollDOM.addEventListener("scroll", scrolled);
     return () => { created.scrollDOM.removeEventListener("scroll", scrolled); created.destroy(); view.current = null; };
@@ -648,7 +695,7 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     if (open.kind === "insert" && (open.anchor < 1 || open.anchor > v.state.doc.length || v.state.doc.sliceString(open.anchor - 1, open.anchor) !== "@")) {
       dismissed.current = open.key; setSpot(null); setNotice("位置变了，请重新框"); v.focus(); return;
     }
-    const now = open.kind === "insert" ? open : spotAt(v.state, open.anchor, true);
+    const now = open.kind === "insert" ? open : spotAt(v.state, open.anchor, true, open.kind === "text" || open.kind === "page");
     if (now) {
       const list = make(now);
       const changes = v.state.changes(list);
@@ -724,7 +771,8 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     if (!spot || !v || !box) return null;
     const c = v.coordsAtPos(Math.min(spot.anchor, v.state.doc.length)); if (!c) return null;
     const r = box.getBoundingClientRect();
-    const width = spot.kind === "image" ? 360 : 420, tall = spot.kind === "image" ? 520 : 470;
+    const width = spot.kind === "image" ? 360 : spot.kind === "fail" ? 592 : spot.kind === "text" || spot.kind === "page" ? 560 : 420;
+    const tall = spot.kind === "image" ? 520 : spot.kind === "fail" ? 600 : spot.kind === "text" ? 520 : spot.kind === "page" ? 420 : 470;
     const left = Math.max(8, Math.min(c.left - r.left, r.width - width - 8));
     const below = c.bottom - r.top + 6;
     const above = below + tall > r.height && c.top - r.top - 6 - tall >= 0;
@@ -740,9 +788,18 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
           onRegion={(region) => write((now) => now.kind !== "image" ? [] : [now.regionFrom !== null ? { from: now.regionFrom, to: now.regionTo!, insert: atText(region) }
             : { from: now.nameTo, to: now.nameTo, insert: `@${atText(region)}` }])} />
         : spot.kind === "at" ? <ScreenPick point={spot.point} value={spot.values} title={`第 ${spot.line} 行 · ${spot.point ? "点位" : "区域"}`} onCancel={close}
-            onDone={(vals) => write((now) => now.kind !== "at" ? [] : [{ from: now.from + 1, to: now.to, insert: atText(vals, now.comma) }])} />
+            onDone={(vals) => write((now) => now.kind !== "at" ? [] : [{ from: now.from + 1, to: now.to, insert: now.lead + atText(vals, now.comma) }])} />
         : spot.kind === "insert" ? <ScreenPick autoFocus point={spot.point} value={null} title={`第 ${spot.line} 行 · ${spot.point ? "点一个位置" : "框一个区域"}`} onCancel={close}
-            onDone={(vals) => write((now) => [{ from: now.anchor, to: now.anchor, insert: atText(vals) }])} /> : null}
+            onDone={(vals) => write((now) => [{ from: now.anchor, to: now.anchor, insert: atText(vals) }])} />
+        : spot.kind === "text" && names.spots ? <TextPanel line={spot.line} text={spot.text} region={spot.region} whole={spot.whole} absent={spot.absent} host={names.spots} onClose={close}
+            onReplace={(word) => write((now) => now.kind !== "text" ? [] : [{ from: now.textFrom, to: now.textTo, insert: word }])}
+            onEditRegion={/^(?:[左中右]:)?-?\d/.test(spot.region) ? () => {
+              // 改区域: the same region in 在画面上选, found as the cursor on its numbers would (a named region is the library's).
+              const v = view.current; const found = v ? spotAt(v.state, spot.regionFrom, true, false) : null;
+              if (found?.kind === "at") setSpot(found);
+            } : null} />
+        : spot.kind === "page" && names.spots ? <PagePanel key={spot.page} line={spot.line} page={spot.page} host={names.spots} onClose={close} />
+        : spot.kind === "fail" && fail ? <FailPanel line={spot.line} host={fail} onClose={close} /> : null}
     </div>}
     {pop && popAt && popField && (pop.kind === "test"
       ? <TestPop style={popAt} f={popField} value={test.values[pop.id]} own={pop.id in test.own} set={(x) => test.set(pop.id, x)} onClose={() => { setPop(null); view.current?.focus(); }} />

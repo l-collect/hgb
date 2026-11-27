@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useDev } from "./context";
 import { referenceSize } from "./GamePage";
 
@@ -14,7 +15,9 @@ export function useReference(): Size {
   const { draft, game } = useDev();
   const said = draft ? referenceSize(draft.body, game) : null;
   const m = said ? /(\d+)\s*×\s*(\d+)/.exec(said) : null;
-  return m ? [Number(m[1]), Number(m[2])] : DEFAULT_REFERENCE;
+  const w = m ? Number(m[1]) : DEFAULT_REFERENCE[0], h = m ? Number(m[2]) : DEFAULT_REFERENCE[1];
+  // The same pair while the numbers are the same, so what depends on it is not worked out again on every render.
+  return useMemo((): Size => [w, h], [w, h]);
 }
 /** Picture pixels → reference numbers (rounded), for a picture of [picture] size. */
 export const toReference = (xs: number[], picture: Size, reference: Size) => { const k = reference[1] / picture[1]; return xs.map((v) => Math.round(v * k)); };
