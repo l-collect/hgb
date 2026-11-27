@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ask } from "../../components/Confirm";
-import { Chips, MoreMenu, Pill, SegmentTabs } from "../../components/ui";
+import { Chips, MoreMenu, Pill, SegmentTabs, Tag } from "../../components/ui";
 import type { CanvasRun } from "./canvas/Canvas";
 import { ToScript } from "./canvas/ToScript";
 import { ConfigTab } from "./config/ConfigTab";
@@ -1155,7 +1155,7 @@ function RunCondition({ step, fields, editing, setEditing, onChange }: { step: O
   const options: [string, string][] = toggle ? [["true", "开"], ["false", "关"]] : objs(field?.options).map((o) => [str(o.value) ?? "", str(o.label) ?? ""]);
   const set = (v: string, not: boolean) => onChange({ field: String(when.field), ...(multi ? { contains: v } : { equals: toggle ? v === "true" : v }), ...(not ? { not: true } : {}) });
   const said = `${str(field?.label) ?? String(when.field)} ${multi ? (when.not === true ? "不含 " : "含 ") : when.not === true ? "不是 " : ""}${options.find(([v]) => v === value)?.[1] ?? value ?? ""} 才跑`;
-  if (!editing) return <button type="button" className={s.linkish} title="点开修改" onClick={() => setEditing(true)}><Pill tone="soft">{said}</Pill></button>;
+  if (!editing) return <button type="button" className={s.linkish} title="点开修改" onClick={() => setEditing(true)}><Tag>{said}</Tag></button>;
   return (
     <span className={s.cond}>
       <select aria-label="按哪个配置项" className={s.select} value={String(when.field)} onChange={(e) => { const f = choices.find((x) => x.id === e.target.value); if (f) onChange(firstCondition(f)); }}>

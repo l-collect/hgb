@@ -17,7 +17,7 @@ export function Card({ flush, className, as: Tag = "div", ...rest }: HTMLAttribu
 /** A card's heading row, as in "排在这个应用后面". */
 export function CardTitle({ id, children }: { id?: string; children: ReactNode }) { return <h2 id={id} className={s.cardTitle}>{children}</h2>; }
 
-type Variant = "primary" | "ghost" | "danger" | "link";
+type Variant = "primary" | "ghost" | "danger" | "destroy" | "link";
 export function Button({ variant = "ghost", small, className, type = "button", ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; small?: boolean }) {
   return <button type={type} className={join(variant === "link" ? s.link : s.button, variant !== "link" && s[variant], small && s.small, className)} {...rest} />;
 }
@@ -31,6 +31,36 @@ export function ButtonLink({ to, primary, small, children }: { to: string; prima
  */
 export function Pill({ tone = "", dot, live, className, children }: { tone?: Tone | "soft"; dot?: boolean; live?: boolean; className?: string; children: ReactNode }) {
   return <span className={join(s.pill, s[`pill_${tone || "neutral"}`], className)} data-live={dot || live ? "" : undefined}>{dot && <span className={s.dot} aria-hidden="true" />}{children}</span>;
+}
+/**
+ * UI v8 的分类色块：任务分类固定对应一组浅彩（日常 1、战斗 2、御魂 3、活动 4），其余中性。彩色只说明类别，不表示状态。
+ */
+export function categoryTone(category?: string): 0 | 1 | 2 | 3 | 4 {
+  const c = category ?? "";
+  if (/日常|签到|领取|寄养|庭院/.test(c)) return 1;
+  if (/战斗|副本|突破|挑战|悬赏|探索/.test(c)) return 2;
+  if (/御魂|式神|养成/.test(c)) return 3;
+  if (/活动|组队|逢魔|限时/.test(c)) return 4;
+  return 0;
+}
+const CATEGORY_ICON: Record<number, ReactNode> = {
+  0: <path d="M10 6h10M10 12h10M10 18h10M4 6h1M4 12h1M4 18h1" />,
+  1: <><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></>,
+  2: <path d="M5 19 19 5M14 5h5v5M5 14v5h5" />,
+  3: <><path d="M6 4h12l3 5-9 11L3 9z" /><path d="M3 9h18" /></>,
+  4: <><circle cx="9" cy="9" r="3.5" /><path d="M3 19a6 6 0 0 1 12 0M16 7h5M18.5 4.5v5" /></>,
+};
+export function CategoryTile({ category, small }: { category?: string; small?: boolean }) {
+  const tone = categoryTone(category);
+  return (
+    <span className={join(s.tile, small && s.tileSmall, s[`k${tone}`])} aria-hidden="true">
+      <svg width={small ? 16 : 20} height={small ? 16 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">{CATEGORY_ICON[tone]}</svg>
+    </span>
+  );
+}
+/** A label that is not a state (a setting, a kind, 自建): a grey capsule with no dot, so it never reads as a status. */
+export function Tag({ className, children }: { className?: string; children: ReactNode }) {
+  return <span className={join(s.tag, className)}>{children}</span>;
 }
 /** Result text in a list, coloured by tone. */
 export function Result({ tone = "", children }: { tone?: Tone; children: ReactNode }) {
@@ -148,7 +178,7 @@ export function Segments<T extends string>({ items, value, onChange, label, role
   );
 }
 
-/** Short options as pills (阵容 分组 / 队伍 …): pale violet with a violet line when on. */
+/** Short options as pills (阵容 分组 / 队伍 …): grey capsules, the chosen one black (white in the dark theme). */
 export function Chips<T extends string | number>({ items, value, onChange, label, disabled }: { items: [T, string][]; value: T | null | undefined; onChange: (value: T) => void; label: string; disabled?: boolean }) {
   return (
     <div className={s.chips} role="radiogroup" aria-label={label}>
@@ -159,7 +189,7 @@ export function Chips<T extends string | number>({ items, value, onChange, label
     </div>
   );
 }
-/** Two to four views of one thing (参数 / 步骤, 全部 / 运行中 …): full width, the current one white on grey. */
+/** Two to four views of one thing (参数 / 步骤, 全部 / 运行中 …): full width, the current one black on grey (white in the dark theme). */
 export function SegmentTabs<T extends string>({ items, value, onChange, label }: { items: [T, string][]; value: T; onChange: (value: T) => void; label: string }) {
   return (
     <div className={s.segTabs} role="tablist" aria-label={label}>

@@ -7,11 +7,12 @@
   background: var(--color-inverse); color: var(--color-on-inverse); box-shadow: var(--shadow-md); font-size: var(--text-md);
   pointer-events: auto; animation: rise var(--motion-enter) var(--motion-ease); max-width: 100%;
 }
-.bad { background: var(--color-danger-solid); color: var(--color-on-danger); }
+/* 失败：仍是反色胶囊，左边一个实心红点说明是失败。 */
+.bad::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--color-danger); }
 .text { min-width: 0; overflow-wrap: anywhere; }
 .link { flex: none; border: 0; background: none; padding: 0 4px; color: inherit; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; font-size: inherit; }
 .link:hover { color: inherit; }
-.bad .link, .bad .link:hover { color: var(--color-on-danger); text-decoration: underline; }
+
 .close { flex: none; width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; color: inherit; opacity: .7; padding: 0; }
 .close:hover { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
 @keyframes rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useConsole } from "../../state/context";
-import { MoreMenu, Pill, Stepper } from "../../components/ui";
+import { MoreMenu, Pill, Stepper, Tag } from "../../components/ui";
 import { Link, navigate } from "../../router";
 import { dev, type DriftWarning, type SyncResult, type TrialRecord } from "./api";
 import { devPaths, failure, useDev } from "./context";
@@ -130,7 +130,7 @@ export function HomePage() {
           {filter === "all" && repoOnly.filter((t) => !q || t.name.toLowerCase().includes(q) || t.taskId.toLowerCase().includes(q)).map((t) =>
             <div key={t.taskId} className={`${w.tasksGrid} ${w.trow} ${w.repoOnly}`} title="草稿里没有：从仓库同步后才能改">
               <span className={w.taskName}><span className={w.bold}>{t.name}</span></span>
-              <span><Pill>只在仓库</Pill></span><span className={w.muted}>同步后可改</span><span className={w.muted}>—</span><span />
+              <span><Tag>只在仓库</Tag></span><span className={w.muted}>同步后可改</span><span className={w.muted}>—</span><span />
             </div>)}
         </div>
       </div>

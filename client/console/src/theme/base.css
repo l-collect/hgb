@@ -1,4 +1,8 @@
 * { box-sizing: border-box; }
+/* 弹层遮罩：浅色压一层暖黑，深色压 60% 黑（不是颜色变量，Kotlin 主题用不到）。 */
+:root { --scrim: rgb(30 20 15 / .38); }
+:root[data-theme="dark"] { --scrim: rgb(0 0 0 / .6); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --scrim: rgb(0 0 0 / .6); } }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--color-bg); color: var(--color-ink); font: var(--text-md)/1.5 var(--font-body); font-variant-numeric: tabular-nums; }
 button, input, select, textarea { font: inherit; color: inherit; }

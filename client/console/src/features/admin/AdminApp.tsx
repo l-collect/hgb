@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiFailure } from "../../api/client";
-import { Button, ErrorCard, Loading, Mark, Pill, ui } from "../../components/ui";
+import { Button, ErrorCard, Loading, Mark, ui, Tag } from "../../components/ui";
 import { ConfirmHost } from "../../components/Confirm";
 import { ToastHost } from "../../components/Toast";
 import { Link, paths, usePath } from "../../router";
@@ -76,7 +76,7 @@ function Shell({ me }: { me: Admin }) {
   return (
     <div className={s.shell}>
       <nav className={s.nav} aria-label="管理导航">
-        <span className={s.brand}><Mark size={26} /><b>护肝宝</b><Pill tone="soft">管理</Pill></span>
+        <span className={s.brand}><Mark size={26} /><b>护肝宝</b><Tag>管理</Tag></span>
         {LINKS.map(([id, label, to, svg]) => (
           <Link key={id} to={to} className={s.link} aria-current={id === section ? "page" : undefined}>{svg}{label}</Link>
         ))}

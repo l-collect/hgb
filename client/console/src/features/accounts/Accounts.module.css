@@ -91,7 +91,7 @@
 .daysRow .dayPick { width: 38px; height: 38px; border: 0; background: var(--color-sunken); color: var(--color-muted); font-weight: 500; }
 .daysRow .dayOn { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
 .inlineInput { min-height: var(--control-height); flex: 0 1 240px; }
-.configLink { border: 0; background: none; padding: 0; font-size: var(--text-sm); font-weight: 600; color: var(--color-primary); text-decoration: none; white-space: nowrap; }
+.configLink { border: 0; background: none; padding: 0; font-size: var(--text-sm); font-weight: 600; color: var(--color-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--color-control); white-space: nowrap; }
 .pickValue { font-size: var(--text-sm); color: var(--color-primary); font-weight: 600; white-space: nowrap; }
 .pickPanel { display: flex; flex-direction: column; padding: var(--space-2) var(--space-4); gap: 2px; }
 .columns { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
@@ -114,7 +114,7 @@
 /* A plan's task: 跟随账号, or 单独设置 with what it changed and 恢复跟随. */
 .followLine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; margin-top: 2px; }
 .followLine .ellipsis { flex: 0 1 auto; max-width: 100%; }
-.staleLine { padding: 8px 12px; border-radius: var(--radius-md); background: var(--color-warn-soft); border: 1px solid var(--color-warn-line); color: var(--color-warn-ink); font-size: var(--text-sm); }
+.staleLine { padding: 8px 12px; border-radius: var(--radius-md); background: var(--color-surface); border: 0; box-shadow: var(--shadow-sm); color: var(--color-warn); font-size: var(--text-sm); }
 .backLink { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--color-primary); font-size: var(--text-sm); font-weight: 600; }
 .orderButtons { display: inline-flex; gap: 2px; }
 .orderButton { position: relative; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--color-sunken); color: var(--color-ink); padding: 0; font-weight: 600; }
@@ -127,12 +127,14 @@
 /* 下次 / 上次 under a plan's tasks. */
 .planWhen { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 2px; }
 .planLast { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-/* 账号 chips: a dot before the name says what needs a look (red), is held (orange) or runs (blue). */
+/* 账号 chips: a dot before the name says what needs a look (red), is held (amber) or runs (ink). On the selected (black) chip the dot gets a ring of the chip's text colour so it stays visible. */
 .chip { display: inline-flex; align-items: center; gap: 6px; }
 .mark { width: 7px; height: 7px; flex: none; border-radius: 50%; }
 .mark_bad { background: var(--color-danger); }
 .mark_warn { background: var(--color-warn); }
-.mark_info { background: var(--color-run); }
+.mark_info { background: var(--color-ink); }
+[aria-checked="true"] > .mark { box-shadow: 0 0 0 2px var(--color-on-primary); }
+[aria-checked="true"] > .mark_info { background: var(--color-on-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-on-primary) 40%, transparent); }
 .warnCell { color: var(--color-warn); font-weight: 600; }
 .tableEnd { display: flex; justify-content: flex-end; padding: 10px var(--space-4); border-top: 1px solid var(--color-line-soft); }
 /* No account yet: how accounts come in, and reading a rooted phone's login as the second way. */

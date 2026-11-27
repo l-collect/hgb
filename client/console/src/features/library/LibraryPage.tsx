@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { CloudTask, ConfigView, Device, Game, GameAccount, GameTask, Job } from "../../api/types";
-import { Breadcrumb, Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, ui } from "../../components/ui";
+import { Breadcrumb, Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, ui, Tag, CategoryTile } from "../../components/ui";
 import { actionKind, ACTIVE, CONFIG_TONE, JOB_STATES, jobStatus, type Tone } from "../../format";
 import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
@@ -73,13 +73,14 @@ export function RunTaskRows({
         const state = taskState(jobs, task, account?.id, devices);
         return (
           <div key={task.taskId} className={s.taskRow}>
+            <span className={s.rowTile}><CategoryTile category={detail?.category} /></span>
             <Link to={paths.taskDetail(task.targetId, task.taskId, account?.id)} className={s.taskLink}>
               <span className={s.titleLine}>
                 <b className={s.titleText}>{task.name}</b>
                 {favorites?.has(favKey(task.targetId, task.taskId)) && <span className={s.starMark} aria-label="常用">★</span>}
                 {state && <Pill tone={state[1]}>{state[0]}</Pill>}
               </span>
-              {chips.length > 0 && <span className={s.chips}>{chips.map((chip) => <Pill key={chip}>{chip}</Pill>)}</span>}
+              {chips.length > 0 && <span className={s.chips}>{chips.map((chip) => <Tag key={chip}>{chip}</Tag>)}</span>}
               <Note note={notes[task.taskId]} />
             </Link>
             {locked ? <ProLockButton name={`切号运行${task.name}`} />
@@ -343,10 +344,10 @@ function TaskStepDetail({ gameId, taskId, detail, step }: { gameId: string; task
         <CardHead title={`动作（${actions.length}）`} />
         {actions.length === 0 ? <Empty>没有动作</Empty> : actions.map((act, idx) => {
           const used = act.consumedFieldIds ?? [];
-          const [kindText, tone] = actionKind(act.kind);
+          const [kindText] = actionKind(act.kind);
           return (
             <div key={`${act.id}-${idx}`} className={s.actionRow}>
-              <Pill tone={tone} className={s.kind}>{kindText}</Pill>
+              <Tag className={s.kind}>{kindText}</Tag>
               <span className={s.actionText}>
                 {act.label}{act.detail && <span className={ui.tiny}> {act.detail}</span>}
                 {used.length > 0 && (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { Game, GameAccount, Job, Plan, PlanDayRuns, PlanLastRun, PlanRunState } from "../../api/types";
-import { Button, Card, Empty, LiveSwitch, Pill, SegmentTabs, join, ui } from "../../components/ui";
+import { Button, Card, Empty, LiveSwitch, Pill, SegmentTabs, join, ui, Tag } from "../../components/ui";
 import { clockText, nextTime, shortTime, WEEK } from "../../format";
 import { useConsole } from "../../state/context";
 import { Link, navigate, paths } from "../../router";
@@ -57,16 +57,16 @@ function PlanRows({ account, entries, jobs, full }: { account: GameAccount; entr
         const href = planHref(account, entry);
         return (
           <div key={entry.key} role="row" className={join(d.trow, d.clickable, s.cols)} onClick={() => navigate(href)}>
-            <b className={join(ui.mono, s.time)} role="cell">{clockText(source.minuteOfDay)}</b>
+            <b className={join(ui.num, s.time)} role="cell">{clockText(source.minuteOfDay)}</b>
             <span role="cell" className={s.name}>
-              <span className={s.nameLine}><Link to={href} className={d.cellLink} onClick={(e) => e.stopPropagation()}>{source.name}</Link>{!entry.preset && <Pill>自建</Pill>}</span>
+              <span className={s.nameLine}><Link to={href} className={d.cellLink} onClick={(e) => e.stopPropagation()}>{source.name}</Link>{!entry.preset && <Tag>自建</Tag>}</span>
               <span className={join(ui.tiny, s.taskInName)}>{taskLine(entry) || "未选任务"}</span>
             </span>
             <span role="cell" className={s.days} aria-label={`周${WEEK.filter((_, i) => days.has(i + 1)).join("")}`}>
               {WEEK.map((label, i) => <span key={label} className={days.has(i + 1) ? `${s.day} ${s.dayOn}` : s.day} aria-hidden="true">{label}</span>)}
             </span>
             <span role="cell" className={join(ui.tiny, s.taskCol)}>{taskLine(entry) || "未选任务"}</span>
-            <span role="cell" className={join(ui.tiny, ui.mono)}>{next || "—"}</span>
+            <span role="cell" className={join(ui.tiny, ui.num)}>{next || "—"}</span>
             <span role="cell" className={ui.tiny}>{last ? <span className={s.last} title={last.detail || undefined}>{shortTime(last.at)} <Pill tone={last.tone}>{last.label}</Pill></span> : "—"}</span>
             <span role="cell" onClick={(e) => e.stopPropagation()}>
               {full && !entry.plan ? <ProLockButton name={`启用${source.name}`} />
@@ -146,7 +146,7 @@ function WeekGrid({ account, entries }: { account: GameAccount; entries: PlanEnt
         {entries.map((entry) => (
           <div key={entry.key} role="row" className={s.weekRow}>
             <Link to={planHref(account, entry)} role="rowheader" className={s.weekName} title={entry.name}>
-              <b className={ui.mono}>{clockText(entry.minuteOfDay)}</b><span>{entry.name}</span>
+              <b className={ui.num}>{clockText(entry.minuteOfDay)}</b><span>{entry.name}</span>
             </Link>
             {WEEK.map((day, i) => {
               const state = cell(entry, i);

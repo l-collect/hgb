@@ -16,8 +16,8 @@ span.field input.input::placeholder { color: var(--color-faint); font-weight: 40
 span.field input.input:disabled { cursor: default; }
 
 .panel {
-  position: fixed; z-index: 60; width: 236px; max-width: calc(100vw - 16px); padding: var(--space-2); border: 1px solid var(--color-line); border-radius: var(--radius-lg);
-  background: var(--color-surface); color: var(--color-ink); box-shadow: 0 12px 32px rgb(0 0 0 / .16), 0 2px 6px rgb(0 0 0 / .08);
+  position: fixed; z-index: 60; width: 236px; max-width: calc(100vw - 16px); padding: var(--space-2); border: 0; border-radius: var(--radius-menu);
+  background: var(--color-raised); color: var(--color-ink); box-shadow: var(--shadow-lg);
 }
 .columns { display: flex; align-items: stretch; gap: 2px; }
 .colon { align-self: center; color: var(--color-faint); font-weight: 600; }

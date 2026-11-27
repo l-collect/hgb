@@ -24,23 +24,22 @@
 .jobActions { display: flex; flex-wrap: wrap; gap: 10px; }
 .jobActions > * { min-height: var(--control-height-lg); }
 .big { padding: 0 var(--space-4); border-radius: var(--radius-lg); }
-.why { display: flex; gap: 14px; padding: var(--space-4) var(--space-5); border-radius: var(--radius-xl); background: var(--color-warn-soft); border: 1px solid var(--color-warn-line); color: var(--color-warn-ink); }
+.why { display: flex; gap: 14px; padding: var(--space-4) var(--space-5); border-radius: var(--radius-xl); background: var(--color-surface); border: 0; box-shadow: var(--shadow-sm); color: var(--color-warn); }
 .why svg { flex: none; margin-top: 2px; color: var(--color-warn); }
 /* Why it stopped, coloured by how it ended (format.ts STATE_TONES): failed red, unconfirmed orange, skipped grey. */
-.why_bad { background: var(--color-danger-soft); border-color: var(--color-danger-line); color: var(--color-ink); }
+.why_bad { background: var(--color-surface); color: var(--color-ink); }
 .why_bad svg, .why_bad h2 { color: var(--color-danger); }
-.why_neutral { background: var(--color-neutral-bg); border-color: var(--color-line); color: var(--color-ink); }
+.why_neutral { background: var(--color-sunken); box-shadow: none; color: var(--color-ink); }
 .why_neutral svg { color: var(--color-muted); }
 .why div { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-.why h2 { font-size: var(--text-lg); font-weight: 600; }
+.why h2 { font-size: var(--text-lg); font-weight: 500; }
 .stepsSection { display: flex; flex-direction: column; gap: 10px; }
 .stepsHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .stepsHead h2 { font-size: var(--text-xl); font-weight: 500; }
 .steps { padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .step { border-radius: var(--radius-xl); background: var(--color-surface); border: 0; box-shadow: var(--shadow-sm); min-width: 0; }
-.stepStop_warn { border-color: var(--color-warn-line); }
-.stepStop_bad { border-color: var(--color-danger-line); }
-.stepStop_neutral, .stepStop_info, .stepStop_ok { border-color: var(--color-line); }
+.stepStop_warn { box-shadow: var(--shadow-sm), inset 0 0 0 1.5px var(--color-warn); }
+.stepStop_bad { box-shadow: var(--shadow-sm), inset 0 0 0 1.5px var(--color-danger); }
 .stepButton { width: 100%; display: flex; align-items: center; gap: var(--space-3); min-height: 64px; padding: var(--space-3) var(--space-4); border: 0; background: transparent; text-align: left; color: inherit; border-radius: var(--radius-xl); }
 .stepMark { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: var(--text-sm); font-weight: 600; }
 .mark_done { background: var(--color-ok); color: var(--color-on-status); }
@@ -65,10 +64,10 @@
 @media (max-width: 560px) { .actionsList { padding-left: var(--space-4); } }
 .accountLink { font-weight: 600; text-decoration: none; }
 .stoppedOn { display: block; margin-top: 8px; max-width: 480px; }
-.stoppedOn img { display: block; width: 100%; height: auto; border-radius: var(--radius-md); border: 1px solid var(--color-warn-line); }
+.stoppedOn img { display: block; width: 100%; height: auto; border-radius: var(--radius-md); }
 /* Why a queued run waits (设备离线 …), under its pill. */
 .reason { display: block; margin-top: 2px; color: var(--color-warn); font-size: var(--text-xs); font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
-.waitNote { padding: 10px 14px; border-radius: var(--radius-lg); background: var(--color-warn-soft); border: 1px solid var(--color-warn-line); color: var(--color-warn-ink); font-size: var(--text-sm); }
+.waitNote { padding: 10px 14px; border-radius: var(--radius-lg); background: var(--color-surface); border: 0; box-shadow: var(--shadow-sm); color: var(--color-warn); font-size: var(--text-sm); }
 .next, .why .next { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 /* 详情 (developers): the steps and actions open below it. */
 .detailBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }

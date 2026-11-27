@@ -1,7 +1,7 @@
 import { useState, type ReactNode, useEffect } from "react";
 import { api, enc } from "../../api/client";
 import type { Device, App, Game, GameAccount, GameTask, Plan } from "../../api/types";
-import { Button, ButtonLink, Card, CardHead, Empty, LiveSwitch, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, join, ui } from "../../components/ui";
+import { Button, ButtonLink, Card, CardHead, Empty, LiveSwitch, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, join, ui, Tag, CategoryTile } from "../../components/ui";
 import { clockText, jobStatus, shortTime } from "../../format";
 import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
@@ -134,13 +134,14 @@ function TaskList({ game, current, account, notes, busy, onRun, locked, blocked 
             const state = taskState(data.jobs, task, account?.id, data.devices);
             return (
               <div key={task.taskId} className={d.pick} aria-current={task.taskId === current ? "true" : undefined}>
+                <span className={s.rowTile}><CategoryTile category={task.category} small /></span>
                 <Link to={paths.taskDetail(task.targetId, task.taskId, account?.id)} className={d.pickLink} aria-current={task.taskId === current ? "page" : undefined}>
                   <span className={s.titleLine}>
                     <b className={s.titleText}>{task.name}</b>
                     {favorites.has(favKey(task.targetId, task.taskId)) && <span className={s.starMark} aria-label="常用">★</span>}
                     {state && <Pill tone={state[1]}>{state[0]}</Pill>}
                   </span>
-                  {chips.length > 0 && <span className={s.chips}>{chips.map((chip) => <Pill key={chip}>{chip}</Pill>)}</span>}
+                  {chips.length > 0 && <span className={s.chips}>{chips.map((chip) => <Tag key={chip}>{chip}</Tag>)}</span>}
                   {task.taskId !== current && <Note note={notes[task.taskId]} />}
                 </Link>
                 <span className={d.hoverOnly}>
@@ -167,7 +168,7 @@ function TaskPane({ game, task, account, note, runBusy, onRun, locked }: {
   const stepHref = (stepId: string) => paths.taskStep(game.id, task.taskId, stepId, { accountId: account?.id });
   const head = (
     <span className={s.titleLine}>
-      <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: 700 }}>{task.name}</h2>
+      <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: 500 }}>{task.name}</h2>
       <StarButton on={favorites.has(key)} toggle={() => toggleFavorite(key)} />
       <DevTaskMenu gameId={game.id} taskId={task.taskId} />
       {note}
@@ -227,7 +228,7 @@ function TaskContext({ game, task, account, plans, pickers, lock }: {
           {using.length === 0 ? <Empty>没有计划用到</Empty> : using.map((plan) => (
             <Row key={plan.id}>
               <Link to={paths.planEdit(account.id, plan.id)} style={{ flex: 1, minWidth: 0, color: "inherit", textDecoration: "none", fontSize: "var(--text-sm)" }}>
-                {plan.name} · <span className={ui.mono}>{clockText(plan.minuteOfDay)}</span>
+                {plan.name} · <span className={ui.num}>{clockText(plan.minuteOfDay)}</span>
               </Link>
               <LiveSwitch label={`启用${plan.name}`} checked={plan.enabled}
                 save={(on) => api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body: saveOf(plan, { enabled: on }) })} />

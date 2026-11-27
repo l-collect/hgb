@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, enc } from "../../api/client";
 import { settingVisible, type ConfigView, type CoopMode, type Device, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
-import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, join, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui } from "../../components/ui";
+import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, join, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui, Tag } from "../../components/ui";
 import { ask } from "../../components/Confirm";
 import { TimePicker } from "../../components/TimePicker";
 import { ProCount, ProLimitButton, ProLockButton, ProLockRow, usePro } from "../../components/Pro";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { runSubmitted } from "../jobs/runs";
-import { clockText, CONFIG_TONE, cycleText, jobStatus, nextTime, PLAN_RUN_STATES, shortTime, WEEK, type Tone } from "../../format";
+import { clockText, cycleText, jobStatus, nextTime, PLAN_RUN_STATES, shortTime, WEEK, type Tone } from "../../format";
 import { leave, Link, navigate, paths, useLeaveGuard } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
@@ -99,7 +99,7 @@ export function PlanList({ account, game, plans, jobs = [] }: { account: GameAcc
                 <span className={ui.tiny}>{cycleLine(source.days, source.jitterMinutes)}</span>
               </span>
               <span className={s.planMain}>
-                <span className={s.planName}><b>{source.name}</b>{!preset && <Pill>自建</Pill>}</span>
+                <span className={s.planName}><b>{source.name}</b>{!preset && <Tag>自建</Tag>}</span>
                 <span className={`${ui.tiny} ${s.ellipsis}`}>{taskNames || "未选任务"}</span>
                 {(next || last) && (
                   <span className={join(ui.tiny, s.planWhen)}>
@@ -373,11 +373,11 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
             <span style={{ display: "block", fontWeight: 500 }}>{task.name}</span>
             {hasOwn(own) ? (
               <span className={s.followLine}>
-                <Pill tone={CONFIG_TONE.set}>单独设置</Pill>
+                <Tag>单独设置</Tag>
                 <span className={`${ui.tiny} ${s.ellipsis}`}>{ownText(task, own)}</span>
                 <button type="button" className={s.configLink} onClick={() => follow(tid)}>恢复跟随</button>
               </span>
-            ) : <span className={s.followLine}><Pill tone={CONFIG_TONE.unset}>跟随账号</Pill></span>}
+            ) : <span className={s.followLine}><Tag>跟随账号</Tag></span>}
           </span>
           <button type="button" className={s.configLink} onClick={() => setEditingTask(tid)}>配置 ›</button>
           <span className={s.orderButtons}>
@@ -553,7 +553,7 @@ function PlanTaskEditor({ account, plan, detail, planName, own, drawer, back, do
 
   const state = accountValues !== null && (
     <p className={s.followLine}>
-      {following ? <Pill tone={CONFIG_TONE.unset}>跟随账号</Pill> : <Pill tone={CONFIG_TONE.set}>单独设置</Pill>}
+      {following ? <Tag>跟随账号</Tag> : <Tag>单独设置</Tag>}
       <span className={ui.tiny}>{following ? "账号参数改了，这里跟着变" : "只在这个计划里生效"}</span>
     </p>
   );

@@ -23,3 +23,13 @@
   --sl-color-text-accent: var(--color-ink);
 }
 .site-title { font-weight: 600; }
+
+/* Starlight 自带的提示框（note / tip / caution / danger）：不用它的蓝紫和彩色浅底，改成白卡 + 状态色小标题，和控制台的提示条一致。 */
+:root, :root[data-theme="light"], :root[data-theme="dark"] {
+  --sl-color-blue-low: var(--color-surface); --sl-color-blue: var(--color-ink); --sl-color-blue-high: var(--color-ink);
+  --sl-color-purple-low: var(--color-surface); --sl-color-purple: var(--color-ink); --sl-color-purple-high: var(--color-ink);
+  --sl-color-green-low: var(--color-surface); --sl-color-green: var(--color-ok); --sl-color-green-high: var(--color-ok);
+  --sl-color-orange-low: var(--color-surface); --sl-color-orange: var(--color-warn); --sl-color-orange-high: var(--color-warn);
+  --sl-color-red-low: var(--color-surface); --sl-color-red: var(--color-danger); --sl-color-red-high: var(--color-danger);
+}
+.starlight-aside { border: 0; border-radius: 24px; background: var(--color-surface); box-shadow: var(--shadow-sm); }

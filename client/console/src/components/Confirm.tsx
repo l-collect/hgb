@@ -43,7 +43,7 @@ export function ConfirmHost() {
         {open.body && <p id="confirm-body" className={s.body}>{open.body}</p>}
         <div className={s.buttons}>
           <Button data-cancel onClick={() => open.answer(false)}>{open.cancel ?? "取消"}</Button>
-          <Button data-ok variant={open.danger ? "danger" : "primary"} onClick={() => open.answer(true)}>{open.ok ?? "确定"}</Button>
+          <Button data-ok variant={open.danger ? "destroy" : "primary"} onClick={() => open.answer(true)}>{open.ok ?? "确定"}</Button>
         </div>
       </div>
     </div>
