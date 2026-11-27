@@ -1,0 +1,44 @@
+client/console/src/components/Hero.tsx
+  s_f7a95e158ed057::t_a1c2caf15801bb 2,14-15,20,22,27,37,39,41,45,47
+client/console/src/shell/Shell.module.css
+  s_f7a95e158ed057::t_a1c2caf15801bb 21,59,112
+client/console/src/shell/useWidth.ts
+  s_f7a95e158ed057::t_a1c2caf15801bb 6
+client/console/src/shell/DevNav.tsx
+  s_f7a95e158ed057::t_a1c2caf15801bb 91-93
+  s_f7a95e158ed057::t_c6db6d629116c4 75
+client/console/src/theme/tokens.ts
+  s_f7a95e158ed057::t_c6db6d629116c4 3
+client/console/src/format.ts
+  s_f7a95e158ed057::t_a1c2caf15801bb 93-102
+design/tokens.mjs
+  s_f7a95e158ed057::t_c6db6d629116c4 43
+client/console/src/shell/Shell.tsx
+  s_f7a95e158ed057::t_a1c2caf15801bb 60,70
+client/console/src/features/accounts/GameAccountsPage.tsx
+  s_f7a95e158ed057::t_a1c2caf15801bb 221
+client/console/src/features/me/Me.module.css
+  s_f7a95e158ed057::t_a1c2caf15801bb 14
+client/console/src/features/dev/Workspace.module.css
+  s_f7a95e158ed057::t_a1c2caf15801bb 4
+client/console/src/features/library/LibraryPage.tsx
+  s_f7a95e158ed057::t_a1c2caf15801bb 158
+client/console/src/features/library/TasksDesk.tsx
+  s_f7a95e158ed057::t_a1c2caf15801bb 77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fbf56c8d920b8000a1baa7277589e4be27e6ef37",
+  "prompts": {},
+  "sessions": {
+    "s_f7a95e158ed057": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4027ed01-4d57-4a0f-b74b-45d11e560dcb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
