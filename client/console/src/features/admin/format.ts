@@ -35,7 +35,8 @@ export const MAX_DAYS = 3650;
 /** A code as the list shows it: its first characters and …; an old code without them shows —. */
 export const shortCode = (prefix: string) => prefix ? `${prefix}…` : "—";
 export const duration = (days: number | null) => days == null ? "永久" : `${days} 天`;
-export const CODE_STATUS: Record<CodeStatus, [string, Tone]> = { unused: ["未用", "info"], used: ["已用", "ok"], revoked: ["作废", ""], expired: ["已过期", ""] };
+/** A code's status and its tone: only 已用 is coloured; 未用, 作废 and 过期 need nobody to act, so they stay neutral. */
+export const CODE_STATUS: Record<CodeStatus, [string, Tone]> = { unused: ["未用", ""], used: ["已用", "ok"], revoked: ["作废", ""], expired: ["过期", ""] };
 
 /** Who someone is, short: their email, else their GitHub login. */
 export const who = (person: Pick<Person, "email" | "githubLogin">) => person.email ?? (person.githubLogin ? `gh:${person.githubLogin}` : "—");

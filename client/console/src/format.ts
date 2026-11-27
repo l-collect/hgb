@@ -69,8 +69,8 @@ export function cycleText(days: number[], jitterMinutes?: number): string {
 /** An action's kind under the one set of names the App and the web share, and its pill colour (a kind, not a state: no state colours). */
 export function actionKind(kind: string): [string, Tone | "soft"] {
   switch (kind) {
-    case "look": return ["看画面", "soft"];
-    case "act": return ["执动作", "soft"];
+    case "look": return ["认画面", "soft"];
+    case "act": return ["操作", "soft"];
     case "nav": return ["去页面", "soft"];
     case "branch": return ["按配置", ""];
     case "loop": return ["循环流", ""];

@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Button, Card, Chips, Message, Stepper, ui } from "../../../components/ui";
+import { Button, Chips, Message, Stepper } from "../../../components/ui";
 import { admin, save, stamp, type Generated } from "../api";
 import { ask } from "../../../components/Confirm";
 import { toast } from "../../../components/Toast";
 import { failure } from "../failure";
 import { dateInput, duration, endOfDay, MAX_DAYS } from "../format";
+import { AlertIcon, DownloadIcon } from "../icons";
 import { Drawer } from "./parts";
 import s from "./pages.module.css";
 
@@ -45,7 +46,7 @@ export function Generate({ onClose, onGenerated }: { onClose: () => void; onGene
   const copy = async () => {
     if (!done) return;
     try { await navigator.clipboard.writeText(done.codes.join("\n")); setKept(true); setCopied(true); setTimeout(() => setCopied(false), 2000); }
-    catch { toast("复制失败，请改用下载 CSV", { tone: "bad" }); }
+    catch { toast("复制失败，请改用导出 CSV", { tone: "bad" }); }
   };
   const download = () => {
     if (!done) return;
@@ -63,15 +64,15 @@ export function Generate({ onClose, onGenerated }: { onClose: () => void; onGene
 
   if (done) return (
     <Drawer title={`已生成 ${done.codes.length} 个`} onClose={close}
-      foot={<><Button onClick={download}>下载 CSV</Button><Button onClick={copy}>{copied ? "已复制" : "复制全部"}</Button><span className={s.spacer} /><Button variant="primary" onClick={close}>好了</Button></>}>
-      <div className={s.once}>明文只显示这一次，关掉就看不到了</div>
-      <Card className={`${s.plain} ${ui.mono}`}>{done.codes.map((code) => <div key={code}>{code}</div>)}</Card>
-      <span className={ui.tiny}>{duration(done.days)}{done.batch ? ` · 批次「${done.batch}」` : ""}</span>
+      foot={<><Button onClick={download}><DownloadIcon />导出 CSV</Button><Button onClick={copy}>{copied ? "已复制" : "复制全部"}</Button><Button variant="primary" onClick={close}>好了</Button></>}>
+      <div className={s.once} role="alert"><span className={s.onceTile}><AlertIcon /></span><b>明文只显示这一次</b></div>
+      <div className={s.plain}>{done.codes.map((code) => <span key={code}>{code}</span>)}</div>
+      <span className={s.meta}>{duration(done.days)}{done.batch ? ` · 批次「${done.batch}」` : ""}</span>
     </Drawer>
   );
   return (
     <Drawer title="批量生成" onClose={onClose}
-      foot={<><span className={s.spacer} /><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!valid || busy} onClick={generate}>{busy ? "生成中…" : `生成 ${count ?? ""} 个`}</Button></>}>
+      foot={<><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!valid || busy} onClick={generate}>{busy ? "生成中…" : `生成 ${count ?? ""} 个`}</Button></>}>
       <div className={s.group}><span className={s.label}>数量</span><Stepper label="数量" value={count} onChange={setCount} min={1} max={500} /></div>
       <div className={s.group}>
         <span className={s.label}>时长</span>
@@ -81,7 +82,6 @@ export function Generate({ onClose, onGenerated }: { onClose: () => void; onGene
       <div className={s.group}>
         <span className={s.label}>批次</span>
         <input aria-label="批次" className={s.input} maxLength={40} placeholder="11 月活动" value={batch} onChange={(e) => setBatch(e.target.value)} />
-        <span className={ui.tiny}>用来筛选和统计，不给用户看</span>
       </div>
       <div className={s.group}>
         <span className={s.label}>有效期</span>

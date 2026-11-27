@@ -16,7 +16,8 @@ export function GameCard({ samples }: { samples: Sample[] }) {
   const [text, setText] = useState<[string, boolean] | null>(null);
   const app = draft ? target(draft.body, game) : undefined;
   const appName = str(app?.name) ?? "";
-  const appPackages = arr(app?.androidPackages).join("、");
+  const packageList = arr(app?.androidPackages).map(String);
+  const appPackages = packageList.join("、");
   const [name, setName] = useState(appName);
   const [packages, setPackages] = useState(appPackages);
   useEffect(() => { setName(appName); setPackages(appPackages); }, [appName, appPackages]);
@@ -24,8 +25,6 @@ export function GameCard({ samples }: { samples: Sample[] }) {
   const profile = objs(draft.body.visionProfiles).find((v) => v.targetId === game);
   const size = referenceSize(draft.body, game);
   const ratios = Object.entries(samples.reduce<Record<string, number>>((m, x) => { const k = ratio(x.width, x.height); m[k] = (m[k] ?? 0) + 1; return m; }, {}));
-  const library = isObj(app.library) ? app.library : {};
-  const fallbacks = arr(library.fallbacks).length;
   const save = async () => {
     const list = packages.split(/[、,，\s]+/).map((x) => x.trim()).filter(Boolean);
     const problem = await apply(async (body) => {
@@ -35,23 +34,34 @@ export function GameCard({ samples }: { samples: Sample[] }) {
     });
     setText(problem ? [problem, false] : ["已保存", true]);
   };
+  const identity = IDENTITY[str(app.identityPolicy) ?? ""] ?? str(app.identityPolicy) ?? "—";
   return (
-    <section className={`${w.card} ${g.card}`} aria-label="游戏">
+    <section className={`${w.card} ${g.card} ${g.game}`} aria-label="游戏">
       <button type="button" className={g.summary} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <b>游戏 · {gameName}</b>
-        <span className={`${w.muted} ${g.grow} ${g.clip}`}>{appPackages || "没写包名"} · 参考 {size ?? "—"} · 模型 {str(profile?.recognizer) ?? "无"} · {IDENTITY[str(app.identityPolicy) ?? ""] ?? str(app.identityPolicy) ?? "—"} · 兜底 {fallbacks}</span>
-        <span className={w.muted}>{open ? "收起" : "展开"}</span>
+        <span className={g.tile} aria-hidden="true">{gameName.slice(0, 1)}</span>
+        <span className={g.sumText}>
+          <b>{gameName}</b>
+          <span className={`${w.muted} ${g.clip} ${g.mono}`}>{packageList.length === 0 ? "没写包名" : packageList.length === 1 ? packageList[0] : `${packageList[0]} · ${packageList.length} 个包`}</span>
+        </span>
+        <span className={g.toggle}>{open ? "收起" : "展开"}</span>
       </button>
-      {open && <>
-        <div className={g.pair}>
-          <div className={g.f} style={{ flex: "1 1 140px" }}><label htmlFor="gn">名称</label><input id="gn" value={name} onChange={(e) => setName(e.target.value)} onBlur={save} /></div>
-          <div className={g.f} style={{ flex: "2 1 220px" }}><label htmlFor="gp">包名（分身用顿号分开）</label><input id="gp" value={packages} onChange={(e) => setPackages(e.target.value)} onBlur={save} /></div>
+      {open && <div className={g.cols}>
+        <div className={g.colMain}>
+          <div className={g.pair}>
+            <div className={g.f} style={{ flex: "1 1 140px" }}><label htmlFor="gn">名称</label><input id="gn" value={name} onChange={(e) => setName(e.target.value)} onBlur={save} /></div>
+            <div className={g.f} style={{ flex: "2 1 220px" }}><label htmlFor="gp">包名</label><input id="gp" className={g.mono} value={packages} placeholder="com.netease.onmyoji、…" onChange={(e) => setPackages(e.target.value)} onBlur={save} /></div>
+          </div>
+          <div className={g.facts}>
+            <div className={g.fact}><span className={w.muted}>参考尺寸</span><b>{size ?? "—"}</b></div>
+            <div className={g.fact}><span className={w.muted}>识字模型</span><b>{str(profile?.recognizer) ?? "无"}</b></div>
+            <div className={g.fact}><span className={w.muted}>账号</span><b>{identity}</b></div>
+          </div>
+          <div className={g.ratios}><span className={g.lb}>样本比例</span>
+            <div className={g.pair}>{ratios.length ? ratios.map(([k, n]) => <span key={k} className={`${g.ratio} ${n > 1 ? "" : w.muted}`}>{k} · {n}</span>) : <span className={w.muted}>没有样本</span>}</div></div>
+          {text && <div className={text[1] ? `${w.muted} ${w.okText}` : w.message}>{text[0]}</div>}
         </div>
-        <div className={g.pair}><span className={w.muted}>样本比例</span>
-          {ratios.length ? ratios.map(([k, n]) => <span key={k} className={`${w.chip} ${n > 1 ? w.pass : w.none}`}>{k} · {n}</span>) : <span className={w.muted}>没有样本</span>}</div>
         <Fallbacks />
-        {text && <div className={text[1] ? `${w.muted} ${w.okText}` : w.message}>{text[0]}</div>}
-      </>}
+      </div>}
     </section>
   );
 }

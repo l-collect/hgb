@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { CloudTask, ConfigView, Device, Game, GameAccount, GameTask, Job } from "../../api/types";
 import { Breadcrumb, Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, ui, Tag, CategoryTile } from "../../components/ui";
-import { actionKind, ACTIVE, CONFIG_TONE, JOB_STATES, jobStatus, type Tone } from "../../format";
+import { actionKind, ACTIVE, JOB_STATES, jobStatus, type Tone } from "../../format";
 import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
@@ -324,42 +324,51 @@ function TaskStepDetail({ gameId, taskId, detail, step }: { gameId: string; task
   return (
     <>
       <Breadcrumb items={crumbs} />
-      <PageHeader title={`步骤 ${step.index} · ${step.name}`} aside={<DevStepButton gameId={gameId} taskId={taskId} stepId={step.id} />} />
+      <PageHeader title={step.name} subtitle={`${detail.name} · 步骤 ${step.index}${detail.stepDetails?.length ? ` / ${detail.stepDetails.length}` : ""}`} aside={<DevStepButton gameId={gameId} taskId={taskId} stepId={step.id} />} />
       <div className={s.stepState}>
-        <Pill tone={willRun ? CONFIG_TONE.set : CONFIG_TONE.unset} dot>{willRun ? "执行" : "跳过"}</Pill>
+        <span className={s.willRun}><i data-run={willRun ? "yes" : "no"} />{willRun ? "这次会跑" : "这次跳过"}</span>
         {step.conditionLabel && <span className={ui.tiny}>准入：{step.conditionLabel}</span>}
       </div>
 
-      {provided.length > 0 && (
+      <div className={s.stepCols}>
         <Card flush as="section">
-          <CardHead title={`提供的设置（${provided.length}）`} />
-          {provided.map((fid) => (
-            <Row key={fid}>
-              <span style={{ flex: 1 }}>{metaById.get(fid)?.label ?? fid}</span>
-              <span className={ui.tiny}>默认：{metaById.get(fid)?.defaultLabel ?? "—"} · 当前：{current(fid)}</span>
-            </Row>
-          ))}
+          <CardHead title={`动作 · ${actions.length}`} />
+          {actions.length === 0 ? <Empty>没有动作</Empty> : actions.map((act, idx) => {
+            const used = act.consumedFieldIds ?? [];
+            const [kindText] = actionKind(act.kind);
+            return (
+              <div key={`${act.id}-${idx}`} className={s.actionRow}>
+                <Tag className={s.kind}>{kindText}</Tag>
+                <span className={s.actionText}>
+                  {act.label}{act.detail && <span className={ui.tiny}> {act.detail}</span>}
+                  {used.length > 0 && <span className={s.consumes}>{used.map((fid) => `${metaById.get(fid)?.label ?? fid} · ${current(fid)}`).join("　")}</span>}
+                </span>
+              </div>
+            );
+          })}
         </Card>
-      )}
 
-      <Card flush as="section">
-        <CardHead title={`动作（${actions.length}）`} />
-        {actions.length === 0 ? <Empty>没有动作</Empty> : actions.map((act, idx) => {
-          const used = act.consumedFieldIds ?? [];
-          const [kindText] = actionKind(act.kind);
-          return (
-            <div key={`${act.id}-${idx}`} className={s.actionRow}>
-              <Tag className={s.kind}>{kindText}</Tag>
-              <span className={s.actionText}>
-                {act.label}{act.detail && <span className={ui.tiny}> {act.detail}</span>}
-                {used.length > 0 && (
-                  <span className={s.consumes}>🎯 {used.map((fid) => `${metaById.get(fid)?.label ?? fid}（当前：${current(fid)}）`).join(" · ")}</span>
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </Card>
+        {provided.length > 0 && (
+          <Card flush as="section">
+            <CardHead title={`用到的设置 · ${provided.length}`} />
+            {provided.map((fid) => {
+              const def = schemaById.get(fid);
+              const fallback = metaById.get(fid)?.defaultLabel ?? formatSettingValue(def, def?.recommended) ?? "—";
+              const now = current(fid);
+              // Changed against the recommended value itself, as 设置 does, not against its formatted text.
+              const hasRecommended = def?.recommended !== undefined && def?.recommended !== null;
+              const changed = hasRecommended && values[fid] !== undefined && JSON.stringify(values[fid]) !== JSON.stringify(def!.recommended);
+              return (
+                <Row key={fid}>
+                  {changed ? <span className={ui.changed} role="img" aria-label="改过" /> : null}
+                  <span className={s.settingName}>{metaById.get(fid)?.label ?? fid}{changed && <span className={ui.tiny}>默认 {fallback}</span>}</span>
+                  <b className={s.settingValue}>{now}</b>
+                </Row>
+              );
+            })}
+          </Card>
+        )}
+      </div>
     </>
   );
 }

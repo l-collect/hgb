@@ -1,19 +1,25 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Button, join, Popover, ui } from "../../../components/ui";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { join, Popover, ui } from "../../../components/ui";
 import { PAGE } from "../api";
+import { BackIcon, CloseIcon, DownIcon, NextIcon, SearchIcon } from "../icons";
 import s from "./pages.module.css";
 
-/** The page's title row, the design's 22px heading with its actions at the end. */
+/** The page's title row: the 26 heading with its actions at the end. */
 export function Title({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return <div className={s.titleRow}><h1>{children}</h1>{aside}</div>;
 }
 
-/** A filter shown as a chip, 批次 ▾; its options open under it, the chosen one highlighted. */
+/** The status tabs, kept at their width and scrolled sideways when the row is narrower. */
+export function TabsRow({ children }: { children: ReactNode }) {
+  return <div className={s.seg}>{children}</div>;
+}
+
+/** A filter shown as a white pill, 批次 全部 ▾; its options open under it, the chosen one highlighted. */
 export function FilterChip<T extends string | number>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (value: T) => void }) {
-  const current = options.find(([id]) => id === value);
-  const on = current !== undefined && current !== options[0];
+  const current = options.find(([id]) => id === value) ?? options[0];
+  const on = current !== options[0];
   return (
-    <Popover label={label} plain trigger={<span className={join(ui.chip, on && ui.chipOn, s.filterChip)}>{on ? `${label} · ${current![1]}` : label} ▾</span>}>
+    <Popover label={`${label}：${current[1]}`} plain trigger={<span className={join(s.pick, on && s.pickOn)}>{label}<span className={s.pickValue}>{current[1]}</span><DownIcon /></span>}>
       {(close) => (
         <div role="listbox" aria-label={label} className={ui.options}>
           {options.map(([id, text]) => (
@@ -35,23 +41,32 @@ export function Search({ value, onChange, placeholder }: { value: string; onChan
     const timer = setTimeout(() => onChange(text), 300);
     return () => clearTimeout(timer);
   }, [text, value, onChange]);
-  return <input type="search" className={s.search} aria-label={placeholder} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} />;
+  return (
+    <label className={s.search}>
+      <SearchIcon />
+      <input type="search" aria-label={placeholder} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} />
+    </label>
+  );
 }
 
-/** 1–50 / 120, then the previous and next pages. */
+/** 1–50 / 120, then the previous and next pages as round buttons. */
 export function Pager({ offset, total, onChange }: { offset: number; total: number; onChange: (offset: number) => void }) {
   if (total <= PAGE && offset === 0) return null;
   return (
     <div className={s.pager}>
       <span className={ui.tiny}>{total === 0 ? 0 : offset + 1}–{Math.min(offset + PAGE, total)} / {total}</span>
-      <Button small disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - PAGE))}>上一页</Button>
-      <Button small disabled={offset + PAGE >= total} onClick={() => onChange(offset + PAGE)}>下一页</Button>
+      <button type="button" className={s.pageButton} aria-label="上一页" disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - PAGE))}><BackIcon size={18} /></button>
+      <button type="button" className={s.pageButton} aria-label="下一页" disabled={offset + PAGE >= total} onClick={() => onChange(offset + PAGE)}><NextIcon /></button>
     </div>
   );
 }
 
-/** The design's right-hand drawer over the page: a heading row with ✕, the body, and a row of buttons at the foot. */
+/**
+ * The drawer over the page: its title with ✕, the body, and the buttons at the foot, right-aligned with the main one
+ * last. On wide it is the full height on the right (480); narrower it takes the whole window.
+ */
 export function Drawer({ title, onClose, children, foot }: { title: string; onClose: () => void; children: ReactNode; foot: ReactNode }) {
+  const heading = useId();
   useEffect(() => {
     // A question open over the drawer takes Escape itself.
     const key = (event: KeyboardEvent) => { if (event.key === "Escape" && !document.querySelector("[role=alertdialog]")) onClose(); };
@@ -61,8 +76,8 @@ export function Drawer({ title, onClose, children, foot }: { title: string; onCl
   return (
     <>
       <div className={s.scrim} onClick={onClose} aria-hidden="true" />
-      <aside className={s.drawer} role="dialog" aria-modal="true" aria-label={title}>
-        <div className={s.drawerHead}><b>{title}</b><button type="button" className={ui.iconButton} aria-label="关闭" onClick={onClose}>✕</button></div>
+      <aside className={s.drawer} role="dialog" aria-modal="true" aria-labelledby={heading}>
+        <div className={s.drawerHead}><h2 id={heading}>{title}</h2><button type="button" className={s.close} aria-label="关闭" onClick={onClose}><CloseIcon /></button></div>
         <div className={s.drawerBody}>{children}</div>
         <div className={s.drawerFoot}>{foot}</div>
       </aside>

@@ -34,12 +34,18 @@ export function RunningHero({ gameId }: { gameId?: string }) {
 }
 
 /** 下次开跑：最近一次要开跑的计划（只看开着的）。 */
-export function NextPlanHero({ gameId }: { gameId?: string }) {
+/** The next enabled plan to start (in [gameId]'s accounts when given): what [NextPlanHero] shows. */
+export function useNextPlan(gameId?: string): (Plan & { nextAt: number }) | undefined {
   const { data } = useConsole();
   const inGame = gameId ? new Set(data.accounts.filter((a) => a.gameId === gameId).map((a) => a.id)) : null;
-  const next = data.plans
+  return data.plans
     .filter((plan): plan is Plan & { nextAt: number } => plan.enabled && typeof plan.nextAt === "number" && plan.nextAt >= Date.now() - 60000 && (!inGame || inGame.has(plan.accountId)))
     .sort((a, b) => a.nextAt - b.nextAt)[0];
+}
+
+export function NextPlanHero({ gameId }: { gameId?: string }) {
+  const { data } = useConsole();
+  const next = useNextPlan(gameId);
   if (!next) return null;
   const account = data.accounts.find((a) => a.id === next.accountId);
   const { day, hm } = nextParts(next.nextAt);

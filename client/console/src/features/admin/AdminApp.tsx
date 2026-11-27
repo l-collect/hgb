@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiFailure } from "../../api/client";
 import { Button, ErrorCard, Loading, Mark, ui, Tag } from "../../components/ui";
+import { BackIcon, KeyIcon, UserIcon } from "./icons";
 import { ConfirmHost } from "../../components/Confirm";
 import { ToastHost } from "../../components/Toast";
 import { Link, paths, usePath } from "../../router";
@@ -41,10 +42,11 @@ export default function AdminApp() {
     case "failed": return <div style={{ padding: 16 }}><ErrorCard text={session.message} retry={() => { setSession({ kind: "loading" }); void check(); }} /></div>;
     // Signed in, the sign-in page comes back here (next).
     case "signed-out": return <Gate title="护肝宝 · 管理" text="用控制台的账号登录"><Link className={buttonClass("primary")} to={`${paths.login}?next=${encodeURIComponent(path)}`}>去登录</Link></Gate>;
+    // The way out first, the main action last (on the right).
     case "denied": return (
       <Gate title="没有权限" text="当前账号不是管理员">
-        <Link className={buttonClass("primary")} to={paths.tasks}>回控制台</Link>
         <Button onClick={() => { admin.logout().catch(() => {}).finally(() => { location.href = paths.login; }); }}>换个账号</Button>
+        <Link className={buttonClass("primary")} to={paths.tasks}>回控制台</Link>
       </Gate>
     );
     case "admin": return <Shell me={session.me} />;
@@ -57,17 +59,16 @@ function Gate({ title, text, children }: { title: string; text: string; children
   return (
     <main className={s.gate}>
       <div className={s.gateCard}>
-        <Mark size={40} /><b className={s.gateTitle}>{title}</b><span className={ui.tiny}>{text}</span>
+        <Mark size={56} /><h1 className={s.gateTitle}>{title}</h1><span className={s.gateText}>{text}</span>
         <div className={s.gateActions}>{children}</div>
       </div>
     </main>
   );
 }
 
-const icon = (d: ReactNode) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">{d}</svg>;
 const LINKS: ["codes" | "users", string, string, ReactNode][] = [
-  ["codes", "兑换码", "/admin", icon(<><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3" /></>)],
-  ["users", "用户", "/admin/users", icon(<><circle cx="12" cy="8" r="4" /><path d="M5 20a7 7 0 0 1 14 0" /></>)],
+  ["codes", "兑换码", "/admin", <KeyIcon />],
+  ["users", "用户", "/admin/users", <UserIcon />],
 ];
 
 function Shell({ me }: { me: Admin }) {
@@ -76,11 +77,11 @@ function Shell({ me }: { me: Admin }) {
   return (
     <div className={s.shell}>
       <nav className={s.nav} aria-label="管理导航">
-        <span className={s.brand}><Mark size={26} /><b>护肝宝</b><Tag>管理</Tag></span>
+        <span className={s.brand}><Mark size={32} /><b className={s.brandName}>护肝宝</b><Tag className={s.brandTag}>管理</Tag></span>
         {LINKS.map(([id, label, to, svg]) => (
           <Link key={id} to={to} className={s.link} aria-current={id === section ? "page" : undefined}>{svg}{label}</Link>
         ))}
-        <span className={s.me}><span className={s.meName}>{who(me)}</span><Link to={paths.tasks}>← 控制台</Link></span>
+        <span className={s.me}><span className={s.meName}>{who(me)}</span><Link to={paths.tasks} className={s.back} aria-label="回控制台"><BackIcon /><span className={s.backText}>控制台</span></Link></span>
       </nav>
       <main className={s.main}>{section === "users" ? <UsersPage me={me.userId} /> : <CodesPage />}</main>
       <ConfirmHost />

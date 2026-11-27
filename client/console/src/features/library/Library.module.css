@@ -27,12 +27,23 @@
 .star[aria-pressed="true"] { color: var(--color-ink); }
 .star:hover { background: var(--color-sunken); }
 
-.stepState { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.actionRow { display: flex; align-items: center; gap: var(--space-3); min-height: 48px; padding: 8px var(--space-4); border-bottom: 1px solid var(--color-line); }
+.stepState { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+/* Whether the step runs this time: the state's colour on the dot only, the words in ink. */
+.willRun { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: 500; }
+.willRun i { width: 8px; height: 8px; border-radius: 50%; background: var(--color-ok); }
+.willRun i[data-run="no"] { background: var(--color-control); }
+/* Actions, and beside them from 1024 the settings the step offers (one column below). */
+.stepCols { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+@media (min-width: 1024px) { .stepCols { grid-template-columns: minmax(0, 1fr) 360px; } }
+.actionRow { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 56px; padding: 12px var(--space-4); border-bottom: 1px solid var(--color-line); box-sizing: border-box; }
 .actionRow:last-child { border-bottom: 0; }
-.kind { flex: none; width: 60px; justify-content: center; }
+.kind { flex: none; width: 64px; justify-content: center; }
+@media (max-width: 599px) { .kind { width: 56px; } }
 .actionText { flex: 1; min-width: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
-.consumes { display: block; color: var(--color-ink); font-weight: 500; font-size: var(--text-xs); margin-top: 2px; }
+/* The settings an action reads, as a soft pill under it. */
+.consumes { display: inline-flex; margin-top: 6px; padding: 4px 10px; border-radius: var(--radius-pill); background: var(--color-primary-soft); color: var(--color-ink); font-size: var(--text-xs); }
+.settingName { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.settingValue { font-weight: 500; }
 /* No account yet: one line above the tasks, the way to add one at its end. */
 .needs { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
 .needsLink { font-weight: 600; text-decoration: none; white-space: nowrap; }

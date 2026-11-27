@@ -13,11 +13,13 @@
 .home .brand:hover { color: var(--color-ink); }
 .home .brandSmall { font-size: 15px; margin-right: 8px; }
 .home .docs { color: var(--color-muted); text-decoration: none; font-weight: 500; }
-.home .cta { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 12px; font-weight: 600; text-decoration: none; white-space: nowrap;
+.home .cta { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 12px; font-weight: 600; text-decoration: none; white-space: nowrap;
   background: var(--color-primary); color: var(--color-on-primary); }
 .home .cta:hover { background: var(--color-primary-hover); color: var(--color-on-primary); }
 .foot { border-top: 1px solid var(--color-line); background: var(--color-surface); font-size: 14px; }
 .foot .row { padding-top: 28px; padding-bottom: 28px; }
+/* Text links reach 44 high, the touch target every link gets. */
+.home .docs, .foot .row a { display: inline-flex; align-items: center; min-height: 44px; }
 
 .legal { padding-top: 48px; padding-bottom: 64px; max-width: 800px; display: flex; flex-direction: column; gap: 16px; }
 .legal h1 { font-size: clamp(28px, 4vw, 36px); font-weight: 600; }
@@ -31,4 +33,13 @@
 @media (max-width: 599px) {
   .bar { gap: 12px; padding: 0 16px; }
   .wrap { padding: 0 16px; }
+  /* Narrow: each row of a table becomes a block, every value led by its column's name in muted. */
+  .legal thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .legal tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--color-line); }
+  .legal td { display: block; padding: 2px 0; border-bottom: 0; }
+  /* The first column names the row: no label, a little larger. The others are led by their column's name, kept
+     out of the accessible name (the roles on the table keep it a table for screen readers). */
+  .legal td:first-child { font-size: 15px; font-weight: 500; padding-bottom: 6px; }
+  .legal td:not(:first-child)::before { content: attr(data-label); content: attr(data-label) / ""; display: block; font-size: 12px; font-weight: 500; color: var(--color-muted); }
+  .home .docs { display: none; }
 }

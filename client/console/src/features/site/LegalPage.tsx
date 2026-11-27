@@ -37,9 +37,9 @@ export function LegalPage({ page }: { page: "privacy" | "terms" }) {
 
 const Table = ({ head, rows }: { head: string[]; rows: ReactNode[][] }) => (
   <div className={s.tableWrap}>
-    <table>
-      <thead><tr>{head.map((cell) => <th key={cell}>{cell}</th>)}</tr></thead>
-      <tbody>{rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody>
+    <table role="table">
+      <thead role="rowgroup"><tr role="row">{head.map((cell) => <th key={cell} role="columnheader">{cell}</th>)}</tr></thead>
+      <tbody role="rowgroup">{rows.map((row, i) => <tr key={i} role="row">{row.map((cell, j) => <td key={j} role="cell" data-label={head[j]}>{cell}</td>)}</tr>)}</tbody>
     </table>
   </div>
 );
@@ -67,7 +67,7 @@ function Privacy() {
       <h2>存在哪里，交给了谁</h2>
       <p>我们不出售、不出租你的信息，也不把它用于广告。下面这些服务商在提供服务时会接触到部分信息：</p>
       <Table head={["服务商", "做什么", "接触到什么"]} rows={[
-        ["Oracle Cloud（新加坡）", "运行服务器、存放数据库", "上面列出的全部账号数据"],
+        ["Oracle Cloud（新加坡）", "托管服务器、存放数据库", "上面列出的全部账号数据"],
         ["Cloudflare", "域名解析、HTTPS、防攻击，所有请求都经过它", "IP 地址和请求内容"],
         ["Vercel", "托管网站和网页控制台的页面文件", "访问网页时的 IP 地址"],
         ["阿里云邮件推送", "发送验证码和邮件通知", "你的邮箱地址和邮件内容"],

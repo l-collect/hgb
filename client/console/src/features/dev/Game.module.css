@@ -19,4 +19,23 @@
 .form input { min-height: var(--control-height); padding: 0 10px; border: 1px solid var(--color-control); border-radius: var(--radius-md); box-sizing: border-box; min-width: 0; }
 .nowrap { white-space: nowrap; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
 .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.summary { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 40px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.summary { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+/* 游戏 card on top of 页面 (as drawn): a tile and the game, the settings beside 通用关闭 from the workbench's wide tier. */
+.game { gap: 18px; }
+.tile { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--color-sunken); font-weight: 600; }
+.sumText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.toggle { flex: none; display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: var(--radius-pill); background: var(--color-sunken); font-size: var(--text-sm); font-weight: 500; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.colMain { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fact { padding: 12px 14px; border-radius: var(--radius-lg); background: var(--color-sunken); display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: var(--text-sm); }
+.fact b { font-size: var(--text-lg); font-weight: 500; overflow-wrap: anywhere; }
+.ratios { display: flex; flex-direction: column; gap: 8px; }
+.ratio { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: var(--radius-pill); background: var(--color-sunken); font-size: var(--text-sm); font-weight: 500; }
+.fallbacks { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fbRow { min-height: 56px; border: 0; background: var(--color-sunken); border-radius: var(--radius-lg); }
+.fbRow:hover { border-color: transparent; background: color-mix(in srgb, var(--color-ink) 6%, var(--color-sunken)); }
+.hit { min-height: 44px; }
+@container dev (max-width: 1023px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+@container dev (max-width: 599px) { .facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .facts > :last-child { grid-column: 1 / -1; } }

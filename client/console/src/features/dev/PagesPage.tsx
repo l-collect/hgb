@@ -235,7 +235,7 @@ export function PagesPage() {
             ))}
             {!listItems.length && <div className={w.empty}>没有</div>}
           </div>
-          {tab !== "states" && <button type="button" className={w.btn} onClick={() => setEditing("new")}>＋ {tab === "pages" ? "页面" : "干扰页"}</button>}
+          {tab !== "states" && <button type="button" className={`${w.btn} ${g.hit}`} onClick={() => setEditing("new")}>{tab === "pages" ? "新建页面" : "新建干扰页"}</button>}
         </nav>
         <section className={st.main} aria-label={current?.name ?? "页面"}>{right}</section>
       </div>

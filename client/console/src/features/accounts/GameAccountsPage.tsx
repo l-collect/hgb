@@ -222,7 +222,7 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
       {isOnmyoji && <RootBanner devices={data.devices} />}
       {isOnmyoji && <RootDevicesCard devices={data.devices} />}
       {!isOnmyoji && adding && <AddAccount games={data.games} gameId={gameId} done={() => setAdding(false)} />}
-      {noDevice && <InstallAppCard />}
+      {noDevice && <InstallAppCard nextPlanGame={gameId} />}
       {data.games.length === 0 ? !noDevice && <Card><Empty>先连一台设备</Empty></Card> : (
         <>
           {data.games.length > 1 && <Segments label="游戏" value={gameId} onChange={(id) => leave(() => { setChosen(id); if (accountId) navigate(paths.accounts, { force: true }); })}

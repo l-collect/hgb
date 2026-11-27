@@ -132,15 +132,15 @@ export function Fallbacks() {
   const lib = objs(draft.body.snippets);
   const done = async (id: string | null, next: Obj | null) => { const problem = await save("fallbacks", id, next); if (problem) setText(problem); else { setText(null); setEdit(null); } };
   return (
-    <div className={g.card}>
+    <div className={g.fallbacks}>
       <div className={g.headRow}><b className={g.grow}>通用关闭 · {list.length}</b>
-        <button type="button" className={w.btn} style={{ minHeight: 32 }} onClick={() => setEdit("new")}>＋ 关闭</button></div>
+        <button type="button" className={`${w.btn} ${g.hit}`} onClick={() => setEdit("new")}>新建规则</button></div>
       {list.map((fb) => edit === fb.id
         ? <FallbackForm key={String(fb.id)} fb={fb} lib={lib} onSave={(n) => done(String(fb.id), n)} onDelete={() => done(String(fb.id), null)} onCancel={() => setEdit(null)} />
-        : <button key={String(fb.id)} type="button" className={`${g.row} ${g.rowButton}`} onClick={() => setEdit(String(fb.id))}>
-            <b className={g.nowrap}>{str(fb.name) ?? String(fb.id)}</b>
-            <span className={`${w.muted} ${g.grow} ${g.clip}`}>片段 {str(lib.find((sn) => sn.id === fb.use)?.name) ?? String(fb.use)}</span>
-            <span className={`${w.chip} ${w.same}`}>≤ {typeof fb.maximum === "number" ? fb.maximum : 3} 次</span>
+        : <button key={String(fb.id)} type="button" className={`${g.row} ${g.rowButton} ${g.fbRow}`} onClick={() => setEdit(String(fb.id))}>
+            <span className={g.sumText}><b>{str(fb.name) ?? String(fb.id)}</b>
+              <span className={`${w.muted} ${g.clip}`}>片段 {str(lib.find((sn) => sn.id === fb.use)?.name) ?? String(fb.use)}</span></span>
+            <span className={w.muted}>≤ {typeof fb.maximum === "number" ? fb.maximum : 3} 次</span>
           </button>)}
       {!list.length && edit !== "new" && <div className={w.muted}>没有</div>}
       {edit === "new" && <FallbackForm lib={lib} taken={list.map((x) => String(x.id))} onSave={(n) => done(null, n)} onCancel={() => setEdit(null)} />}
