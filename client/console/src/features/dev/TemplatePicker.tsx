@@ -13,8 +13,11 @@ export interface PickerTemplate { name: string; src: string; meta: string; pages
 export interface PickerHost {
   templates: PickerTemplate[];
   pages: string[];
-  /** The newest picture of the phone (a sample, in the numbers a script writes); null when there is none. */
-  sample: () => Promise<Sample | null>;
+  /**
+   * The picture to show for template [name]: the sample it was cut from, so its region sits on its own scene; the
+   * newest picture of the phone when it has none (or that sample is gone). [origin] says which. Null when there is none.
+   */
+  sample: (name: string) => Promise<{ sample: Sample; origin: boolean } | null>;
   sampleSrc: (id: string) => string;
   /** Cuts [rect] of [sample] as template [name] into the draft; its id, or throws with why. */
   cut: (sample: Sample, rect: number[], name: string) => Promise<string>;
@@ -32,12 +35,13 @@ export const padded = (rect: number[], width: number, height: number) => {
 };
 
 /**
- * 选图: the line's picture and where it looks, tried on the newest phone picture; a new region drawn there; any other
+ * 选图: the line's picture and where it looks, tried on the sample it was cut from (else the newest phone picture); a new region drawn there; any other
  * picture of the library chosen from a grid (search, by page, arrows and Enter), or a new one cut from that picture.
  */
 export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: PickTarget; host: PickerHost;
   onChoose: (name: string, region?: number[]) => void; onRegion: (region: number[]) => void; onClose: () => void }) {
-  const [sample, setSample] = useState<Sample | null | undefined>(undefined);
+  const [picture, setPicture] = useState<{ sample: Sample; origin: boolean } | null | undefined>(undefined);
+  const sample = picture === undefined ? undefined : picture?.sample ?? null;
   const [query, setQuery] = useState("");
   const [page, setPage] = useState("");
   const [focus, setFocus] = useState(0);
@@ -55,7 +59,8 @@ export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: 
   const region = sample && at.region ? toPicture(at.region, [sample.width, sample.height], reference).map(Math.round) : null;
   const box = useRef<HTMLDivElement>(null);
   const start = useRef<[number, number] | null>(null);
-  useEffect(() => { let live = true; host.sample().then((x) => { if (live) setSample(x); }, () => { if (live) setSample(null); }); return () => { live = false; }; }, [host]);
+  useEffect(() => { let live = true; setPicture(undefined)
+    host.sample(at.name).then((x) => { if (live) setPicture(x); }, () => { if (live) setPicture(null); }); return () => { live = false; }; }, [host, at.name]);
   useEffect(() => { setSaid(null); setHit(null); }, [at.name, at.region?.join(",")]);
 
   const mine = host.templates.find((t) => t.name === at.name);
@@ -131,7 +136,7 @@ export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: 
               {rect && <span className={s.box} data-kind="new" style={pct(rect)} />}
               {hit?.box && mode === "look" && <span className={s.box} data-kind="hit" title="最像的地方" style={pct(hit.box)} />}
             </div>
-            <span className={s.caption}>{mode === "cut" ? "框出要裁的图" : sample.name}</span>
+            <span className={s.caption}>{mode === "cut" ? "框出要裁的图" : `${picture?.origin ? "裁图来源" : "最新画面"} · ${sample.name}`}</span>
           </>}
         </div>
       </div>

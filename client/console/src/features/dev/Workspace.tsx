@@ -23,7 +23,6 @@ import pub from "./Publish.module.css";
 import type { LineFailure, LineMark, ScriptNames, ScriptProblem, TemplateView } from "./ScriptEditor";
 import { braceFit, lintSettings, readsAsNumber, settingView, slotWhileTyping, spanOf, valuesOf, type SettingView } from "./settingUse";
 import { PatchConflicts } from "./PatchConflicts";
-import { newestSample } from "./ScreenPick";
 import type { PickerHost } from "./TemplatePicker";
 import w from "./Wb.module.css";
 import s from "./Workspace.module.css";
@@ -369,7 +368,15 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       templates: bases.map((name) => { const t = library.find((x) => x.id.split("@")[0] === name)!;
         return { name, src: dev.templateImage(game, t.id), meta: sizes[name] ?? `${t.width}×${t.height}`, pages: pageList.filter((p) => p.text.includes(name)).map((p) => p.name) }; }),
       pages: pageList.map((p) => p.name),
-      sample: () => newestSample(game),
+      sample: async (name) => {
+        const all = await dev.samples(game);
+        // The sample this picture was cut from (any theme of it), so the line's region is drawn on its own scene.
+        const from = library.find((t) => t.id.split("@")[0] === name && t.sample)?.sample;
+        const origin = from ? all.find((x) => x.id === from) : undefined;
+        if (origin) return { sample: origin, origin: true };
+        const newest = [...all].sort((a, b) => b.createdAt - a.createdAt)[0];
+        return newest ? { sample: newest, origin: false } : null;
+      },
       sampleSrc: (id) => dev.sampleImage(id),
       cut: async (sample, rect, name) => {
         // A name the library already has would be overwritten: only when asked (DriftGuide's 替换 is its own path).
