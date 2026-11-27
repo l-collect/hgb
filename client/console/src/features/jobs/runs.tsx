@@ -54,7 +54,36 @@ export async function stopJob(job: Job) {
   if (question && !await ask({ ...question, danger: true })) return;
   await jobCommand(job, "cancel");
 }
-/** Pause or resume, and stop (or cancel before it starts), for a job that is still going. */
+/**
+ * 远程核对: tells the phone holding [job]'s unconfirmed step that it was done (做完了) or is to be done again (重做这步),
+ * as if pressed there, naming the check it answers. Only 「已发给手机」 is said: the job goes back to running and on, as
+ * the stream reports it; a refusal (409 not_pending / device_offline) is the server's own words in a toast.
+ */
+export function resolveJob(job: Job, outcome: "done" | "redo") {
+  return orToast(() => api(`/api/jobs/${enc(job.id)}/resolve`, { method: "POST", body: { outcome, check: job.check ?? null } }), "已发给手机");
+}
+/** Whether the phone still waits on [job]'s check, so 做完了 / 重做这步 can be answered from here. */
+export const canResolve = (job: Job) => job.state === "UNKNOWN" && !!job.held && job.check != null;
+/**
+ * 做完了 / 重做这步 (only while the phone holds the check) and 放弃本次 for a result left unconfirmed; the first is the
+ * main one. Once either check button is pressed both stay off until the job's state, check or updatedAt changes.
+ */
+export function ResolveControls({ job, small }: { job: Job; small?: boolean }) {
+  const version = `${job.state}|${job.check ?? ""}|${job.updatedAt}`;
+  const [sent, setSent] = useState<string | null>(null);
+  const answered = sent === version;
+  const resolve = (outcome: "done" | "redo") => { if (answered) return; setSent(version); void resolveJob(job, outcome).then((ok) => { if (!ok) setSent(null); }); };
+  return (
+    <>
+      {canResolve(job) && <>
+        <Button small={small} variant="primary" disabled={answered} onClick={() => resolve("done")}>做完了</Button>
+        <Button small={small} disabled={answered} onClick={() => resolve("redo")}>重做这步</Button>
+      </>}
+      <Button small={small} variant="danger" onClick={() => void stopJob(job)}>放弃本次</Button>
+    </>
+  );
+}
+/** Pause or resume, and stop (or cancel before it starts), for a job that is still going; 核对 for an unconfirmed one. */
 export function JobControls({ job, small }: { job: Job; small?: boolean }) {
   const { data } = useConsole();
   const [busy, setBusy] = useState(false);
@@ -62,8 +91,8 @@ export function JobControls({ job, small }: { job: Job; small?: boolean }) {
   // Paused on the phone itself counts too: 继续 works from here.
   const paused = jobPaused(job, data.devices);
   const command = async (what: "pause" | "resume") => { setBusy(true); try { await jobCommand(job, what); } finally { setBusy(false); } };
-  // A result left unconfirmed holds the phone: giving it up takes the step as not done and frees the phone.
-  if (job.state === "UNKNOWN") return <Button small={small} variant="danger" onClick={() => void stopJob(job)}>放弃本次</Button>;
+  // A result left unconfirmed holds the phone: say whether the step was done, or give it up and free the phone.
+  if (job.state === "UNKNOWN") return <ResolveControls job={job} small={small} />;
   if (!ACTIVE.has(job.state)) return null;
   return (
     <>
@@ -72,9 +101,21 @@ export function JobControls({ job, small }: { job: Job; small?: boolean }) {
     </>
   );
 }
+/** Whether 重跑 is offered: an ended run of an account that still exists; not one left unconfirmed, which is 核对 first. */
+export const canRerun = (job: Job, accountExists: boolean) => !ACTIVE.has(job.state) && job.state !== "UNKNOWN" && !!job.accountId && accountExists;
 
 export type RunColumn = "place" | "account" | "source";
-/** Run records as rows that open the record. Newest first, as the server sends them. */
+/** Why a run ended badly or waits, in a few words, for a list: a failure's reason, what holds a queued one. */
+export function runNote(job: Job): string {
+  if (waitReason(job)) return waitReason(job);
+  if ((job.state === "FAILED" || job.state === "UNKNOWN" || job.state === "SKIPPED") && job.detail) return job.detail;
+  return "";
+}
+/**
+ * Run records as rows that open the record, newest first as the server sends them. Two lines: the task (· account) with
+ * its state at the end, then one muted line, cut short when too long: when it started · the device (only with more than
+ * one) · the plan · why it failed or waits.
+ */
 export function RunRows({ jobs, devices, columns, limit }: { jobs: Job[]; devices: Device[]; columns: RunColumn[]; limit?: number }) {
   const [all, setAll] = useState(false);
   const shown = limit && !all ? jobs.slice(0, limit) : jobs;
@@ -82,14 +123,16 @@ export function RunRows({ jobs, devices, columns, limit }: { jobs: Job[]; device
     <>
       {shown.map((job) => {
         const [label, tone] = jobStatus(job, devices);
+        const note = runNote(job);
+        const sub = [shortTime(job.createdAt), columns.includes("place") && devices.length > 1 ? jobPlace(job, devices) : null,
+          columns.includes("source") ? jobSource(job).replace(/^计划 · /, "") : null].filter(Boolean).join(" · ");
         return (
           <RowLink key={job.id} to={paths.job(job.id)}>
-            <span className={s.task}>{job.taskName}{!columns.includes("account") && job.accountName ? ` · ${job.accountName}` : ""}</span>
-            {columns.includes("account") && <span className={`${s.cell} ${s.narrow}`}>{job.accountName ?? "—"}</span>}
-            {columns.includes("place") && devices.length > 1 && <span className={`${s.cell} ${s.wide}`}>{jobPlace(job, devices)}</span>}
-            {columns.includes("source") && <span className={s.cell}>{jobSource(job)}</span>}
-            <span className={`${s.cell} ${s.time}`}>{shortTime(job.updatedAt)}</span>
-            <span className={s.state}><Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
+            <span className={s.runLine}>
+              <span className={s.task}>{job.taskName}{job.accountName ? <span className={s.runAccount}> · {job.accountName}</span> : null}</span>
+              <span className={s.state}><Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill></span>
+            </span>
+            <span className={s.runSub}>{sub}{note && <>{sub && " · "}<span className={job.state === "FAILED" ? s.noteFail : s.noteWait}>{note}</span></>}</span>
           </RowLink>
         );
       })}
@@ -152,7 +195,7 @@ const matches = (query: JobQuery, job: Job) => (!query.states || query.states.in
   && (!query.planId || job.planId === query.planId) && (!query.from || job.createdAt >= query.from);
 /** The states each 战报 filter asks the server for; all asks for none. */
 export const FILTER_STATES: Record<"all" | "active" | "done" | "bad" | "waiting", JobState[] | undefined> = {
-  all: undefined, active: ["WAITING", "QUEUED", "LEASED", "RUNNING"], done: ["COMPLETED"], bad: ["FAILED", "UNKNOWN"], waiting: ["QUEUED", "WAITING"],
+  all: undefined, active: ["LEASED", "RUNNING"], done: ["COMPLETED"], bad: ["FAILED", "UNKNOWN"], waiting: ["QUEUED", "WAITING"],
 };
 
 /**

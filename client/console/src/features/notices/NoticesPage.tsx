@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, enc } from "../../api/client";
-import type { Channel, EventFollowUp, EventRule, Notice, PlanOutcome } from "../../api/types";
-import { Breadcrumb, Button, Card, Empty, ErrorCard, Field, Form, Grow, LiveSwitch, Loading, Muted, PageHeader, PageTabs, Pill, Row, TextSelect } from "../../components/ui";
+import type { Channel, EventRule, Notice, PlanOutcome } from "../../api/types";
+import { Breadcrumb, Button, Card, Empty, ErrorCard, Grow, LiveSwitch, Loading, Muted, PageHeader, PageTabs, Pill, Row, TextSelect } from "../../components/ui";
 import { orToast } from "../../components/useAction";
-import { ask } from "../../components/Confirm";
 import { shortTime, type Tone } from "../../format";
 import { Link, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
@@ -36,7 +35,7 @@ export function NoticesPage() {
 }
 
 /** Reads [path] again whenever the stream says notices or rules changed; the third value reads it again now (重试). */
-function useNotices<T>(path: string): [T | null, string | null, () => void] {
+export function useNotices<T>(path: string): [T | null, string | null, () => void] {
   const { data } = useConsole();
   const [value, setValue] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -120,13 +119,26 @@ function Log() {
                 )) : <Muted as="span" className={s.delivery}>无渠道订阅</Muted>}
               </div>
             </div>
-            {item.jobId && <Link to={paths.job(item.jobId)} className={s.open}>战报</Link>}
+            <NoticeLinks notice={item} />
           </article>
         )) : <Empty>{rule ? "这条规则还没有记下事件" : "还没有事件"}</Empty>}
       </Card>
       {more && <div className={s.more}><Button onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? "读取中…" : "加载更多"}</Button></div>}
     </>
   );
+}
+
+/** Where a notice leads: its run, the device that went offline, the plan that did not run (only those still there). */
+function NoticeLinks({ notice }: { notice: Notice }) {
+  const { data } = useConsole();
+  const device = notice.deviceId ? data.devices.find((item) => item.id === notice.deviceId) : undefined;
+  const plan = notice.planId ? data.plans.find((item) => item.id === notice.planId) : undefined;
+  const links: [string, string][] = [];
+  if (notice.jobId) links.push(["战报 ›", paths.job(notice.jobId)]);
+  if (device && !notice.jobId) links.push(["看设备 ›", paths.device(device.id)]);
+  if (plan) links.push(["看计划 ›", paths.planEdit(plan.accountId, plan.id)]);
+  if (!links.length) return null;
+  return <span className={s.opens}>{links.map(([text, to]) => <Link key={to} to={to} className={s.open}>{text}</Link>)}</span>;
 }
 
 function Rules() {
@@ -145,62 +157,7 @@ function Rules() {
           {list.map((rule) => <RuleRow key={rule.ruleId} rule={rule} />)}
         </Card>
       ))}
-      <FollowUps />
     </>
-  );
-}
-
-/** Script events (`上报 事件名`) that automatically queue a follow-up task for the same game account. */
-function FollowUps() {
-  const { data } = useConsole();
-  const [items] = useNotices<EventFollowUp[]>("/api/notifications/follow-ups");
-  const [adding, setAdding] = useState(false);
-  const games = data.games.filter((g) => g.tasks.length > 0);
-  const [targetId, setTargetId] = useState(games[0]?.id ?? "");
-  const game = games.find((g) => g.id === targetId) ?? games[0];
-  const [eventName, setEventName] = useState("");
-  const [taskId, setTaskId] = useState(game?.tasks[0]?.taskId ?? "");
-  if (!items && !games.length) return null;
-  const chosenTask = game?.tasks.some((t) => t.taskId === taskId) ? taskId : game?.tasks[0]?.taskId ?? "";
-  return (
-    <Card flush as="section" aria-label="事件续排任务">
-      <Row>
-        <Grow><h2 className={s.groupTitle} style={{ padding: 0 }}>事件续排<Muted as="span"> · 上报后排入后续任务</Muted></h2></Grow>
-        {games.length > 0 && <Button small onClick={() => setAdding(!adding)}>{adding ? "收起" : "新建"}</Button>}
-      </Row>
-      {adding && game && (
-        <div style={{ padding: "12px 16px" }}><Form onSubmit={(e) => {
-          e.preventDefault();
-          if (!eventName.trim() || !chosenTask) return;
-          void orToast(async () => {
-            await api("/api/notifications/follow-ups", { method: "POST", body: { targetId: game.id, eventName: eventName.trim(), taskId: chosenTask, enabled: true } });
-            setEventName(""); setAdding(false);
-          }, "已保存");
-        }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-            {games.length > 1 && <Field label="游戏"><select value={game.id} onChange={(e) => setTargetId(e.target.value)}>
-              {games.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>}
-            <Field label="脚本上报的事件名"><input required maxLength={60} value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="如 悬赏邀请" /></Field>
-            <Field label="排入后续任务"><select value={chosenTask} onChange={(e) => setTaskId(e.target.value)}>
-              {game.tasks.map((t) => <option key={t.taskId} value={t.taskId}>{t.name}</option>)}</select></Field>
-            <Button variant="primary" type="submit">保存</Button>
-          </div>
-        </Form></div>
-      )}
-      {(items ?? []).map((item) => (
-        <Row key={item.id} className={s.rule}>
-          <Grow className={s.ruleText}><b>上报「{item.eventName}」→ 排入「{item.taskName}」</b>
-            <Muted as="span">{data.games.find((g) => g.id === item.targetId)?.name ?? item.targetId}</Muted></Grow>
-          <LiveSwitch checked={item.enabled} label={`启用续排：${item.eventName}`} save={(on) => api("/api/notifications/follow-ups",
-            { method: "POST", body: { targetId: item.targetId, eventName: item.eventName, taskId: item.taskId, enabled: on } })} />
-          <Button small variant="danger" onClick={async () => {
-            if (!await ask({ title: `删除续排「${item.eventName}」？`, body: `上报后不再排入「${item.taskName}」`, ok: "删除", danger: true })) return;
-            await orToast(() => api(`/api/notifications/follow-ups/${enc(item.id)}`, { method: "DELETE" }), "已删除");
-          }}>删除</Button>
-        </Row>
-      ))}
-      {(items ?? []).length === 0 && !adding && <div style={{ padding: "8px 16px 14px" }}><Muted>还没有续排</Muted></div>}
-    </Card>
   );
 }
 

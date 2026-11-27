@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Mark } from "../components/ui";
-import { Link, paths } from "../router";
+import { Link, paths, usePath } from "../router";
+import { TopBarContext } from "./topBar";
 import type { Connection } from "../state/console";
 import s from "./Shell.module.css";
 
@@ -18,22 +20,28 @@ const ADMIN_ICON = icon(<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V
 const TITLES: Record<Section, string> = { tasks: "任务", accounts: "账号计划", devices: "设备战报", me: "我的", dev: "开发工作台" };
 const LIVE: Record<Connection, string> = { live: "实时连接中", connecting: "连接中…", lost: "已断开，重连中…" };
 const LIVE_SHORT: Record<Connection, string> = { live: "已连接", connecting: "连接中", lost: "已断开" };
+/** The four pages of the bottom bar, which the top bar names. */
+const PRIMARY = new Set<string>([paths.tasks, "/library", paths.accounts, paths.devices, paths.me]);
 
 /**
  * The frame every console page sits in, in the widths of the design: from 1280 a 240 sidebar with full names, from 600 a
  * rail of icons with short labels, and below that a top bar with the section's name and four tabs at the bottom.
  * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1200. [admin] adds
- * 后台管理 (/admin, with a frame of its own) above the connection, or to the top bar when narrow.
+ * 后台管理 (/admin, with a frame of its own) above the connection, or to the top bar when narrow. A page that fails while
+ * drawing shows 「这页出错了」 in its place; the frame and its navigation stay.
  */
 export function Shell({ section, connection, full, admin, stale, children }: { section: Section; connection: Connection; full?: boolean; admin?: boolean; stale?: boolean; children: ReactNode }) {
   // The workbench lives under 我的.
   const current = section === "dev" ? "me" : section;
+  const path = usePath();
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   return (
     <div className={s.shell} data-wide={section === "dev" || full === true}>
       <header className={s.top}>
         <Mark size={26} /><b className={s.topTitle}>{TITLES[section]}</b>
         {admin && <Link className={s.topAdmin} to="/admin">后台</Link>}
-        <span className={s.liveShort} role="status"><span className={s.liveDot} data-state={connection} aria-hidden="true" />{LIVE_SHORT[connection]}</span>
+        <span ref={setSlot} className={s.topSlot} />
+        <span className={s.liveShort} role="status" title={LIVE[connection]}><span className={s.liveDot} data-state={connection} aria-hidden="true" /><span className={s.liveShortText}>{LIVE_SHORT[connection]}</span></span>
       </header>
       <nav className={s.nav} aria-label="主导航">
         <Link to={paths.tasks} className={s.navBrand}><Mark size={26} /><span className={s.brandName}>护肝宝</span></Link>
@@ -55,7 +63,11 @@ export function Shell({ section, connection, full, admin, stale, children }: { s
           </div>
         </div>
       </nav>
-      <main className={s.main} data-stale={stale ? "true" : undefined}>{children}</main>
+      <main className={s.main} data-stale={stale ? "true" : undefined}>
+        <TopBarContext.Provider value={{ primary: PRIMARY.has(path), slot }}>
+          <ErrorBoundary resetKey={path}>{children}</ErrorBoundary>
+        </TopBarContext.Provider>
+      </main>
     </div>
   );
 }

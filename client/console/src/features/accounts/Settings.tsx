@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CONFIG_TONE } from "../../format";
 import { api, ApiFailure, enc } from "../../api/client";
 import { settingVisible, type CloudTask, type ConfigView, type GameAccount, type GameTask, type SettingField, type TaskStepDetail } from "../../api/types";
 import { Button, Card, CardHead, Check, Chips, Choices, Empty, ErrorCard, FootBar, Loading, Pill, Row, Stepper, Switch, toNumber, ui } from "../../components/ui";
@@ -157,7 +158,7 @@ export function TaskStepsList({
               <b>步骤 {step.index} · {step.name}</b>
               <span className={ui.tiny} style={{ display: "block" }}>{summary}</span>
             </span>
-            <Pill tone={willRun ? "ok" : ""}>{willRun ? "● 执行" : "○ 跳过"}</Pill>
+            <Pill tone={willRun ? CONFIG_TONE.set : CONFIG_TONE.unset} dot>{willRun ? "执行" : "跳过"}</Pill>
           </Link>
         );
       })}

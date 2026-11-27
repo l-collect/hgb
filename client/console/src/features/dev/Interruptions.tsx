@@ -5,6 +5,7 @@ import { uniqueId } from "./HomePage";
 import { idOf } from "./NameButton";
 import { arr, isObj, objs, str } from "./model";
 import w from "./Wb.module.css";
+import { PickOnScreen } from "./ScreenPick";
 import g from "./Game.module.css";
 
 /** 干扰页 (technical design 1.6): pages that can come up over any other; every page wait clears them first with their snippet. */
@@ -71,6 +72,7 @@ export function InterruptionForm({ page, lib, known, taken = [], onSave, onDelet
           : <div className={g.pair}>
             <input aria-label="字" style={{ flex: "2 1 160px" }} value={words} onChange={(e) => setWords(e.target.value)} placeholder="已断开游戏服务器" />
             <input aria-label="区域 x,y,宽,高" style={{ flex: "1 1 140px" }} value={within} onChange={(e) => setWithin(e.target.value)} />
+            <PickOnScreen value={region.length === 4 ? region : null} onPick={(v) => setWithin(v.join(","))} />
           </div>}
       </div>
       <div className={g.f}>

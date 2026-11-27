@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, enc } from "../../api/client";
-import { settingVisible, type ConfigView, type CoopMode, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
+import { settingVisible, type ConfigView, type CoopMode, type Device, type Game, type GameAccount, type GameTask, type Job, type Plan, type PlanSave, type PresetPlan } from "../../api/types";
 import { Breadcrumb, Button, Card, CardHead, Check, Empty, FootBar, join, LiveSwitch, Loading, PageHeader, Pill, Popover, Row, SegmentTabs, Stepper, ui } from "../../components/ui";
 import { ask } from "../../components/Confirm";
 import { TimePicker } from "../../components/TimePicker";
-import { ProCount, ProLimitButton, ProLockButton, ProLockCard, ProLockRow, usePro } from "../../components/Pro";
+import { ProCount, ProLimitButton, ProLockButton, ProLockRow, usePro } from "../../components/Pro";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { runSubmitted } from "../jobs/runs";
-import { clockText, cycleText, jobStatus, nextTime, PLAN_RUN_STATES, shortTime, WEEK, type Tone } from "../../format";
+import { clockText, CONFIG_TONE, cycleText, jobStatus, nextTime, PLAN_RUN_STATES, shortTime, WEEK, type Tone } from "../../format";
 import { leave, Link, navigate, paths, useLeaveGuard } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
@@ -29,7 +29,7 @@ const presetSaveOf = (preset: PresetPlan, enabled = true): PlanSave => ({
 });
 
 /** A plan's latest run: the server's [Plan.last], else (an older server) the newest of its jobs the console holds. */
-export function planLast(plan: Plan, jobs: Job[]): { at: number; label: string; tone: Tone; jobId: string | null; detail: string } | null {
+export function planLast(plan: Plan, jobs: Job[], devices?: Device[]): { at: number; label: string; tone: Tone; jobId: string | null; detail: string } | null {
   if (plan.last !== undefined) {
     if (!plan.last) return null;
     const [label, tone] = PLAN_RUN_STATES[plan.last.state] ?? [plan.last.state, ""];
@@ -37,7 +37,7 @@ export function planLast(plan: Plan, jobs: Job[]): { at: number; label: string; 
   }
   const job = jobs.find((item) => item.planId === plan.id);
   if (!job) return null;
-  const [label, tone] = jobStatus(job);
+  const [label, tone] = jobStatus(job, devices);
   return { at: job.updatedAt, label, tone, jobId: job.id, detail: "" };
 }
 /** 下次 明天 08:03 while the plan is on, as the server worked it out (jitter included). */
@@ -67,18 +67,17 @@ export const planHref = (account: GameAccount, { plan, preset }: PlanEntry) => p
 
 /** 定时计划: presets and the account's own plans by time; the switch enables one (a preset is copied with its defaults). */
 export function PlanList({ account, game, plans, jobs = [] }: { account: GameAccount; game?: Game; plans: Plan[]; jobs?: Job[] }) {
+  const { data: { devices } } = useConsole();
   const unified = planEntries(account, game, plans);
 
   const enabledCount = unified.filter((u) => u.plan?.enabled).length;
   const pro = usePro();
   // Plans count over all accounts, as the server counts them; a preset switched on becomes one too.
   const full = pro.full("maxPlans", plans.length);
-  const count = pro.count("maxPlans", plans.length);
 
   return (
     <Card as="section" flush aria-label="定时计划">
-      <CardHead title={<>定时计划 <span className={ui.tiny}>{enabledCount}/{unified.length} 启用</span> <ProCount text={count && `计划 ${count}`} /></>}
-        aside={full ? <ProLimitButton small what="计划" /> : <Button small onClick={() => navigate(paths.planNew(account.id))}>＋ 新建</Button>} />
+      <CardHead title="定时计划" aside={<PlanCounts enabled={enabledCount} full={full} used={plans.length} newPlan={() => navigate(paths.planNew(account.id))} />} />
       {unified.length === 0 ? (
         <Empty>还没有计划，点「＋ 新建」</Empty>
       ) : unified.map((entry) => {
@@ -91,13 +90,13 @@ export function PlanList({ account, game, plans, jobs = [] }: { account: GameAcc
           : `${tasks.slice(0, 2).map((t) => t.name).join(" · ")} 等 ${tasks.length} 项`;
         const targetHref = planHref(account, entry);
         const next = planNext(plan);
-        const last = plan ? planLast(plan, jobs) : null;
+        const last = plan ? planLast(plan, jobs, devices) : null;
         return (
           <div key={key} className={s.planRow}>
             <Link to={targetHref} className={s.planLink}>
               <span className={s.planTime}>
                 <b className={ui.mono}>{clockText(source.minuteOfDay)}</b>
-                <span className={ui.tiny}>{cycleText(source.days, source.jitterMinutes)}</span>
+                <span className={ui.tiny}>{cycleLine(source.days, source.jitterMinutes)}</span>
               </span>
               <span className={s.planMain}>
                 <span className={s.planName}><b>{source.name}</b>{!preset && <Pill>自建</Pill>}</span>
@@ -116,6 +115,25 @@ export function PlanList({ account, game, plans, jobs = [] }: { account: GameAcc
         );
       })}
     </Card>
+  );
+}
+
+/** 每天 · ±5分: the days, and the float in 分 when there is one. */
+export const cycleLine = (days: number[], jitter?: number) => jitter && jitter > 0 ? `${cycleText(days)} · ±${jitter}分` : cycleText(days);
+
+/**
+ * The right of 定时计划's head: 「3 个启用」 in grey, then 新建; at a free account's limit 「新建 · Pro」 with the count
+ * beside it (「4/3」, in the warning colour once over).
+ */
+export function PlanCounts({ enabled, full, used, newPlan }: { enabled: number; full: boolean; used: number; newPlan: () => void }) {
+  const { account } = useConsole();
+  const max = account.quota?.maxPlans;
+  return (
+    <span className={s.planCounts}>
+      <span className={ui.tiny}>{enabled} 个启用</span>
+      {full ? <><ProCount text={max ? `${used}/${max}` : null} /><ProLimitButton small what="计划" /></>
+        : <Button small onClick={newPlan}>＋ 新建</Button>}
+    </span>
   );
 }
 
@@ -211,6 +229,8 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
   const [starting, setStarting] = useState(false);
   const { busy, message, run } = useAction();
   const saving = useRef(false);
+  // The revision our own last save made: its event is no 「别处保存过」, even when it comes before setLoaded does.
+  const ours = useRef<number | null>(null);
   const enabled = plan?.enabled ?? true;
   const dirty = formKey(form) !== formKey(loaded.form);
   useLeaveGuard(dirty);
@@ -220,12 +240,13 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
   // Saved somewhere else meanwhile: an untouched editor takes the new version, an edited one offers it.
   const reload = () => { const next = { form: formOf(plan, preset), revision: plan?.revision ?? 0 }; setLoaded(next); setForm(next.form); setStale(false); };
   useEffect(() => {
-    if (!plan || plan.revision === loaded.revision || saving.current) return;
+    if (!plan || plan.revision === loaded.revision || saving.current || plan.revision === ours.current) return;
     if (dirty) setStale(true); else reload();
   }, [plan?.revision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = () => navigate(paths.accounts);
-  const submit = () => run(async () => {
+  /** Saves the form; throws what is wrong with it, or the server's refusal. */
+  const persist = async (): Promise<Plan | null> => {
     if (!form.name.trim()) throw new Error("先填名称");
     if (!form.tasks.length) throw new Error("至少选一个任务");
     if (!form.days.length) throw new Error("至少选一天");
@@ -248,9 +269,14 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
     };
     saving.current = true;
     try {
-      if (plan) await api(`/api/plans/${enc(plan.id)}`, { method: "PUT", body });
-      else await api(`/api/accounts/${enc(account.id)}/plans`, { method: "POST", body });
+      const saved = plan ? await api<Plan>(`/api/plans/${enc(plan.id)}`, { method: "PUT", body })
+        : await api<Plan>(`/api/accounts/${enc(account.id)}/plans`, { method: "POST", body });
+      if (saved && typeof saved.revision === "number") ours.current = saved.revision;
+      return saved;
     } finally { saving.current = false; }
+  };
+  const submit = () => run(async () => {
+    await persist();
     toast("已保存", { tone: "ok" });
     navigate(paths.accounts, { force: true });
   });
@@ -293,7 +319,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
     }) } });
   };
   const follow = (tid: string) => { const configs = { ...form.configs }; delete configs[tid]; change({ configs }); };
-  const last = plan ? planLast(plan, data.jobs) : null;
+  const last = plan ? planLast(plan, data.jobs, data.devices) : null;
   const next = planNext(plan);
   const unpicked = (game?.tasks ?? []).filter((task) => !form.tasks.includes(task.taskId));
   const deviceText = form.where.length ? data.devices.filter((d) => form.where.includes(d.id)).map((d) => d.name).join("、") || "自动分配" : "自动分配";
@@ -303,11 +329,20 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
   const partnerText = form.coop === "none" ? "不带" : form.coop === "custom" && chosenPartners ? chosenPartners : accountPartners ? `跟随账号 · ${accountPartners}` : "跟随账号";
 
   const title = plan ? plan.name : preset ? preset.name : "新建计划";
-  const runNow = plan ? <Button small disabled={starting} onClick={async () => {
+  // With unsaved edits the plan is saved first (a refusal is said beside 保存计划 and nothing runs), so what runs is what is on screen.
+  const runNow = plan ? <Button small disabled={starting || busy} onClick={async () => {
     setStarting(true);
-    try { if (await orToast(() => api(`/api/plans/${enc(plan.id)}/run`, { method: "POST", body: {} }))) runSubmitted(null, data.devices, paths.account(account.id, "runs")); }
+    try {
+      if (dirty) {
+        const result: { saved?: Plan | null } = {};
+        await run(async () => { result.saved = await persist(); });
+        if (!("saved" in result)) return;
+        setLoaded({ form, revision: result.saved?.revision ?? plan.revision + 1 });
+      }
+      if (await orToast(() => api(`/api/plans/${enc(plan.id)}/run`, { method: "POST", body: {} }))) runSubmitted(null, data.devices, paths.account(account.id, "runs"));
+    }
     finally { setStarting(false); }
-  }}>立即运行</Button> : undefined;
+  }}>{dirty ? "保存并运行" : "立即运行"}</Button> : undefined;
   const lastLine = (last || next) && (
     <p className={ui.tiny} style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
       {next && <span>{next}</span>}
@@ -317,7 +352,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
     </p>
   );
   const dayPicks = (
-    <div className={s.daysRow} role="group" aria-label="星期">
+    <div className={drawer ? `${s.daysRow} ${drawerStyles.choiceGroup}` : s.daysRow} role="group" aria-label="星期">
       {WEEK.map((label, i) => (
         <button key={label} type="button" role="checkbox" aria-checked={form.days.includes(i + 1)} aria-label={`周${label}`}
           className={form.days.includes(i + 1) ? `${s.dayPick} ${s.dayOn}` : s.dayPick} onClick={() => change({ days: flip(form.days, i + 1, !form.days.includes(i + 1)) })}>{label}</button>
@@ -338,11 +373,11 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
             <span style={{ display: "block", fontWeight: 500 }}>{task.name}</span>
             {hasOwn(own) ? (
               <span className={s.followLine}>
-                <Pill tone="info">单独设置</Pill>
+                <Pill tone={CONFIG_TONE.set}>单独设置</Pill>
                 <span className={`${ui.tiny} ${s.ellipsis}`}>{ownText(task, own)}</span>
                 <button type="button" className={s.configLink} onClick={() => follow(tid)}>恢复跟随</button>
               </span>
-            ) : <span className={s.followLine}><Pill tone="soft">跟随账号</Pill></span>}
+            ) : <span className={s.followLine}><Pill tone={CONFIG_TONE.unset}>跟随账号</Pill></span>}
           </span>
           <button type="button" className={s.configLink} onClick={() => setEditingTask(tid)}>配置 ›</button>
           <span className={s.orderButtons}>
@@ -405,18 +440,23 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
           <DrawerGrid>
             <DrawerField label="名称"><input type="text" required maxLength={40} aria-label="名称" value={form.name} onChange={(e) => change({ name: e.target.value })} /></DrawerField>
             <DrawerField label="时间"><TimePicker required label="时间" value={form.at} onChange={(at) => change({ at })} /></DrawerField>
-            <DrawerField label="浮动"><Stepper label="浮动" unit="±分" min={0} max={60} value={form.jitter} onChange={(jitter) => change({ jitter })} /></DrawerField>
+            <DrawerField label="浮动"><Stepper label="浮动" unit="分" min={0} max={60} value={form.jitter} onChange={(jitter) => change({ jitter })} /></DrawerField>
             <DrawerField label="补跑窗口"><Stepper label="补跑窗口" unit="分" min={1} max={1440} step={5} value={form.late} onChange={(late) => change({ late })} /><span className={ui.tiny}>错过时间后，这么久内仍补跑</span></DrawerField>
             <DrawerField label="周期" wide>{dayPicks}</DrawerField>
           </DrawerGrid>
           {tasksCard}
-          {(data.devices.length > 0 || peerAccounts.length > 0) && (
+          {(data.devices.length > 0 || (peerAccounts.length > 0 && !coopLocked)) && (
             <DrawerGrid>
               {data.devices.length > 0 && pick("设备", deviceText, deviceChecks)}
-              {peerAccounts.length > 0 && <ProLockCard name="协战" locked={coopLocked}>{pick("协战（最多 2 个）", partnerText, partnerChecks)}</ProLockCard>}
+              {peerAccounts.length > 0 && !coopLocked && pick("协战（最多 2 个）", partnerText, partnerChecks)}
             </DrawerGrid>
           )}
-          {switchLocked && data.devices.length > 0 && <Card flush><ProLockRow compact name="自动切号" label="自动切号" detail={`只在登录着${account.name}的应用上跑`} /></Card>}
+          {((switchLocked && data.devices.length > 0) || (coopLocked && peerAccounts.length > 0)) && (
+            <Card flush>
+              {switchLocked && data.devices.length > 0 && <ProLockRow compact name="自动切号" label="自动切号" detail={`只在登录着${account.name}的应用上跑`} />}
+              {coopLocked && peerAccounts.length > 0 && <ProLockRow compact label="协战" />}
+            </Card>
+          )}
         </DrawerBody>
         <DrawerFoot>
           {plan && <Button variant="danger" onClick={remove}>{preset ? "重置" : "删除"}</Button>}
@@ -444,7 +484,7 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
         <Row>
           <span style={{ flex: 1 }}>时间</span>
           <TimePicker required label="时间" value={form.at} onChange={(at) => change({ at })} />
-          <Stepper label="浮动" unit="±分" min={0} max={60} value={form.jitter} onChange={(jitter) => change({ jitter })} />
+          <Stepper label="浮动" unit="分" min={0} max={60} value={form.jitter} onChange={(jitter) => change({ jitter })} />
         </Row>
         {dayPicks}
         <Row>
@@ -462,9 +502,8 @@ function PlanEditor({ account, game, plan, preset, drawer, openTask }: { account
             <PickRow label="设备" text={deviceText}>{deviceChecks}</PickRow>
           )}
           {switchLocked && data.devices.length > 0 && <ProLockRow name="自动切号" label="自动切号" detail={`只在登录着${account.name}的应用上跑`} />}
-          {peerAccounts.length > 0 && (
-            <ProLockCard name="协战" locked={coopLocked}><PickRow label="协战（最多 2 个）" text={partnerText}>{partnerChecks}</PickRow></ProLockCard>
-          )}
+          {peerAccounts.length > 0 && (coopLocked ? <ProLockRow label="协战" />
+            : <PickRow label="协战（最多 2 个）" text={partnerText}>{partnerChecks}</PickRow>)}
         </Card>
       )}
 
@@ -514,7 +553,7 @@ function PlanTaskEditor({ account, plan, detail, planName, own, drawer, back, do
 
   const state = accountValues !== null && (
     <p className={s.followLine}>
-      {following ? <Pill tone="soft">跟随账号</Pill> : <Pill tone="info">单独设置</Pill>}
+      {following ? <Pill tone={CONFIG_TONE.unset}>跟随账号</Pill> : <Pill tone={CONFIG_TONE.set}>单独设置</Pill>}
       <span className={ui.tiny}>{following ? "账号参数改了，这里跟着变" : "只在这个计划里生效"}</span>
     </p>
   );

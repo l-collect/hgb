@@ -2,15 +2,16 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiFailure, enc } from "../../api/client";
 import { ask } from "../../components/Confirm";
 import type { Device, Game, GameAccount, LoginReportEvent } from "../../api/types";
-import { Button, ButtonLink, Card, CardHead, Chips, Empty, Field, Form, join, Message, MoreMenu, Muted, PageHeader, Pill, Popover, Row, RowLink, Segments, ui } from "../../components/ui";
+import { Button, ButtonLink, Card, CardHead, Empty, Field, Form, join, Message, MoreMenu, Muted, PageHeader, Pill, Popover, Row, RowLink, Segments, ui } from "../../components/ui";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
-import { jobStatus, shortTime, type Tone } from "../../format";
+import { jobHeadline, jobStatus, shortTime, type Tone } from "../../format";
 import { leave, Link, navigate, paths } from "../../router";
 import { awaitLoginReport, type ConsoleData } from "../../state/console";
 import { useConsole } from "../../state/context";
 import { Drawer } from "../../components/Drawer";
 import { goPro, ProCount, ProLimitButton, ProLockRow, usePro } from "../../components/Pro";
+import { InstallAppCard } from "../onboarding/Onboarding";
 import { useWide } from "../../shell/useWidth";
 import { PlanList } from "./Plans";
 import { PlanTable } from "./PlansDesk";
@@ -25,14 +26,14 @@ export function onlineGameDevices(devices: Device[], gameId: string, requireApp 
  * A text button that does [run] on the one device there is, or, with several, opens them to pick from (the button keeps
  * its words either way). With none it says what is missing.
  */
-function DeviceAction({ label, devices, none, primary, small, run, itemText }: {
-  label: string; devices: Device[]; none: string; primary?: boolean; small?: boolean; run: (device: Device) => void; itemText: (device: Device) => string;
+function DeviceAction({ label, devices, none, primary, small, link, run, itemText }: {
+  label: string; devices: Device[]; none: string; primary?: boolean; small?: boolean; link?: boolean; run: (device: Device) => void; itemText: (device: Device) => string;
 }) {
   if (devices.length <= 1) {
-    return <Button small={small} variant={primary ? "primary" : undefined} onClick={() => devices.length ? run(devices[0]) : toast(none, { tone: "bad" })}>{label}</Button>;
+    return <Button small={small} variant={link ? "link" : primary ? "primary" : undefined} onClick={() => devices.length ? run(devices[0]) : toast(none, { tone: "bad" })}>{label}</Button>;
   }
   return (
-    <Popover label={label} plain trigger={<span className={join(ui.button, small && ui.small, primary ? ui.primary : ui.ghost)}>{label} ▾</span>}>
+    <Popover label={label} plain trigger={<span className={link ? ui.link : join(ui.button, small && ui.small, primary ? ui.primary : ui.ghost)}>{label} ▾</span>}>
       {(close) => (
         <>
           <span className={ui.menuLabel}>选设备</span>
@@ -62,8 +63,8 @@ function loginText(report: LoginReportEvent, accounts: GameAccount[]): [string, 
  * 读取登录 on a device: the phone reads who is signed in and the server makes or updates the account. The outcome comes
  * back as a login-report and is said beside the button (「读到 春樱共赏·归雨」, 「手机没 Root，读不了登录」).
  */
-export function ReportDeviceLoginAction({ gameId, label = "读取登录", primary = false, small = true }: {
-  gameId: string; label?: string; primary?: boolean; small?: boolean;
+export function ReportDeviceLoginAction({ gameId, label = "读取登录", primary = false, small = true, link = false }: {
+  gameId: string; label?: string; primary?: boolean; small?: boolean; link?: boolean;
 }) {
   const { data } = useConsole();
   const pro = usePro();
@@ -91,7 +92,7 @@ export function ReportDeviceLoginAction({ gameId, label = "读取登录", primar
   const quota = state?.kind === "done" && (state.report.reason === "quota" || state.report.skippedPrimary) && pro.free;
   return (
     <span className={s.loginAction}>
-      <DeviceAction label={label} devices={candidates} none="没有在线设备，先在手机打开护肝宝" primary={primary} small={small} run={(dev) => void trigger(dev)} itemText={(dev) => dev.name} />
+      <DeviceAction label={label} devices={candidates} none="没有在线设备，先在手机打开护肝宝" primary={primary} small={small} link={link} run={(dev) => void trigger(dev)} itemText={(dev) => dev.name} />
       {state && <span role="status" className={join(s.loginNote, state.kind === "wait" ? ui.tiny : ok ? s.statusOk : s.statusBad)}>
         {text}{quota && <> · <button type="button" className={s.configLink} onClick={goPro}>开通 Pro</button></>}
       </span>}
@@ -124,12 +125,54 @@ export function ApplyAccountLoginAction({ account, label = "下发登录", prima
   return <DeviceAction label={label} devices={candidates} none="没有装这个游戏的在线设备" primary={primary} small={small} run={(dev) => void trigger(dev)} itemText={(dev) => dev.name} />;
 }
 
+/**
+ * The account's state in a few words, as the job page and the device say it: paused first, then what the phone waits for
+ * (已暂停 · 设备 / 卡住 · 等无障碍 / 运行中 · 设备), else where it is signed in.
+ */
 export function accountNow(account: GameAccount, data: ConsoleData): [string, Tone] {
   const running = data.jobs.find((job) => job.accountId === account.id && job.state === "RUNNING");
-  if (running) return [`运行中 · ${running.deviceName ?? "设备"}`, "info"];
+  if (running) return jobHeadline(running, data.devices);
   const signedIn = data.devices.flatMap((device) => device.apps.filter((app) => app.accountId === account.id).map((app) => device.apps.length > 1 ? `${device.name} · ${app.name}` : device.name));
   if (signedIn.length) return [`已绑 ${signedIn.join("、")}`, "ok"];
   return ["空闲", ""];
+}
+
+/**
+ * The dot on an account's chip: red with failures or runs to check, orange when stuck or paused, blue while running;
+ * [title] counts them (「1 失败 · 1 待核对」). Null when there is nothing to mark.
+ */
+export function accountMark(account: GameAccount, data: ConsoleData): { tone: Tone; title: string } | null {
+  const mine = data.jobs.filter((job) => job.accountId === account.id);
+  // A task counts as failed while its latest run failed (a later success clears it); the jobs come newest first.
+  const latest = new Map<string, (typeof mine)[number]>();
+  for (const job of mine) { const key = `${job.targetId}:${job.taskId}`; if (!latest.has(key)) latest.set(key, job); }
+  const failed = [...latest.values()].filter((job) => job.state === "FAILED").length;
+  const pending = mine.filter((job) => job.state === "UNKNOWN").length;
+  if (failed || pending) return { tone: "bad", title: [failed && `${failed} 失败`, pending && `${pending} 待核对`].filter(Boolean).join(" · ") };
+  const [now, tone] = accountNow(account, data);
+  if (tone === "warn" || tone === "info") return { tone, title: now };
+  return null;
+}
+
+/** 切换账号: the account chips, each with its [accountMark] dot; [end] closes the row (the limit's 「＋ · Pro」). */
+function AccountChips({ accounts, value, onChange, end }: { accounts: GameAccount[]; value: string; onChange: (id: string) => void; end?: ReactNode }) {
+  const { data } = useConsole();
+  return (
+    <div className={ui.chips} role="radiogroup" aria-label="切换账号">
+      {accounts.map((account) => {
+        const mark = accountMark(account, data);
+        return (
+          <button key={account.id} type="button" role="radio" aria-checked={account.id === value} title={mark?.title}
+            className={join(ui.chip, s.chip, account.id === value && ui.chipOn)} onClick={() => onChange(account.id)}>
+            {mark && <span className={join(s.mark, s[`mark_${mark.tone}`])} aria-hidden="true" />}
+            {account.name}
+            {mark && <span className="visually-hidden">（{mark.title}）</span>}
+          </button>
+        );
+      })}
+      {end}
+    </div>
+  );
 }
 
 /**
@@ -156,8 +199,9 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
   // Game accounts count over all games, as the server counts them.
   const accountsFull = pro.full("maxGameAccounts", data.accounts.length);
   const accountCount = pro.count("maxGameAccounts", data.accounts.length);
-  // Onmyoji accounts are made by reading a phone's login, so there is no 添加 to lock: the list ends with the limit.
-  const moreAccounts = isOnmyoji && accountsFull && <ProLockRow compact name="更多账号" label={<>账号 <ProCount text={accountCount} /></>} detail="再多需 Pro" />;
+  // Onmyoji accounts are made by reading a phone's login, so there is no 添加 to lock: the chips end with 「＋ · Pro」.
+  const moreAccounts = isOnmyoji && accountsFull && <ProLimitButton small text="＋" what="游戏账号" className={s.chipLimit} />;
+  const noDevice = data.devices.length === 0;
 
   return (
     <>
@@ -166,23 +210,25 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
           {!isOnmyoji && <ProCount text={accountCount} />}
           {accounts.length > 0 && <Button small onClick={() => setManaging(!managing)}>{managing ? "回到计划" : "管理账号"}</Button>}
           {isOnmyoji
-            ? <ReportDeviceLoginAction gameId={gameId || "onmyoji"} label="读取设备登录" primary small />
+            // The empty state says how accounts come in; with some, reading the phone's login is a second way.
+            ? accounts.length > 0 && <ReportDeviceLoginAction gameId={gameId || "onmyoji"} label="读取设备登录" small />
             : accountsFull && !adding ? <ProLimitButton small text="添加账号" what="游戏账号" />
             : <Button small variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>{adding ? "收起" : "＋ 添加账号"}</Button>}
         </span>
       } />
       {!isOnmyoji && adding && <AddAccount games={data.games} gameId={gameId} done={() => setAdding(false)} />}
-      {data.games.length === 0 ? <Card><Empty>先连一台设备</Empty></Card> : (
+      {noDevice && <InstallAppCard />}
+      {data.games.length === 0 ? !noDevice && <Card><Empty>先连一台设备</Empty></Card> : (
         <>
           {data.games.length > 1 && <Segments label="游戏" value={gameId} onChange={(id) => leave(() => { setChosen(id); if (accountId) navigate(paths.accounts, { force: true }); })}
             items={data.games.map((g) => [g.id, g.name])} />}
           {accounts.length === 0 ? (
             <Card>
               {isOnmyoji ? (
-                <div style={{ padding: "24px 16px", textAlign: "center", display: "grid", gap: 10, justifyItems: "center" }}>
+                <div className={s.emptyHow}>
                   <b>还没有阴阳师账号</b>
-                  <Muted>在手机登录阴阳师、允许护肝宝 Root 后，读取登录即可自动建号。</Muted>
-                  <ReportDeviceLoginAction gameId={gameId} label="读取设备登录" primary small={false} />
+                  <Muted>在手机护肝宝里进游戏，会自动识别角色</Muted>
+                  {!noDevice && <span className={s.emptyAlt}><span className={ui.tiny}>手机已 Root？</span><ReportDeviceLoginAction gameId={gameId} label="读取设备登录" link /></span>}
                 </div>
               ) : <Empty>还没有账号</Empty>}
             </Card>
@@ -194,13 +240,12 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
                   <tbody>{accounts.map((account) => <AccountRow key={account.id} account={account} />)}</tbody>
                 </table>
               </div>
-              {moreAccounts}
+              {moreAccounts && <div className={s.tableEnd}>{moreAccounts}</div>}
             </Card>
           ) : activeAccount && (
             <>
-              <Chips label="切换账号" value={activeAccount.id} onChange={(id) => leave(() => { setSelectedId(id); if (accountId) navigate(paths.accounts, { force: true }); })}
-                items={accounts.map((a): [string, string] => [a.id, a.name])} />
-              {moreAccounts && <Card flush>{moreAccounts}</Card>}
+              <AccountChips accounts={accounts} value={activeAccount.id} end={moreAccounts}
+                onChange={(id) => leave(() => { setSelectedId(id); if (accountId) navigate(paths.accounts, { force: true }); })} />
               <div className={wide ? d.colsMain : s.columns}>
                 {wide
                   ? <PlanTable account={activeAccount} game={game} plans={data.plans} jobs={data.jobs} />
@@ -212,7 +257,7 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
                     {(() => {
                       const runs = data.jobs.filter((job) => job.accountId === activeAccount.id).slice(0, 3);
                       return runs.length ? runs.map((job) => {
-                        const [label, tone] = jobStatus(job);
+                        const [label, tone] = jobStatus(job, data.devices);
                         return (
                           <RowLink key={job.id} to={paths.job(job.id)}>
                             <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontWeight: 500 }}>{job.taskName}</span><span className={ui.tiny}>{shortTime(job.updatedAt)}{job.deviceName ? ` · ${job.deviceName}` : ""}</span></span>
@@ -255,7 +300,7 @@ function AccountSummary({ account, accounts, game }: { account: GameAccount; acc
         {!account.hasLoginSnapshot && <ReportDeviceLoginAction gameId={account.gameId} label="读取登录" small />}
       </Row>
       {popup && <Row><span style={{ flex: 1 }}>弹窗处理</span><span className={ui.tiny}>{popup.name}：{popupChoice ?? "—"}</span></Row>}
-      <Row><span style={{ flex: 1 }}>失败停用</span>{paused.length ? paused.map((name) => <Pill key={name} tone="warn">{name}</Pill>) : <span className={ui.tiny}>无</span>}</Row>
+      <Row><span style={{ flex: 1 }}>失败停用</span>{paused.length ? paused.map((name) => <Pill key={name} tone="warn">{name}</Pill>) : <span className={ui.tiny}>—</span>}</Row>
     </Card>
   );
 }
@@ -270,7 +315,7 @@ function AccountRow({ account }: { account: GameAccount }) {
   return (
     <tr>
       <td><Link to={paths.account(account.id)} className={s.name}>{account.name}</Link><br /><Muted as="span">{[account.uid ? `UID ${account.uid}` : null, account.nickname].filter(Boolean).join(" · ") || "—"}</Muted></td>
-      <td className={tone === "info" ? s.runCell : undefined}>{now}</td>
+      <td className={tone === "info" ? s.runCell : tone === "warn" ? s.warnCell : undefined}>{now}</td>
       <td className={s.mutedCell}>{last ? `${shortTime(last.updatedAt)}${last.deviceName ? ` · ${last.deviceName}` : ""}` : "—"}</td>
       <td className={s.ops}><MoreMenu label={`${account.name} 的操作`} actions={[["编辑", () => setEditing(true)], ["移除", remove, true]]} /></td>
     </tr>

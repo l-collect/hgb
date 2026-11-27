@@ -28,3 +28,14 @@ input.input { min-height: var(--control-height); box-sizing: border-box; }
 .confirm > :first-child { flex: 1; margin-top: 0; white-space: nowrap; }
 .done { padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-ok-bg); color: var(--color-ok); font-weight: 600; }
 @media (max-width: 1023px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+/* 发布's last question: which version, what changed, who gets it. */
+.dialog { width: min(440px, calc(100vw - 32px)); box-sizing: border-box; padding: 18px 20px; border: 1px solid var(--color-line); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--color-ink); }
+.dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+.dialog::backdrop { background: rgba(0, 0, 0, .4); }
+.dialogTitle { font-size: var(--text-lg, 17px); }
+.dialogPart { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-sm); }
+.dialogList { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.notes { white-space: pre-wrap; color: var(--color-muted); }
+.dialogRow { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.rowWrap { padding: 0 16px; }
+.rowWrap:has(> *) { padding: 8px 16px; border-bottom: 1px solid var(--color-line-soft); }

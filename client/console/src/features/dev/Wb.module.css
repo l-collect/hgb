@@ -40,7 +40,8 @@
 .topSync [data-tone="ok"] { color: var(--color-ok); }
 .topSync [data-tone="go"] { color: var(--color-nav-current); }
 .topSync [data-tone="bad"] { color: var(--color-danger); font-weight: 600; }
-.topPublish { min-height: 32px; padding: 0 12px; }
+.topPublish { min-height: 32px; padding: 0 12px; position: relative; gap: 6px; }
+.topBad { width: 7px; height: 7px; border-radius: 50%; background: var(--color-danger); flex: none; display: inline-block; }
 .dotOnline { width: 7px; height: 7px; border-radius: 50%; background: var(--color-faint, #A9A7B5); flex: none; display: inline-block; }
 .dotOnline[data-on] { background: var(--color-ok); }
 .menu { display: flex; flex-direction: column; padding: 4px 0; min-width: 200px; }
@@ -115,12 +116,22 @@ a.trow:hover { color: inherit; background: var(--color-bg); }
   .tasksGrid, .libGrid { grid-template-columns: 1fr; gap: 4px; }
   .thead { display: none; }
 }
-/* A refused patch's two sides, over whatever page is open. */
-.refused { position: fixed; right: 16px; bottom: 16px; z-index: 40; width: min(560px, calc(100vw - 32px)); max-height: min(70vh, 640px); overflow: auto;
-  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-color: var(--color-danger); box-shadow: 0 8px 28px rgba(0, 0, 0, .18); box-sizing: border-box; }
+/* A refused patch's two sides, at the top of the page (in a workspace, of the editor). */
+.refused { max-height: min(60vh, 560px); overflow: auto; margin-bottom: 12px;
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-color: var(--color-danger); box-sizing: border-box; }
 .refusedRow { display: flex; gap: 8px; flex-wrap: wrap; }
-.refusedRow > button { flex: 1; justify-content: center; }
+.refusedRow > button { justify-content: center; }
 /* 快照: the draft's kept copies, newest first. */
 .snapList { display: flex; flex-direction: column; gap: 2px; min-width: 260px; padding: 4px; }
 .snapItem { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: var(--text-sm); }
 .snapItem > span:first-child { flex: 1; min-width: 0; }
+/* 同步's result: one line with 看差异 and 撤销, and the both-changed nodes' sides. */
+.syncReport { display: flex; flex-direction: column; gap: 8px; }
+.syncLine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: var(--text-sm); }
+.linkBtn { border: 0; background: none; padding: 0; font: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--color-nav-current); cursor: pointer; white-space: nowrap; }
+.linkBtn:hover { text-decoration: underline; }
+.linkBtn:disabled { color: var(--color-muted); cursor: default; text-decoration: none; }
+.syncDiff { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+.both { margin-left: 8px; font-size: 11px; font-weight: 600; color: var(--color-warn); white-space: nowrap; }
+.repoAhead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 12px; border-radius: var(--radius-md); background: var(--color-primary-soft); font-size: var(--text-sm); }
+.repoOnly { opacity: .6; }

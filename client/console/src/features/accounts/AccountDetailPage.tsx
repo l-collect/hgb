@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, enc } from "../../api/client";
-import type { EventFollowUp, GameAccount, GameTask, InterruptionOption } from "../../api/types";
-import { Breadcrumb, Button, Card, CardHead, LiveSelect, LiveSwitch, PageTabs, Pill, Row, ui } from "../../components/ui";
+import type { GameAccount, GameTask, InterruptionOption } from "../../api/types";
+import { Breadcrumb, Button, Card, CardHead, LiveSelect, PageTabs, Pill, Row, ui } from "../../components/ui";
 import { orToast } from "../../components/useAction";
 import { ProLockCard, usePro } from "../../components/Pro";
 import { ask } from "../../components/Confirm";
@@ -12,6 +12,7 @@ import { NotFound } from "../ConsolePage";
 import { PagedRuns } from "../jobs/runs";
 import { accountNow, ApplyAccountLoginAction, EditAccount, removeAccount, ReportDeviceLoginAction } from "./GameAccountsPage";
 import { PlanList } from "./Plans";
+import { FollowUps } from "../notices/FollowUps";
 import s from "./Accounts.module.css";
 
 type Tab = "settings" | "plans" | "runs";
@@ -123,7 +124,6 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
               </Row>
             );
           })}
-          <FollowUpSwitches gameId={account.gameId} />
         </Card>
       )}
 
@@ -148,27 +148,9 @@ function AccountSettingsTab({ account, gameName, tasks, interruptions }: { accou
         </Card>
       )}
 
+      <FollowUps />
+
       <Button variant="danger" className={s.dangerWide} onClick={remove}>移除账号</Button>
     </div>
-  );
-}
-
-function FollowUpSwitches({ gameId }: { gameId: string }) {
-  const [items, setItems] = useState<EventFollowUp[] | null>(null);
-  const load = () => api<EventFollowUp[]>("/api/notifications/follow-ups").then(setItems).catch(() => setItems([]));
-  useEffect(() => { void load(); }, [gameId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const mine = (items ?? []).filter((item) => item.targetId === gameId);
-  return (
-    <>
-      {mine.map((item) => (
-        <Row key={item.id}>
-          <span style={{ flex: 1 }}>{item.eventName}后去做{item.taskName}</span>
-          <LiveSwitch checked={item.enabled} label={`${item.eventName}后去做${item.taskName}`} save={async (on) => {
-            await api("/api/notifications/follow-ups", { method: "POST", body: { targetId: item.targetId, eventName: item.eventName, taskId: item.taskId, enabled: on } });
-            await load();
-          }} />
-        </Row>
-      ))}
-    </>
   );
 }

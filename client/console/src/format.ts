@@ -1,14 +1,27 @@
 import type { AppWaiting, Device, Job, JobEvent, JobState, Plan, PlanRunState } from "./api/types";
 
 export type Tone = "" | "ok" | "info" | "warn" | "bad";
+/**
+ * The one table of what colour a state is, the same on the App (shared/ui/Format.kt): 运行中 blue; 排队 and 等待中 grey
+ * (why they wait is warn text); 完成 green; 失败 red, its reason box and failed step too; 待核对, 卡住 and 已暂停 orange;
+ * 已取消 and 已跳过 grey. Settings (执行 / 跳过, 单独设置 / 跟随账号) are not states: they use [CONFIG_TONE].
+ */
+export const STATE_TONES = {
+  running: "info", queued: "", waiting: "", done: "ok", failed: "bad", partial: "bad", unknown: "warn", stuck: "warn",
+  paused: "warn", pausing: "warn", stopping: "warn", cancelled: "", skipped: "", idle: "ok", offline: "",
+} as const satisfies Record<string, Tone>;
+/** A setting's two sides (执行 / 跳过, 单独设置 / 跟随账号): soft violet for the one that is set, grey for the other. */
+export const CONFIG_TONE = { set: "soft", unset: "" } as const;
 export const JOB_STATES: Record<JobState, [string, Tone]> = {
   // 已下发 (LEASED) reads as 运行中: the device has it and is starting.
-  WAITING: ["等待中", "info"], QUEUED: ["排队", "info"], LEASED: ["运行中", "info"], RUNNING: ["运行中", "info"], COMPLETED: ["完成", "ok"],
-  FAILED: ["失败", "bad"], UNKNOWN: ["待核对", "warn"], CANCELLED: ["已取消", ""], SKIPPED: ["已跳过", "warn"],
+  WAITING: ["等待中", STATE_TONES.waiting], QUEUED: ["排队", STATE_TONES.queued], LEASED: ["运行中", STATE_TONES.running], RUNNING: ["运行中", STATE_TONES.running],
+  COMPLETED: ["完成", STATE_TONES.done], FAILED: ["失败", STATE_TONES.failed], UNKNOWN: ["待核对", STATE_TONES.unknown],
+  CANCELLED: ["已取消", STATE_TONES.cancelled], SKIPPED: ["已跳过", STATE_TONES.skipped],
 };
 /** A plan's latest firing, as a pill. */
 export const PLAN_RUN_STATES: Record<PlanRunState, [string, Tone]> = {
-  ACTIVE: ["运行中", "info"], COMPLETED: ["完成", "ok"], PARTIAL_FAILED: ["部分失败", "warn"], FAILED: ["失败", "bad"], CANCELLED: ["已取消", ""], SKIPPED: ["已跳过", "warn"],
+  UNKNOWN: ["待核对", STATE_TONES.unknown], ACTIVE: ["运行中", STATE_TONES.running], COMPLETED: ["完成", STATE_TONES.done], PARTIAL_FAILED: ["部分失败", STATE_TONES.partial],
+  FAILED: ["失败", STATE_TONES.failed], CANCELLED: ["已取消", STATE_TONES.cancelled], SKIPPED: ["已跳过", STATE_TONES.skipped],
 };
 export const ACTIVE = new Set<JobState>(["WAITING", "QUEUED", "LEASED", "RUNNING"]);
 export const PHASES: Record<string, string> = {
@@ -21,7 +34,7 @@ export const WEEK = ["一", "二", "三", "四", "五", "六", "日"];
 export const clockText = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 export function planRule(plan: Pick<Plan, "days" | "minuteOfDay" | "jitterMinutes">): string {
   const days = plan.days.length === 7 ? "每天" : `每周${plan.days.map((day) => WEEK[day - 1]).join("、")}`;
-  const jitter = plan.jitterMinutes && plan.jitterMinutes > 0 ? ` (±${plan.jitterMinutes}分)` : "";
+  const jitter = plan.jitterMinutes && plan.jitterMinutes > 0 ? ` · ±${plan.jitterMinutes}分` : "";
   return `${days} ${clockText(plan.minuteOfDay)}${jitter}`;
 }
 
@@ -45,23 +58,23 @@ export function eventDetail(event: JobEvent): string {
     .replace(/^Failed\(reason=(.*)\)$/, "失败：$1").replace(/^Interrupted$/, "已中断");
 }
 
-/** A plan's days, short as the design writes them: 每天 / 工作日 / 周末 / 周五六日, then ±N m. */
+/** A plan's days, short as the design writes them: 每天 / 工作日 / 周末 / 周五六日, then · ±N分. */
 export function cycleText(days: number[], jitterMinutes?: number): string {
   const sorted = [...days].sort();
   const key = sorted.join("");
   const text = key === "1234567" ? "每天" : key === "12345" ? "工作日" : key === "67" ? "周末" : `周${sorted.map((day) => WEEK[day - 1]).join("")}`;
-  return jitterMinutes && jitterMinutes > 0 ? `${text} ±${jitterMinutes}m` : text;
+  return jitterMinutes && jitterMinutes > 0 ? `${text} · ±${jitterMinutes}分` : text;
 }
 
-/** An action's kind under the one set of names the App and the web share, and its pill colour. */
+/** An action's kind under the one set of names the App and the web share, and its pill colour (a kind, not a state: no state colours). */
 export function actionKind(kind: string): [string, Tone | "soft"] {
   switch (kind) {
     case "look": return ["看画面", "soft"];
-    case "act": return ["执动作", "info"];
-    case "nav": return ["去页面", "info"];
-    case "branch": return ["按配置", "warn"];
+    case "act": return ["执动作", "soft"];
+    case "nav": return ["去页面", "soft"];
+    case "branch": return ["按配置", ""];
     case "loop": return ["循环流", ""];
-    case "end": return ["写战报", "ok"];
+    case "end": return ["写战报", ""];
     default: return ["控制流", ""];
   }
 }
@@ -101,24 +114,53 @@ export function jobPhase(job: Job, devices?: Device[]): string | null {
   if (!device?.online) return null;
   return device.apps.find((app) => app.key === job.appKey)?.phase ?? device.phase ?? null;
 }
-/** Whether a running job is paused, or asked to pause, by the web or on the phone itself: then the button says 继续. */
+/**
+ * Whether a running job is paused, or asked to pause, by the web or on the phone itself: then the button says 继续. A
+ * leased job whose phone says PAUSED counts too, as jobStatus shows it 已暂停.
+ */
 export const jobPaused = (job: Job, devices?: Device[]) => {
   const phase = jobPhase(job, devices);
+  if (job.state === "LEASED") return phase === "PAUSED";
   return job.state === "RUNNING" && (job.pauseRequested || phase === "PAUSED" || phase === "PAUSING");
 };
+/** What the app a running job runs on waits for on the phone (等无障碍 …); null when nothing, or not known (offline: its apps are old news). */
+export function jobWaiting(job: Job, devices?: Device[]): AppWaiting | null {
+  if (!devices || !job.deviceId || job.state !== "RUNNING") return null;
+  const device = devices.find((item) => item.id === job.deviceId);
+  if (!device?.online) return null;
+  return device.apps.find((app) => app.key === job.appKey)?.waiting ?? null;
+}
 /**
- * The job's state as the user should read it, taking pending pause and cancel requests into account. With [devices],
- * a pause is 已暂停 only once the device says so (正在暂停 until then), and one made on the phone shows too.
+ * The job's state as the user should read it, the same in every place that shows one (战报行, 作业页, 设备卡, 账号头):
+ * pending pause and cancel requests count, and with [devices] what its phone says too. A pause is 已暂停 only once the
+ * device says so (正在暂停 until then), and one made on the phone shows too; a started job whose phone waits for
+ * something (无障碍断开, 锁屏 …) is 「卡住 · 等无障碍」, not 运行中.
  */
 export function jobStatus(job: Job, devices?: Device[]): [string, Tone] {
   const [label, tone] = JOB_STATES[job.state];
-  if (job.cancelRequested && ACTIVE.has(job.state)) return ["正在停止", "warn"];
-  if (job.state === "RUNNING") {
+  if (job.cancelRequested && ACTIVE.has(job.state)) return ["正在停止", STATE_TONES.stopping];
+  if (job.state === "RUNNING" || job.state === "LEASED") {
     const phase = jobPhase(job, devices);
-    if (phase === "PAUSED") return ["已暂停", "warn"];
-    if (job.pauseRequested || phase === "PAUSING") return ["正在暂停", "warn"];
+    if (phase === "PAUSED") return ["已暂停", STATE_TONES.paused];
+    if (job.state === "RUNNING" && (job.pauseRequested || phase === "PAUSING")) return ["正在暂停", STATE_TONES.pausing];
+    const waiting = jobWaiting(job, devices);
+    if (waiting) return [`卡住 · ${waiting.text}`, STATE_TONES.stuck];
   }
   return [label, tone];
+}
+/**
+ * One line for a job seen from its account (账号头): 「卡住 · 等无障碍」, 「已暂停 · 手机」, 「运行中 · 手机」; the device is
+ * left out when stuck, since what it waits for says more.
+ */
+export function jobHeadline(job: Job, devices?: Device[]): [string, Tone] {
+  const [label, tone] = jobStatus(job, devices);
+  if (label.startsWith("卡住") || !job.deviceName) return [label, tone];
+  return [`${label} · ${job.deviceName}`, tone];
+}
+/** How long a started job has run so far, in whole minutes (「已跑 12 分」); null before it starts or after it ends. */
+export function ranFor(job: Job, startedAt: number | null | undefined, now = Date.now()): string | null {
+  if (!startedAt || (job.state !== "RUNNING" && job.state !== "LEASED")) return null;
+  return `已跑 ${Math.max(0, Math.floor((now - startedAt) / 60000))} 分`;
 }
 /** What to do about what the phone waits for, in one line. */
 const WAIT_NEXT: Record<string, string> = {
@@ -131,13 +173,13 @@ export const deviceWaiting = (device: Device): AppWaiting | null => device.onlin
 export const waitReason = (job: Job) => (job.state === "WAITING" || job.state === "QUEUED") && job.waitReason ? job.waitReason : "";
 /** How an app is doing, as a pill; waiting for the phone (无障碍, 解锁 …) wins over its phase. */
 export function appStatus(phase: string, online: boolean, waiting?: AppWaiting | null): [string, Tone] {
-  if (!online) return ["离线", ""];
-  if (waiting) return [waiting.text, "warn"];
+  if (!online) return ["离线", STATE_TONES.offline];
+  if (waiting) return [waiting.text, STATE_TONES.stuck];
   const label = PHASES[phase] ?? phase;
-  if (phase === "RUNNING" || phase === "SWITCHING") return [label, "info"];
-  if (phase === "IDLE") return [label, "ok"];
-  if (phase === "BLOCKED_UNKNOWN") return [label, "bad"];
-  if (phase === "PAUSED" || phase === "PAUSING" || phase === "REMOVING") return [label, "warn"];
+  if (phase === "RUNNING" || phase === "SWITCHING") return [label, STATE_TONES.running];
+  if (phase === "IDLE") return [label, STATE_TONES.idle];
+  if (phase === "BLOCKED_UNKNOWN") return [label, STATE_TONES.unknown];
+  if (phase === "PAUSED" || phase === "PAUSING" || phase === "REMOVING") return [label, STATE_TONES.paused];
   return [label, ""];
 }
 export const shortDuration = (ms: number) => ms < 10000 ? `${(ms / 1000).toFixed(1)} 秒` : seconds(ms);

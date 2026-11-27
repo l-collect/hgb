@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { ask } from "../../components/Confirm";
 import { Chips, SegmentTabs, Stepper, ui } from "../../components/ui";
-import { navigate } from "../../router";
+import { navigate, useQuery } from "../../router";
+import { DriftGuide, parseDrift, type DriftFocus } from "./DriftGuide";
 import { dev, follow, type Sample, type Template } from "./api";
 import { failure, useDev } from "./context";
 import { clock } from "./HomePage";
@@ -53,6 +54,17 @@ function fuzzyContains(line: string, target: string): boolean {
 
 /** 素材: samples, templates and colour sets; on a sample the tools make a condition, checked on every sample, then 插到 the line. */
 export function SamplesPage({ id }: { id?: string }) {
+  // ?drift=<page>:<kind>:<subject> (任务's 补采): the guide on top, and the list on what drifted.
+  const drift = parseDrift(useQuery().get("drift"));
+  const [focus, setFocus] = useState<DriftFocus | null>(null);
+  useEffect(() => { if (!drift) setFocus(null); }, [!drift]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <>
+    {drift && <DriftGuide key={`${drift.state}:${drift.kind}:${drift.subject}`} drift={drift} onFocus={setFocus} />}
+    <SamplesBody id={id} focus={drift ? focus : null} />
+  </>;
+}
+
+function SamplesBody({ id, focus }: { id?: string; focus: DriftFocus | null }) {
   const { game, draft, apply, me } = useDev();
   const phone = useDevice();
   const insert = useInsert();
@@ -75,6 +87,13 @@ export function SamplesPage({ id }: { id?: string }) {
   const [setName, setSetName] = useState("");
   const box = useRef<HTMLDivElement>(null);
   const start = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    if (!focus) return;
+    setKind(focus.tab);
+    if (focus.template) setPickedTemplate(focus.template);
+    if (focus.tool) setTool(focus.tool);
+  }, [focus?.key, focus?.template]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lit = new Set(focus?.samples ?? []);
   const load = () => Promise.all([dev.samples(game).then(setList), dev.templates(game).then(setTemplates)]).catch((e) => setText([failure(e), false]));
   useEffect(() => { void load(); }, [game]); // eslint-disable-line react-hooks/exhaustive-deps
   // A sample taken (or read) on the phone shows up here as soon as it is stored.
@@ -175,12 +194,12 @@ export function SamplesPage({ id }: { id?: string }) {
       </div>}
       <div className={`${w.card} ${m.rows}`}>
         {kind === "samples" && (list?.length ? list.map((x) => (
-          <button key={x.id} type="button" className={m.item} aria-current={x.id === sample?.id ? "true" : undefined} onClick={() => open(x.id)}>
+          <button key={x.id} type="button" className={m.item} aria-current={x.id === sample?.id ? "true" : undefined} data-hit={lit.has(x.id) || undefined} onClick={() => open(x.id)}>
             <img className={m.thumb} src={dev.sampleImage(x.id)} alt="" loading="lazy" decoding="async" />
             <span className={m.grow}><b className={m.name}>{x.name}</b><span className={w.muted}>{clock(x.createdAt)} · {x.device || "手机"}</span></span>
           </button>)) : <div className={w.empty}>{list ? "还没有样本" : "加载中…"}</div>)}
         {kind === "templates" && (templates.length ? templates.map((t) => (
-          <button key={t.id} type="button" className={m.item} aria-current={t.id === (pickedTemplate ?? templates[0]?.id) ? "true" : undefined} onClick={() => setPickedTemplate(t.id)}>
+          <button key={t.id} type="button" className={m.item} aria-current={t.id === (pickedTemplate ?? templates[0]?.id) ? "true" : undefined} data-hit={focus?.template === t.id || undefined} onClick={() => setPickedTemplate(t.id)}>
             <img className={m.tplThumb} src={dev.templateImage(game, t.id)} alt="" loading="lazy" />
             <span className={m.grow}><b className={m.name}>{t.id}</b><span className={w.muted}>{t.width}×{t.height}{inDraft(t) ? "" : " · 不在草稿"}</span></span>
           </button>)) : <div className={w.empty}>还没有模板</div>)}

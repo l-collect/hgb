@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ask } from "../../components/Confirm";
 import { Chips, MoreMenu, Pill, SegmentTabs } from "../../components/ui";
 import { Link, navigate, usePath, useQuery } from "../../router";
-import { dev, dropped, follow, issuesOf, queued, runId, type CheckIssue, type CheckRequest, type DevRun, type DevTrace, type IssueWhere, type Obj, type Sample } from "./api";
+import { dev, dropped, follow, issuesOf, queued, runId, sampleNow, type CheckIssue, type CheckRequest, type DevRun, type DevTrace, type IssueWhere, type Obj, type Sample, type Template } from "./api";
 import { devPaths, EDIT_CONFLICT, failure, PATCH_CONFLICT, useDev, type Edit } from "./context";
 import { startedHere, useDevRun } from "./events";
 import { FrameTools } from "./FrameTools";
@@ -13,10 +14,13 @@ import { openDirect, type DirectScreen } from "./direct";
 import { completed, failedAt, failReason, insertAfter, missBoxes, ok, ownerOfStep, placeOf, running, snippetKey, testValues, type OwnerKey } from "./runs";
 import type { InsertTarget } from "./sentence";
 import { lineDiff, useDevice } from "./wb";
-import { IssueText, Located } from "./where";
+import { IssueText, Located, locate, placeOf as placeAt } from "./where";
 import pub from "./Publish.module.css";
 import type { LineFailure, LineMark, ScriptNames, ScriptProblem, TemplateView } from "./ScriptEditor";
-import { lintSettings, readsAsNumber, settingView, type SettingView } from "./settingUse";
+import { braceFit, lintSettings, readsAsNumber, settingView, slotWhileTyping, spanOf, valuesOf, type SettingView } from "./settingUse";
+import { PatchConflicts } from "./PatchConflicts";
+import { newestSample } from "./ScreenPick";
+import type { PickerHost } from "./TemplatePicker";
 import w from "./Wb.module.css";
 import s from "./Workspace.module.css";
 
@@ -25,36 +29,46 @@ const ScriptEditor = lazy(() => import("./ScriptEditor").then((m) => ({ default:
 
 const CATEGORY: Record<string, string> = { daily: "日常", weekly: "每周", event: "活动", account: "账号" };
 
-/** What a script may say, one line each (docs/design/task-script.md). */
-const HELP: [string, string][] = [
+/** What a script may say, one line each (docs/design/task-script.md); the third, when given, is what a click inserts. */
+const HELP: [string, string, string?][] = [
   ["去 结界突破", "按页面图走过去"],
   ["等 \"文字\"@区域", "等到这行字"],
   ["点 \"文字\"@区域 [最多 N 次]", "等到、找到、点它"],
   ["清零 认输", "清零已点次数"],
   ["点 图 模板@区域 [最上]", "点图标"],
   ["点 … 偏 dx,dy [空白]", "点目标旁边"],
-  ["分情况 / 名字 条件", "等到其一，走那支"],
-  ["如果看到 / 如果没看到 条件", "连续 2 帧再判断"],
+  ["分情况 / 名字 条件", "等到其一，走那支", "分情况\n  名字 条件"],
+  ["如果看到 / 如果没看到 条件", "连续 2 帧再判断", "如果看到 条件"],
   ["色 x,y#RRGGBB … / 色 组名@x,y", "取色点，最快"],
   ["点 色 组名@x,y [偏 dx,dy]", "点取色组中心"],
-  ["如果有 条件 / 否则", "只看刚等到的画面"],
-  ["如果红点@区域 / 否则", "有没有红点"],
+  ["如果有 条件 / 否则", "只看刚等到的画面", "如果有 条件\n否则"],
+  ["如果红点@区域 / 否则", "有没有红点", "如果红点@区域\n否则"],
   ["如果颜色@区域 r,g,b~r,g,b N%", "这种颜色够不够多"],
-  ["按设置 配置项 / 值", "开 关 其他 没有值"],
-  ["直到 条件 最多 N 次", "反复做，到了就停"],
-  ["反复 最多 N 次 / 跳出", "到了就跳出"],
+  ["按设置 配置项 / 值", "开 关 其他 没有值", "按设置 配置项\n  值"],
+  ["反复 最多 {rounds} 次 / 等待 {pause|2}秒", "读配置项的数", "反复 最多 {rounds} 次"],
+  ["直到 条件 最多 N 次", "反复做，到了就停", "直到 条件 最多 3 次"],
+  ["反复 最多 N 次 / 跳出", "到了就跳出", "反复 最多 3 次\n  跳出"],
   ["逐个 名 在 甲,乙", "每个值做一遍；{名}"],
   ["扫描网格 x,y 列x行 步进 dx,dy 格大小 w,h: 条件", "一帧扫网格"],
   ["拖 \"锚\"@区域 偏 dx,dy 到 dx,dy", "从锚点旁拖"],
   ["启动游戏", "启动并等到前台"],
   ["用 片段", "调用片段"],
   ["上报 \"悬赏邀请\"", "排后续任务"],
-  ["结果 \"…\" / 停下 \"…\"", "写结果 / 停下"],
-  ["长等待 300秒 / 等待 2秒", "放宽看门狗 / 干等"],
+  ["结果 \"…\" / 停下 \"…\"", "写结果 / 停下", "结果 \"…\""],
+  ["长等待 300秒 / 等待 2秒", "放宽看门狗 / 干等", "等待 2秒"],
 ];
 
 type Tab = "run" | "problems" | "screen" | "help";
 type Issue = { line: number | null; reason: string; location: string; where?: IssueWhere | null; warning?: boolean };
+/** A problem as listed and marked: from the server's check, or found here on the spot. */
+type Shown = { line: number | null; reason: string; warning: boolean; col?: number; len?: number };
+/** The same line and words once. */
+const once = <T extends { line: number | null; reason: string }>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((x) => { const k = `${x.line}|${x.reason}`; if (seen.has(k)) return false; seen.add(k); return true; })
+  .sort((a, b) => (a.line ?? 1e9) - (b.line ?? 1e9)); };
+/** 「2 错 · 1 提醒」. */
+const tally = (xs: { warning: boolean }[]) => { const e = xs.filter((x) => !x.warning).length, wn = xs.length - e; return [e ? `${e} 错` : "", wn ? `${wn} 提醒` : ""].filter(Boolean).join(" · "); };
+/** What a click on a 写法 line inserts: its own text, else the line with [optional] parts left out and the first of a / b. */
+const helpInsert = ([sayIt, , insert]: [string, string, string?]) => insert ?? sayIt.replace(/\s*\[[^\]]*\]/g, "").split(" / ")[0];
 
 /**
  * 工作区: a task (or, with no task, the snippet library) as one page — steps on the left, the script in the middle,
@@ -62,7 +76,7 @@ type Issue = { line: number | null; reason: string; location: string; where?: Is
  * condition there, and every line it ran. The loop write → check → run → fix → run again stays on this page.
  */
 export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { task?: string; step?: string; snippet?: string }) {
-  const { draft, game, apply, reloadTrials, edits: allEdits, setEdit: putEdit, saveScript, conflicts, device } = useDev();
+  const { draft, game, apply, reloadTrials, edits: allEdits, setEdit: putEdit, saveScript, conflicts, device, refused, resolveRefused } = useDev();
   const phone = useDevice();
   const path = usePath();
   const query = useQuery();
@@ -89,6 +103,8 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const [tab, setTab] = useState<Tab>(taskId ? "run" : "problems");
   const [goTo, setGoTo] = useState<{ key: OwnerKey; line: number; at: number } | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
+  // The phone's screen last looked at in 画面: the tools there keep that very picture as their sample.
+  const [peekUrl, setPeekUrl] = useState<string | null>(null);
   useEffect(() => { setCursor(null); }, [key]);
   const owner = body && key ? ownerIn(body, key) : undefined;
   const saved = key ? savedOf(key) : undefined;
@@ -169,11 +185,15 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   // the new one comes.
   const [checked, setChecked] = useState<{ key: OwnerKey; issues: Issue[]; others: Issue[] } | null>(null);
   const [checking, setChecking] = useState(false);
-  const [checkNote, setCheckNote] = useState<string | null>(null);
+  // The server's queue was full: when it is tried again by itself ([retryNow] at once), and what the server said.
+  const [queuedUntil, setQueuedUntil] = useState<{ at: number; said: string } | null>(null);
+  const retryNow = useRef<(() => void) | null>(null);
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => { if (!queuedUntil) return; setClock(Date.now()); const t = setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(t); }, [queuedUntil]);
   const issues = checked && checked.key === key ? checked.issues : null;
   const others = checked && checked.key === key ? checked.others : [];
   useEffect(() => {
-    if (!body || !key || !isScript) { setChecked(key ? { key, issues: [], others: [] } : null); setChecking(false); return; }
+    if (!body || !key || !isScript) { setChecked(key ? { key, issues: [], others: [] } : null); setChecking(false); setQueuedUntil(null); return; }
     let live = true; setChecking(true);
     const control = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -194,27 +214,87 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
         setChecked({ key,
           issues: all.filter(own).map((x) => ({ line: whereOf(x).line ?? null, reason: x.reason, location: x.location, warning: x.warning })),
           others: all.filter((x) => !own(x) && (!!whereOf(x).task || !!whereOf(x).snippet)).map((x) => ({ line: null, reason: x.reason, location: x.location, where: x.where, warning: x.warning })) });
-        setChecking(false); setCheckNote(null);
+        setChecking(false); setQueuedUntil(null);
       } catch (error) {
         if (!live || control.signal.aborted) return;
         // Given up for a newer check (from another window, say): nothing to show.
         if (dropped(error)) { setChecking(false); return; }
         // The server's queue is full: say so, and try once more a little later.
-        if (queued(error) && !again) { setCheckNote(`${failure(error)} · 稍后自动重试`); retry = setTimeout(() => void send(true), 8000); return; }
-        setCheckNote(null); setChecking(false);
+        if (queued(error) && !again) {
+          setQueuedUntil({ at: Date.now() + 8000, said: failure(error) });
+          retry = setTimeout(() => void send(true), 8000);
+          retryNow.current = () => { clearTimeout(retry); retryNow.current = null; setQueuedUntil(null); void send(true); };
+          return;
+        }
+        setQueuedUntil(null); setChecking(false);
         setChecked({ key, issues: [{ line: null, reason: `检查没做成：${failure(error)}`, location: "" }], others: [] });
       }
     };
     const timer = setTimeout(() => void send(false), 600);
-    return () => { live = false; clearTimeout(timer); clearTimeout(retry); control.abort(); };
+    return () => { live = false; clearTimeout(timer); clearTimeout(retry); retryNow.current = null; control.abort(); };
   }, [text, body, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setQueuedUntil(null); }, [text, key]);
   // Settings read wrong, found on the spot while the server's check (half a minute) is still out; its answer then wins.
   const local = useMemo(() => isScript ? lintSettings(text, task ? task.fields : null, !!key?.startsWith("snippet:")) : [], [text, task, isScript, key]);
-  const problems = useMemo((): ScriptProblem[] => issues === null || checking
-    ? local.map((x) => ({ line: x.line, reason: x.reason, severity: x.severity, col: x.col, len: x.len }))
-    : issues.flatMap((x) => x.line === null ? [] : [{ line: x.line, reason: x.reason, severity: x.warning ? "warning" as const : "error" as const,
-      ...placeIn(local, x.line) }]), [issues, local, checking]);
+  // One list is shown everywhere (the marks in the editor, the count on top, the head of 问题): the server's answer;
+  // while a newer check is out, what was found here on the spot (the server's older answer folded as 上次检查), or,
+  // when nothing was found here, that older answer.
+  const served = useMemo((): Shown[] | null => issues === null ? null
+    : once(issues.map((x) => ({ line: x.line, reason: x.reason, warning: !!x.warning, ...(x.line === null ? {} : placeIn(local, x.line)) }))), [issues, local]);
+  const spot = useMemo((): Shown[] => once(local.map((x) => ({ line: x.line, reason: x.reason, warning: x.severity === "warning", col: x.col, len: x.len }))), [local]);
+  const fromSpot = checking && (spot.length > 0 || served === null);
+  const shownIssues: Shown[] = fromSpot ? spot : served ?? [];
+  const staleIssues = fromSpot ? served : null;
+  const problems = useMemo((): ScriptProblem[] => shownIssues.flatMap((x) => x.line === null ? []
+    : [{ line: x.line, reason: x.reason, severity: x.warning ? "warning" as const : "error" as const, col: x.col, len: x.len }]), [shownIssues]);
+  const otherShown = once(others.map((x) => ({ ...x, warning: !!x.warning })));
 
+  const [sizes, setSizes] = useState<Record<string, string>>({});
+  const [library, setLibrary] = useState<Template[]>([]);
+  const [libraryRead, setLibraryRead] = useState(0);
+  useEffect(() => {
+    dev.templates(game).then((list) => {
+      setLibrary(list);
+      const grouped = new Map<string, { dim: string; count: number }>();
+      for (const t of list) {
+        const base = t.id.split("@")[0];
+        const prev = grouped.get(base);
+        grouped.set(base, prev ? { dim: prev.dim, count: prev.count + 1 } : { dim: `${t.width}×${t.height}`, count: 1 });
+      }
+      setSizes(Object.fromEntries(Array.from(grouped.entries()).map(([k, v]) => [k, v.count > 1 ? `${v.dim} · ${v.count} 套主题` : v.dim])));
+    }).catch(() => undefined);
+  }, [game, libraryRead]);
+  // 选图: the library by the names scripts write, each with the pages that mention it; the newest picture; a cut kept in the draft.
+  const pickerHost = useMemo((): PickerHost | null => {
+    if (!body) return null;
+    const g = objs(body.targets).find((t) => t.id === (task?.raw.targetId ?? objs(body.targets)[0]?.id));
+    const lib = isObj(g?.library) ? g.library : {};
+    const pageList = objs(lib.pages).map((p) => ({ name: str(p.name) ?? String(p.id), text: JSON.stringify(p) }));
+    const bases = Array.from(new Set(library.map((t) => t.id.split("@")[0])));
+    return {
+      templates: bases.map((name) => { const t = library.find((x) => x.id.split("@")[0] === name)!;
+        return { name, src: dev.templateImage(game, t.id), meta: sizes[name] ?? `${t.width}×${t.height}`, pages: pageList.filter((p) => p.text.includes(name)).map((p) => p.name) }; }),
+      pages: pageList.map((p) => p.name),
+      sample: () => newestSample(game),
+      sampleSrc: (id) => dev.sampleImage(id),
+      cut: async (sample, rect, name) => {
+        // A name the library already has would be overwritten: only when asked (DriftGuide's 替换 is its own path).
+        const taken = Array.from(new Set([...library.map((x) => x.id.split("@")[0]), ...objs(body.resources).map((r) => String(r.id).split("@")[0])]));
+        const base = name.split("@")[0];
+        if (taken.includes(base) && !await ask({ title: "已有同名图，替换？", body: `「${base}」会换成这次裁的图，用到它的脚本都跟着变`, ok: "替换", cancel: "取消", danger: true }))
+        { let n = 2; while (taken.includes(`${base}-${n}`)) n++; throw new Error(`已有「${base}」，换个名字（如 ${base}-${n}）`); }
+        const t = await dev.cut(game, { id: name, sample: sample.id, rect, confirmedTexts: [] });
+        const entry = { id: t.id, assetName: t.assetName, bytes: t.bytes, sha256: t.sha256 };
+        const problem = await apply(async (b) => {
+          const old = objs(b.resources).find((r) => r.id === t.id);
+          return [old ? { op: "put", path: `resources:${t.id}`, expect: await nodeDigest(old), value: entry } : { op: "insert", path: "", field: "resources", value: entry }];
+        });
+        if (problem) throw new Error(problem);
+        setLibraryRead((n) => n + 1);
+        return t.id;
+      },
+    };
+  }, [body, task, library, sizes, game, apply]);
   // ---- completion and template pictures
   const names = useMemo((): ScriptNames => {
     const b = body ?? {};
@@ -226,22 +306,18 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       regions: isObj(library.regions) ? Object.keys(library.regions) : [],
       snippets: allSnippets.map((sn) => String(sn.id)).filter((id) => key !== snippetKey(id)),
       fields: (task?.fields ?? []).map((f) => String(f.id)),
-      numberFields: (task?.fields ?? []).filter(readsAsNumber).map((f) => ({ id: String(f.id), label: str(f.label) ?? String(f.id) })),
+      // After {: every setting, those that do not fit this place greyed with why; those that may lack a value end as {x|n}.
+      braces: (head, after) => (task?.fields ?? []).map((f) => {
+        const label = str(f.label) ?? String(f.id);
+        const span = readsAsNumber(f) ? spanOf(f) : null;
+        const fit = key?.startsWith("snippet:") ? { ok: false, needDefault: null, short: "片段里不能读" } : braceFit(f, slotWhileTyping(head, after));
+        return { id: String(f.id), label, detail: `${label}${span ? ` · ${span[0]}–${span[1]}${str(f.unit) ? ` ${str(f.unit)}` : ""}` : ""}`, bad: fit.ok ? undefined : fit.short, needDefault: fit.needDefault };
+      }).sort((a, b) => Number(!!a.bad) - Number(!!b.bad)),
+      values: (id) => { const f = task?.fields.find((x) => String(x.id) === id); return f ? valuesOf(f).map((v) => ({ word: v.word, label: v.label })) : null; },
+      picker: pickerHost,
       pages: objs(library.pages).map((p) => str(p.name) ?? String(p.id)),
     };
-  }, [body, task, key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [sizes, setSizes] = useState<Record<string, string>>({});
-  useEffect(() => {
-    dev.templates(game).then((list) => {
-      const grouped = new Map<string, { dim: string; count: number }>();
-      for (const t of list) {
-        const base = t.id.split("@")[0];
-        const prev = grouped.get(base);
-        grouped.set(base, prev ? { dim: prev.dim, count: prev.count + 1 } : { dim: `${t.width}×${t.height}`, count: 1 });
-      }
-      setSizes(Object.fromEntries(Array.from(grouped.entries()).map(([k, v]) => [k, v.count > 1 ? `${v.dim} · ${v.count} 套主题` : v.dim])));
-    }).catch(() => undefined);
-  }, [game]);
+  }, [body, task, key, pickerHost]); // eslint-disable-line react-hooks/exhaustive-deps
   const setting = useCallback((id: string): SettingView | null => {
     const f = task?.fields.find((x) => String(x.id) === id);
     return f && task ? settingView(f, task.steps, `${devPaths.config(task.id)}?field=${encodeURIComponent(id)}`) : null;
@@ -287,6 +363,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     // The old result goes at once: what shows now is this trial's.
     shown.current = ""; setRun(null); setFromPhone(false);
     try {
+      if (refused || dirtyKeys.some((k) => conflicts.includes(scoped(k)))) { setRunError("先在左边选用哪边，再试跑"); return; }
       for (const k of dirtyKeys) if (!await save(k)) { setRunError("有脚本没保存成，没开始试跑"); return; }
       const only = scope === "step" && step && !snippetId ? String(step.id) : undefined;
       // The id is made here, so the server's events (排队, 准备) are followed before it answers.
@@ -307,7 +384,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       const listed = issuesOf(error);
       setRunIssues(listed);
       // Listed one by one below; the message then only says why.
-      setRunError(listed.length ? `没通过检查，${listed.length} 处问题` : failure(error));
+      setRunError(listed.length ? null : failure(error));
     }
     finally { startingRef.current = false; setStarting(false); setPreparing(false); }
   };
@@ -358,7 +435,17 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const conflicted = !!key && conflicts.includes(scoped(key));
   const offline = !!device && phone !== undefined && !phone.online;
   const category = task ? str(objs(target(body, String(task.raw.targetId))?.categories).find((c) => c.id === task.raw.category)?.name) ?? CATEGORY[str(task.raw.category) ?? ""] ?? "任务" : "";
-  const tabs: [Tab, string][] = [...(task ? [["run", "试跑"] as [Tab, string]] : []), ["problems", issues?.length || others.length ? `问题 ${(issues?.length ?? 0) + others.length}` : "问题"], ["screen", "画面"], ["help", "写法"]];
+  // Errors known before a trial (this script's, then the snippets it uses): the trial button sends to the first.
+  const ownErrors = shownIssues.filter((x) => !x.warning);
+  const otherErrors = otherShown.filter((x) => !x.warning);
+  const blockers = ownErrors.length + otherErrors.length;
+  const toFirstError = () => {
+    const mine = ownErrors.find((x) => x.line !== null);
+    if (mine && key) { setGoTo({ key, line: mine.line!, at: Date.now() }); return; }
+    const o = otherErrors[0]; const place = o ? placeAt(o.where, body) ?? locate(o.location, body) : null;
+    if (place) navigate(place.to); else setTab("problems");
+  };
+  const tabs: [Tab, string][] = [...(task ? [["run", "试跑"] as [Tab, string]] : []), ["problems", shownIssues.length || otherShown.length ? `问题 ${shownIssues.length + otherShown.length}` : "问题"], ["screen", "画面"], ["help", "写法"]];
 
   return (
     <div className={s.layout}>
@@ -380,21 +467,27 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
       </nav>
 
       <section aria-label="脚本" className={s.editor}>
-        {message && <div role="status" className={message[1] ? `${w.muted} ${w.okText}` : w.message}>{message[0]}</div>}
+        {message && !((refused || conflicted) && (message[0] === PATCH_CONFLICT || message[0] === EDIT_CONFLICT)) &&
+          <div role="status" className={message[1] ? `${w.muted} ${w.okText}` : w.message}>{message[0]}</div>}
+        {/* A refused save's two sides: here, at the top of the editor, the one place it is said. */}
+        {refused && <PatchConflicts conflicts={refused} body={body} onChoose={async (mine) => { const problem = await resolveRefused(mine); if (!problem) say(null); return problem; }} />}
         {key && owner ? <>
           <div className={s.bar}>
             <b className={s.barName}>{stepNo ? `${stepNo} · ` : ""}{label}</b>
             {task && step && !snippetId && <StepTools task={task} step={step} apply={apply} onMessage={say} onRemoved={() => setEdit(ownerOfStep(step), undefined)} />}
             {key.startsWith("snippet:") && <Pill>片段 · 用在 {uses(key.slice(8))} 处</Pill>}
             <span className={s.grow} />
-            {isScript && <span className={w.muted}>{checkNote && checking ? checkNote : issues === null ? "检查中…" : <>
-              {issues.length ? <button type="button" className={s.linkish} onClick={() => setTab("problems")}>{issues.length} 处问题</button> : "没问题"}
-              {checking && <span title="新的检查还没回来"> · 可能过期</span>}</>}</span>}
-            {dirty && <span className={s.unsaved}>{conflicted ? "冲突" : "未保存"}</span>}
+            {isScript && <span className={w.muted}>{queuedUntil && checking ? <QueueLine until={queuedUntil} now={clock} onRetry={() => retryNow.current?.()}
+                last={shownIssues} local={fromSpot} />
+              : !shownIssues.length ? (checking ? "检查中…" : "没问题") : <>
+              <button type="button" className={s.linkish} onClick={() => setTab("problems")}>
+                {fromSpot || !checking ? "" : "上次 "}<Tally xs={shownIssues} /></button>
+              {checking && <span title="新的检查还没回来">（检查中）</span>}</>}</span>}
+            {dirty && <span className={s.unsaved}>{conflicted || refused ? "选用哪边" : "未保存"}</span>}
             {isScript && <button type="button" className={`${w.btn} ${w.sm} ${dirty ? w.primary : ""}`} disabled={saving || !dirty || conflicted} onClick={() => void save(key)}>
               {saving ? "保存中…" : <>保存 <kbd className={s.kbd}>⌘S</kbd></>}</button>}
           </div>
-          {conflicted && isScript && <Conflict theirs={saved ?? ""} mine={text} busy={saving}
+          {conflicted && isScript && !refused && <Conflict theirs={saved ?? ""} mine={text} busy={saving}
             onMine={async () => { if (await save(key, true)) say(null); }}
             onTheirs={() => { setEdit(key, undefined); setMessage(["已换成别处的版本", true]); }} />}
           {isScript ? (
@@ -422,30 +515,27 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
             <RunPanel task={task} step={step} snippetOpen={!!snippetId} run={run} busy={busy} device={device} offline={offline} failIndex={failIndex} places={places} savedOf={savedOf}
               why={why} scope={scope} setScope={setScope} presets={presets} custom={custom} preset={preset} setPreset={setPreset}
               preparing={preparing} error={runError} issues={runIssues} fromPhone={fromPhone} body={body} onRefresh={(x) => { if (shown.current === x.id) setRun(x); }}
-              onStart={() => void start()} onOpen={openKey} onMessage={(t) => setRunError(t)} target={insertTarget} backHere={backHere} />
+              onStart={() => void start()} onOpen={openKey} onMessage={(t) => setRunError(t)} target={insertTarget} backHere={backHere}
+              blockers={blockers} onFix={toFirstError} />
           )}
-          {tab === "problems" && checkNote && checking && <span className={w.muted}>{checkNote}</span>}
-          {tab === "problems" && (issues === null ? <>
-            <span className={w.muted}>检查中…{local.length ? " 先看本地查到的：" : ""}</span>
-            {local.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && setGoTo({ key, line: x.line, at: Date.now() })}>
-              <span className={s.ln}>L{x.line}</span>{x.severity === "warning" && <span className={s.warnTag}>提醒</span>}{x.reason}</button>)}
-          </> : <>
-            <div className={s.group}>本脚本{checking ? " · 可能过期" : ""}</div>
-            {issues.length === 0 ? <span className={w.muted}>没问题</span>
-              : issues.map((x, i) => <button key={i} type="button" className={s.problem} onClick={() => key && x.line !== null && setGoTo({ key, line: x.line, at: Date.now() })}>
-                {x.line !== null && <span className={s.ln}>L{x.line}</span>}{x.warning && <span className={s.warnTag}>提醒</span>}{x.reason}</button>)}
-            {(task || others.length > 0) && <>
-              <div className={s.group}>{key?.startsWith("snippet:") ? "调用它的地方" : "用到的片段"}</div>
-              {others.length === 0 ? <span className={w.muted}>没问题</span>
-                : others.map((x, i) => <div key={i} className={s.problem}>{x.warning && <span className={s.warnTag}>提醒</span>}<IssueText issue={x} body={body} /></div>)}
-            </>}
-          </>)}
+          {tab === "problems" && queuedUntil && checking && <span className={w.muted}><QueueLine until={queuedUntil} now={clock} onRetry={() => retryNow.current?.()} last={null} local={false} /></span>}
+          {tab === "problems" && <ProblemList head={fromSpot ? `本地刚查到 · ${spot.length}` : checking && served ? "本脚本 · 上次检查" : "本脚本"} checking={checking}
+            items={shownIssues} fresh={fromSpot} stale={staleIssues} onGo={(line) => key && setGoTo({ key, line, at: Date.now() })} />}
+          {tab === "problems" && served !== null && (task || otherShown.length > 0) && <>
+            <div className={s.group}>{key?.startsWith("snippet:") ? "调用它的地方" : "用到的片段"}{checking ? " · 上次检查" : ""}</div>
+            {otherShown.length === 0 ? <span className={w.muted}>没问题</span>
+              : otherShown.map((x, i) => <div key={i} className={s.problem}>{x.warning && <span className={s.warnTag}>提醒</span>}<IssueText issue={x} body={body} /></div>)}
+          </>}
           {tab === "screen" && (device
-            ? <FrameTools key={device} picture={<Peek device={device} />} target={insertTarget} assets={backHere}
-                makeSample={() => sampleNow(game, device)} />
+            ? <FrameTools key={device} picture={<Peek device={device} onShown={setPeekUrl} />} target={insertTarget} assets={backHere}
+                fresh={!peekUrl} pictureKey={peekUrl ?? ""}
+                makeSample={(signal, sent) => peekUrl ? sampleFromPicture(game, peekUrl).catch(() => sampleNow(game, device, signal, sent)) : sampleNow(game, device, signal, sent)} />
             : <span className={w.muted}>顶栏选一台手机</span>)}
           {tab === "help" && <div className={s.help}>
-            {HELP.map(([sayIt, does]) => <div key={sayIt}><code>{sayIt}</code><span className={w.muted}>{does}</span></div>)}
+            <span className={w.muted}>{isScript ? `点一条插到 L${cursor ?? lines(key!)} 后` : "打开脚本后可点插入"}</span>
+            {HELP.map((h) => <button key={h[0]} type="button" className={s.helpItem} disabled={!isScript}
+              onClick={() => { const firstNumber = (task?.fields ?? []).find(readsAsNumber); insertAt(helpInsert(h).replace("{rounds}", `{${firstNumber ? String(firstNumber.id) : "rounds"}}`), cursor ?? text.split("\n").length); }}>
+              <code>{h[0]}</code><span className={w.muted}>{h[1]}</span></button>)}
             <span className={w.muted}>区域 @x,y,宽,高 · 条件用“且”连 · # 后是注释</span>
           </div>}
         </div>
@@ -454,15 +544,36 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   );
 }
 
-/** Has the phone take a sample of its screen now, and gives it once it is stored. */
-async function sampleNow(game: string, device: string): Promise<Sample> {
-  const run = await dev.startRun({ kind: "sample", target: game, device, name: "画面" });
-  const done = await follow(run.id, () => {});
-  if (done.state !== "FINISHED") throw new Error(done.detail || "没采到");
-  const all = await dev.samples(game);
-  const made = all.find((x) => x.id === done.sample) ?? all[0];
-  if (!made) throw new Error("没采到");
-  return made;
+/** The picture looked at ([url], an object URL from 看一张 or 实时) kept as a sample as it is: no new picture from the phone. */
+async function sampleFromPicture(game: string, url: string): Promise<Sample> {
+  const blob = await (await fetch(url)).blob();
+  return dev.uploadSample(game, new File([blob], blob.type === "image/png" ? "画面.png" : "画面.jpg", { type: blob.type || "image/png" }));
+}
+
+/** 「检查排队中 · 8 秒后重试 · 现在重试」, with the count shown beside it: the last check's (上次), or what was found here (本地). */
+function QueueLine({ until, now, onRetry, last, local }: { until: { at: number; said: string }; now: number; onRetry: () => void; last: Shown[] | null; local: boolean }) {
+  const secs = Math.max(0, Math.ceil((until.at - now) / 1000));
+  return <span title={until.said}>检查排队中 · {secs ? `${secs} 秒后重试` : "重试中"} · <button type="button" className={`${s.linkish} ${w.okText}`} onClick={onRetry}>现在重试</button>
+    {last && last.length > 0 && (local ? <> · <Tally xs={last} />（本地）</> : <> · 上次 <Tally xs={last} /></>)}</span>;
+}
+/** Errors and warnings apart: 「2 错 · 1 提醒」. */
+function Tally({ xs }: { xs: { warning: boolean }[] }) {
+  const e = xs.filter((x) => !x.warning).length, wn = xs.length - e;
+  return <>{e > 0 && <span className={s.countErr}>{e} 错</span>}{e > 0 && wn > 0 && " · "}{wn > 0 && <span className={s.countWarn}>{wn} 提醒</span>}</>;
+}
+/** 问题's own part: the list shown (found here on the spot while the check is out), and the older answer folded under 上次检查. */
+function ProblemList({ head, checking, items, fresh, stale, onGo }: { head: string; checking: boolean; items: Shown[]; fresh: boolean; stale: Shown[] | null; onGo: (line: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const row = (x: Shown, i: number, cls = "") => <button key={i} type="button" className={`${s.problem} ${cls}`} disabled={x.line === null} onClick={() => x.line !== null && onGo(x.line)}>
+    {x.line !== null && <span className={s.ln}>L{x.line}</span>}{x.warning && <span className={s.warnTag}>提醒</span>}{x.reason}</button>;
+  return <>
+    <div className={s.group}>{head}{checking ? "（检查中）" : ""}</div>
+    {items.length === 0 ? <span className={w.muted}>{checking ? "检查中…" : "没问题"}</span> : items.map((x, i) => row(x, i, fresh ? s.problemNew : ""))}
+    {stale && stale.length > 0 && <>
+      <button type="button" className={s.fold} aria-expanded={open} onClick={() => setOpen(!open)}>上次检查 · {tally(stale)} {open ? "▾" : "›"}</button>
+      {open && stale.map((x, i) => row(x, i, s.stale))}
+    </>}
+  </>;
 }
 
 /** The task's steps, each with how the trial shown went on it (• = not saved), and a way to add one. */
@@ -554,7 +665,7 @@ function StepTools({ task, step, apply, onMessage, onRemoved }: { task: TaskDef;
   ];
   return <>
     <RunCondition step={step} fields={task.fields} editing={editing} setEditing={setEditing} onChange={(next) => void setWhen(next)} />
-    {provided.length > 0 && <Link to={devPaths.config(task.id)} title={provided.map((f) => str(f.label) ?? String(f.id)).join("、")}><Pill>提供 {provided.length} 项</Pill></Link>}
+    {provided.length > 0 && <Link to={devPaths.config(task.id)} title={provided.map((f) => str(f.label) ?? String(f.id)).join("、")}><Pill>配置 {provided.length} 项</Pill></Link>}
     {removing && <span className={s.cond}><span>移出「{str(step.name) ?? sid}」？</span>
       <button type="button" className={`${w.btn} ${w.sm} ${w.danger}`} onClick={() => void remove()}>移出</button>
       <button type="button" className={`${w.btn} ${w.sm}`} onClick={() => setRemoving(false)}>取消</button></span>}
@@ -568,8 +679,13 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
   scope: "step" | "task"; setScope: (v: "step" | "task") => void; presets: [string, Obj][]; custom: Obj | null; preset: number; setPreset: (i: number) => void;
   preparing: boolean; error: string | null; issues: CheckIssue[]; fromPhone: boolean; body: Obj; onRefresh: (run: DevRun) => void;
   onStart: () => void; onOpen: (k: OwnerKey, line?: number) => void; onMessage: (text: string | null) => void;
-  target: InsertTarget | null; backHere: string }) {
+  target: InsertTarget | null; backHere: string;
+  /** Errors already known in the scripts: the button goes to the first ([onFix]) before it runs. */
+  blockers: number; onFix: () => void }) {
   const { task, step, run, busy, failIndex, places } = p;
+  // While it runs the seconds go on by themselves, and how long the phone has said nothing.
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => { if (!busy) return; setTick(Date.now()); const t = setInterval(() => setTick(Date.now()), 1000); return () => clearInterval(t); }, [busy]);
   const canStep = !!step && !p.snippetOpen;
   const scope = canStep ? p.scope : "task";
   const frames = useFrames(busy ? null : run);
@@ -617,7 +733,9 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
     : busy ? [`运行中${now ? ` · ${where(now)}` : ""}`, "info"]
     : !run ? ["还没试跑", ""] : completed(run) ? ["通过", "ok"] : halted ? ["已停止", ""]
     : failRow ? [`停在 ${stopPlace(failRow)}`, "bad"] : ["没通过", "bad"];
-  const secs = run ? Math.max(0, Math.round((run.updatedAt - run.createdAt) / 1000)) : 0;
+  const secs = run ? Math.max(0, Math.round(((busy ? tick : run.updatedAt) - run.createdAt) / 1000)) : 0;
+  const onPhone = busy && !!run && (run.state === "RUNNING" || (run.state === "SENT" && phase !== "queued" && phase !== "preparing"));
+  const quiet = run ? Math.max(0, Math.round((tick - run.updatedAt) / 1000)) : 0;
   // The screen a failed trial stopped on comes a moment after the result: wait for it a while, then offer to ask again.
   const [late, setLate] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -674,22 +792,32 @@ function RunPanel(p: { task: TaskDef; step: Obj | undefined; snippetOpen: boolea
       <Link className={s.plus} to={devPaths.config(task.id)} title="在配置项页调一组值带回来">＋</Link>
     </div>}
     <div className={s.line}>
-      <button type="button" className={`${w.btn} ${w.primary} ${s.grow}`} disabled={busy || !p.device || p.offline}
-        onClick={p.onStart}>{busy ? "试跑中…" : !p.device ? "顶栏选手机" : p.offline ? "手机离线" : scope === "step" ? "▶ 试跑本步" : "▶ 试跑整个任务"}</button>
+      {p.blockers > 0 && !busy && p.device && !p.offline
+        ? <><button type="button" className={`${w.btn} ${w.primary} ${s.grow}`} onClick={p.onFix}>先修 {p.blockers} 处问题</button>
+            <button type="button" className={`${s.linkish} ${w.muted} ${s.small}`} onClick={p.onStart}>仍要试跑</button></>
+        : <button type="button" className={`${w.btn} ${w.primary} ${s.grow}`} disabled={busy || !p.device || p.offline}
+        onClick={p.onStart}>{busy ? "试跑中…" : !p.device ? "顶栏选手机" : p.offline ? "手机离线" : scope === "step" ? "▶ 试跑本步" : "▶ 试跑整个任务"}</button>}
       {busy && run && <button type="button" className={w.btn} disabled={run.stopping}
         onClick={async () => { try { await dev.stopRun(run.id); } catch (error) { p.onMessage(failure(error)); } }}>{run.stopping ? "正在停…" : "停止"}</button>}
     </div>
     {scope === "step" && step && task.steps.indexOf(step) > 0 && !busy && <span className={w.muted}>本步会先跑第 1 步</span>}
-    {p.error && <div role="alert" className={w.message}><Located text={p.error} body={p.body} /></div>}
-    {p.issues.length > 0 && <div className={`${w.card} ${s.rows}`}>
-      {p.issues.map((x, i) => <div key={i} className={s.problem}><IssueText issue={x} body={p.body} /></div>)}
-    </div>}
-    {(run || p.preparing || busy) && <div className={s.line}>
+    {p.error && !p.issues.length && <div role="alert" className={w.message}><Located text={p.error} body={p.body} /></div>}
+    {p.issues.length > 0 && (() => {
+      // Held back by the check: said once, with where.
+      const first = p.issues[0]; const place = placeAt(first.where, p.body) ?? locate(first.location, p.body);
+      return <div role="alert" className={s.blocked}><b>检查没过</b>
+        {place ? <Link to={place.to} title={first.reason}>{place.label} ›</Link> : <span>{first.reason}</span>}
+        {place && <span className={w.muted}>{first.reason}</span>}
+        {p.issues.length > 1 && <span className={w.muted}>还有 {p.issues.length - 1} 处</span>}</div>;
+    })()}
+    {(run || p.preparing || busy) && !p.issues.length && <div className={s.line}>
       {run && (run.source === "phone" || (p.fromPhone && run.source !== "web")) ? <Pill tone="soft">{busy ? "来自手机 · 进行中" : "来自手机"}</Pill>
         : run && p.fromPhone ? <Pill tone="soft">来自别的窗口</Pill> : null}
       {failRow?.key && !busy ? <button type="button" className={s.linkish} onClick={() => p.onOpen(failRow.key!, failRow.line)}><Pill tone={tone || undefined}>{pill}</Pill></button>
         : <Pill tone={tone || undefined}>{pill}</Pill>}
       {run && <span className={w.muted}>{secs} 秒{run.frameCount ? ` · ${run.frameCount} 帧` : ""}</span>}
+      {onPhone && (quiet > 60 ? <span className={`${s.late} ${s.small}`}>手机 {quiet} 秒没回报</span>
+        : <span className={`${w.muted} ${s.small}`}>最后回报 {quiet} 秒前</span>)}
       <span className={s.grow} />
       {frames.length > 0 && <>
         <button type="button" className={`${w.btn} ${w.sm}`} aria-label="上一帧" disabled={view === 0} onClick={() => setView(view === null ? frames.length - 1 : Math.max(0, view - 1))}>◀</button>
@@ -736,7 +864,7 @@ function Conflict({ theirs, mine, busy, onMine, onTheirs }: { theirs: string; mi
   return (
     <div className={`${w.card} ${s.conflict}`} role="alert">
       <b>别处改过这段脚本（你开始编辑之后）</b>
-      <span className={w.muted}>− 别处的 · + 你的</span>
+      <span className={w.muted}>− 别处的 · + 我的</span>
       <div className={pub.diff}>
         {shown.map((l, i) => <div key={i} className={pub.diffLine} data-kind={l.kind}><span className={pub.ln}>{l.kind === "add" ? l.b : l.a}</span><span>{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "} {l.text}</span></div>)}
       </div>
@@ -773,7 +901,7 @@ function poll(tr: DevTrace): string {
  * (WebRTC, the server only introduces the two) and shows each picture as soon as the last has come; where no direct
  * path can be found it takes them through the server instead, one after the other. Says which it is.
  */
-function Peek({ device }: { device: string }) {
+function Peek({ device, onShown }: { device: string; onShown?: (url: string | null) => void }) {
   const [shown, setShown] = useState<{ url: string; at: number } | null>(null);
   const [mode, setMode] = useState<"off" | "connecting" | "direct" | "relay">("off");
   const [rate, setRate] = useState<number | null>(null);
@@ -782,7 +910,8 @@ function Peek({ device }: { device: string }) {
   const alive = useRef(true);
   const session = useRef(0);
   useEffect(() => () => { alive.current = false; session.current++; }, []);
-  useEffect(() => () => { if (shown) URL.revokeObjectURL(shown.url); }, [shown]);
+  useEffect(() => { onShown?.(shown?.url ?? null); return () => { if (shown) URL.revokeObjectURL(shown.url); }; }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onShown?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
   const showUrl = (url: string) => { if (alive.current) setShown({ url, at: Date.now() }); else URL.revokeObjectURL(url); };
   const once = async () => {
     setBusy(true); setWhy(null);
@@ -851,7 +980,7 @@ function RunCondition({ step, fields, editing, setEditing, onChange }: { step: O
   const value = multi ? str(when.contains) : when.equals === true ? "true" : when.equals === false ? "false" : str(when.equals);
   const options: [string, string][] = toggle ? [["true", "开"], ["false", "关"]] : objs(field?.options).map((o) => [str(o.value) ?? "", str(o.label) ?? ""]);
   const set = (v: string, not: boolean) => onChange({ field: String(when.field), ...(multi ? { contains: v } : { equals: toggle ? v === "true" : v }), ...(not ? { not: true } : {}) });
-  const said = `准入：${str(field?.label) ?? String(when.field)} ${multi ? (when.not === true ? "不含" : "含") : when.not === true ? "≠" : "="} ${options.find(([v]) => v === value)?.[1] ?? value ?? ""}`;
+  const said = `${str(field?.label) ?? String(when.field)} ${multi ? (when.not === true ? "不含 " : "含 ") : when.not === true ? "不是 " : ""}${options.find(([v]) => v === value)?.[1] ?? value ?? ""} 才跑`;
   if (!editing) return <button type="button" className={s.linkish} title="点开修改" onClick={() => setEditing(true)}><Pill tone="soft">{said}</Pill></button>;
   return (
     <span className={s.cond}>

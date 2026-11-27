@@ -15,14 +15,15 @@ export const idOf = (name: string) => {
  * With [askId], an id is asked beside it: taken from the name when the name has letters, required when it has none,
  * so a Chinese name never becomes "field" or "step".
  */
-export function NameButton({ label, placeholder, className, style, askId, onName }: { label: ReactNode; placeholder: string; className?: string;
-  style?: CSSProperties; askId?: boolean; onName: (name: string, id: string) => unknown }) {
+export function NameButton({ label, placeholder, className, style, askId, idOptional, onName }: { label: ReactNode; placeholder: string; className?: string;
+  /** [idOptional]: an empty id is fine (the caller makes one). */
+  style?: CSSProperties; askId?: boolean; idOptional?: boolean; onName: (name: string, id: string) => unknown }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [id, setId] = useState("");
   const close = () => { setOpen(false); setName(""); setId(""); };
   const chosen = idOf(id) || idOf(name);
-  const ready = name.trim() !== "" && (!askId || chosen !== "");
+  const ready = name.trim() !== "" && (!askId || idOptional || chosen !== "");
   const submit = async () => {
     const value = name.trim(); if (!ready) return; close();
     try { await onName(value, chosen); } catch (error) { console.error(error); }
@@ -37,7 +38,7 @@ export function NameButton({ label, placeholder, className, style, askId, onName
   return (
     <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <input autoFocus aria-label={placeholder} placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={keys} style={field} />
-      {askId && <input aria-label="编号（英文字母、数字、-）" placeholder={idOf(name) || "编号，如 collect-realm"} value={id} onChange={(e) => setId(e.target.value)} onKeyDown={keys}
+      {askId && <input aria-label="编号（英文字母、数字、-）" placeholder={idOf(name) || (idOptional ? "编号（空则自动）" : "编号，如 collect-realm")} value={id} onChange={(e) => setId(e.target.value)} onKeyDown={keys}
         title="编号用英文：写进任务包、配置里，以后不好改" style={{ ...field, minWidth: 160 }} />}
       <button type="button" className={`${w.btn} ${w.primary}`} style={{ minHeight: 34 }} disabled={!ready} onClick={() => void submit()}>确定</button>
       <button type="button" className={w.btn} style={{ minHeight: 34 }} onClick={close}>取消</button>

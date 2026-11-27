@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
-import type { CloudTask, ConfigView, Game, GameAccount, GameTask, Job } from "../../api/types";
+import type { CloudTask, ConfigView, Device, Game, GameAccount, GameTask, Job } from "../../api/types";
 import { Breadcrumb, Button, ButtonLink, Card, CardHead, Empty, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, ui } from "../../components/ui";
-import { actionKind, ACTIVE, jobStatus, type Tone } from "../../format";
+import { actionKind, ACTIVE, CONFIG_TONE, JOB_STATES, jobStatus, type Tone } from "../../format";
 import { leave, Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
 import { formatSettingValue, resolveTaskDefaults, SettingsForm, stepWillRun, summarizeWebTaskConfig, TaskStepsList } from "../accounts/Settings";
 import { Note, useRunNow, useSwitchLocked } from "../jobs/runs";
 import { ProLockButton, ProLimitButton, ProLockRow } from "../../components/Pro";
+import { InstallAppCard } from "../onboarding/Onboarding";
 import s from "./Library.module.css";
 
 /** 常用: starred tasks, kept in this browser (the App keeps its own). */
@@ -35,21 +36,23 @@ export function StarButton({ on, toggle }: { on: boolean; toggle: () => void }) 
 }
 
 /** A task's live state for an account, as the row's pill: running, or waiting in a queue. */
-export function taskState(jobs: Job[] | undefined, task: CloudTask, accountId: string | undefined): [string, Tone] | null {
+export function taskState(jobs: Job[] | undefined, task: CloudTask, accountId: string | undefined, devices?: Device[]): [string, Tone] | null {
   if (!jobs || !accountId) return null;
   const job = jobs.find((item) => item.accountId === accountId && item.targetId === task.targetId && item.taskId === task.taskId && ACTIVE.has(item.state));
   if (!job) return null;
-  return job.state === "RUNNING" || job.state === "LEASED" ? jobStatus(job) : [job.state === "WAITING" ? "等待中" : "排队", "warn"];
+  return job.state === "RUNNING" || job.state === "LEASED" ? jobStatus(job, devices) : JOB_STATES[job.state];
 }
 
 /** Task rows: the name (★ when starred, the live state), its settings as grey pills, and ▶ to run it now. */
 export function RunTaskRows({
-  tasks, games, account, jobs, busy, notes, onRun, favorites, locked,
+  tasks, games, account, jobs, devices, busy, notes, onRun, favorites, locked, blocked,
 }: {
   tasks: CloudTask[];
   games: Game[];
   account: GameAccount | undefined;
   jobs?: Job[];
+  /** For the live state: a paused or stuck run says so. */
+  devices?: Device[];
   deviceId?: string;
   appKey?: string;
   busy: string | null;
@@ -58,13 +61,15 @@ export function RunTaskRows({
   favorites?: Set<string>;
   /** Running needs an account switch the free tier does not allow: the lock and Pro in place of ▶. */
   locked?: boolean;
+  /** No account or no device yet: ▶ is grey (the line above the list says what to do). */
+  blocked?: boolean;
 }) {
   return (
     <>
       {tasks.map((task) => {
         const detail = games.find((game) => game.id === task.targetId)?.tasks.find((item) => item.taskId === task.taskId);
         const chips = summarizeWebTaskConfig(detail, {}, 3);
-        const state = taskState(jobs, task, account?.id);
+        const state = taskState(jobs, task, account?.id, devices);
         return (
           <div key={task.taskId} className={s.taskRow}>
             <Link to={paths.taskDetail(task.targetId, task.taskId, account?.id)} className={s.taskLink}>
@@ -77,12 +82,17 @@ export function RunTaskRows({
               <Note note={notes[task.taskId]} />
             </Link>
             {locked ? <ProLockButton name={`切号运行${task.name}`} />
-              : <Button small variant="primary" aria-label={`运行${task.name}`} title="运行" disabled={busy !== null} onClick={() => onRun(task)}>▶</Button>}
+              : <Button small variant="primary" aria-label={`运行${task.name}`} title={blocked ? "先添加账号和设备" : "运行"} disabled={busy !== null || blocked} onClick={() => onRun(task)}>▶</Button>}
           </div>
         );
       })}
     </>
   );
+}
+
+/** Above the task list while there is no account: 先添加账号才能运行 · 去添加 ›. */
+export function RunNeeds() {
+  return <p className={s.needs} role="note">先添加账号才能运行 · <Link to={paths.accounts} className={s.needsLink}>去添加 ›</Link></p>;
 }
 
 const searchIcon = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>;
@@ -111,10 +121,11 @@ export function LibraryPage() {
     return (
       <>
         <PageHeader title="任务" />
-        <Card><Empty>连上设备后同步任务</Empty></Card>
+        {data.devices.length === 0 ? <InstallAppCard /> : <Card><Empty>连上设备后同步任务</Empty></Card>}
       </>
     );
   }
+  const blocked = gameAccounts.length === 0 || data.devices.length === 0;
 
   const starred = game.tasks.filter((t) => favorites.has(favKey(t.targetId, t.taskId)));
   const needle = query.trim().toLowerCase();
@@ -147,6 +158,8 @@ export function LibraryPage() {
         <button type="button" className={s.iconButton} aria-label="搜索" aria-pressed={searching}
           onClick={() => { if (searching) setQuery(""); setSearching(!searching); }}>{searchIcon}</button>
       </div>
+      {data.devices.length === 0 && <InstallAppCard />}
+      {gameAccounts.length === 0 && <RunNeeds />}
       {switchLocked && <Card flush><ProLockRow compact name="自动切号" label={`切到${activeAccount?.name ?? "这个账号"}跑`} /></Card>}
       {searching && <input type="search" className={s.search} autoFocus placeholder="搜任务" aria-label="搜任务" value={query} onChange={(e) => setQuery(e.target.value)} />}
 
@@ -165,10 +178,12 @@ export function LibraryPage() {
                 games={data.games}
                 account={activeAccount}
                 jobs={data.jobs}
+                devices={data.devices}
                 busy={busy}
                 notes={notes}
                 favorites={favorites}
                 locked={switchLocked}
+                blocked={blocked}
                 onRun={(cTask) => {
                   if (!activeAccount) { navigate(paths.accounts); return; }
                   void run(cTask, activeAccount.id, place ? { deviceId: place.device.id, appKey: place.app.key } : null);
@@ -306,7 +321,7 @@ function TaskStepDetail({ gameId, taskId, detail, step }: { gameId: string; task
       <Breadcrumb items={crumbs} />
       <PageHeader title={`步骤 ${step.index} · ${step.name}`} />
       <div className={s.stepState}>
-        <Pill tone={willRun ? "ok" : ""}>{willRun ? "● 执行" : "○ 跳过"}</Pill>
+        <Pill tone={willRun ? CONFIG_TONE.set : CONFIG_TONE.unset} dot>{willRun ? "执行" : "跳过"}</Pill>
         {step.conditionLabel && <span className={ui.tiny}>准入：{step.conditionLabel}</span>}
       </div>
 

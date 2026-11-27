@@ -10,7 +10,8 @@ import { saveOf } from "../accounts/Plans";
 import { SettingsForm, summarizeWebTaskConfig, TaskStepsList, resolveTaskDefaults } from "../accounts/Settings";
 import { Note, useRunNow, useSwitchLocked } from "../jobs/runs";
 import { ProLimitButton, ProLockButton, ProLockRow } from "../../components/Pro";
-import { favKey, StarButton, taskState, useFavorites } from "./LibraryPage";
+import { favKey, RunNeeds, StarButton, taskState, useFavorites } from "./LibraryPage";
+import { InstallAppCard } from "../onboarding/Onboarding";
 import d from "../../shell/Desk.module.css";
 import s from "./Library.module.css";
 
@@ -41,7 +42,7 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
     return (
       <>
         <PageHeader title="任务与日常" />
-        <Card><Empty>连上设备后同步任务</Empty></Card>
+        {data.devices.length === 0 ? <InstallAppCard /> : <Card><Empty>连上设备后同步任务</Empty></Card>}
       </>
     );
   }
@@ -71,8 +72,10 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
         <span className={s.pickers} aria-label="在哪跑"><span className={ui.tiny}>账号</span>{pickers.account}<span className={ui.tiny}>设备</span>{pickers.place}</span>
       ) : undefined} />
       {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => leave(() => { setChosenGame(id); run.clear(); navigate(paths.tasks, { force: true }); })} items={data.games.map((item) => [item.id, item.name])} />}
+      {data.devices.length === 0 && <InstallAppCard />}
       <div className={join(d.cols, d.cols3)}>
-        <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} locked={switchLocked} />
+        <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} locked={switchLocked}
+          blocked={!account || data.devices.length === 0} />
         <div className={d.detail}>
           {!task ? <Card><Empty>{taskId ? "没有这个任务" : "没有任务"}</Empty></Card> : (
             <TaskPane key={`${game.id}:${task.taskId}:${account?.id ?? ""}`} game={game} task={task} account={account}
@@ -87,8 +90,10 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
 }
 
 /** The left column: 全部 / ★ 常用, a search box, and the tasks by category; ▶ runs one now (shown on hover with a mouse). */
-function TaskList({ game, current, account, notes, busy, onRun, locked }: {
+function TaskList({ game, current, account, notes, busy, onRun, locked, blocked }: {
   game: Game; current?: string; account?: GameAccount; notes: Record<string, { text: string; ok: boolean }>; busy: string | null; onRun: (task: GameTask) => void; locked?: boolean;
+  /** No account or no device yet: ▶ is grey. */
+  blocked?: boolean;
 }) {
   const { data } = useConsole();
   const [view, setView] = useState<"all" | "fav">("all");
@@ -113,6 +118,7 @@ function TaskList({ game, current, account, notes, busy, onRun, locked }: {
     <nav className={d.side} aria-label="任务">
       <SegmentTabs label="筛选" value={view} onChange={setView} items={[["all", `全部 ${game.tasks.length}`], ["fav", `★ 常用 ${starred.length}`]]} />
       <input type="search" className={d.search} placeholder="搜索任务" aria-label="搜索任务" value={query} onChange={(e) => setQuery(e.target.value)} />
+      {!account && <RunNeeds />}
       {groups.size === 0 && <Card><Empty>{needle ? "没有匹配的任务" : view === "fav" ? "还没有常用，点 ★" : "没有任务"}</Empty></Card>}
       {[...groups.entries()].map(([label, tasks]) => (
         <Card key={label} flush as="section" aria-label={label}>
@@ -124,7 +130,7 @@ function TaskList({ game, current, account, notes, busy, onRun, locked }: {
           </button>
           {open && tasks.map((task) => {
             const chips = summarizeWebTaskConfig(task, {}, 3);
-            const state = taskState(data.jobs, task, account?.id);
+            const state = taskState(data.jobs, task, account?.id, data.devices);
             return (
               <div key={task.taskId} className={d.pick} aria-current={task.taskId === current ? "true" : undefined}>
                 <Link to={paths.taskDetail(task.targetId, task.taskId, account?.id)} className={d.pickLink} aria-current={task.taskId === current ? "page" : undefined}>
@@ -138,7 +144,7 @@ function TaskList({ game, current, account, notes, busy, onRun, locked }: {
                 </Link>
                 <span className={d.hoverOnly}>
                   {locked ? <ProLockButton name={`切号运行${task.name}`} />
-                    : <Button small variant="primary" aria-label={`运行${task.name}`} title="运行" disabled={busy !== null} onClick={() => onRun(task)}>▶</Button>}
+                    : <Button small variant="primary" aria-label={`运行${task.name}`} title={blocked ? "先添加账号和设备" : "运行"} disabled={busy !== null || blocked} onClick={() => onRun(task)}>▶</Button>}
                 </span>
               </div>
             );

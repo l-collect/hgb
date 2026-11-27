@@ -1,13 +1,59 @@
-import { useEffect, useRef } from "react";
-import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
+import { useEffect, useRef, useState } from "react";
+import { autocompletion, closeCompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, StreamLanguage, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
-import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
+import { EditorState, Prec, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
 import { Decoration, EditorView, GutterMarker, WidgetType, gutter, highlightActiveLine, hoverTooltip, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { href as hrefOf, navigate } from "../../router";
-import type { SettingView } from "./settingUse";
+import { inQuote, stripComment, type SettingView } from "./settingUse";
+import { atText } from "./coords";
+import { ScreenPick } from "./ScreenPick";
+import { TemplatePicker, type PickerHost } from "./TemplatePicker";
+import ps from "./Picker.module.css";
+
+/**
+ * What the cursor is on that a picture answers: a `图 name@region` (选图), any other `@x,y[,w,h]` (在画面上选), or a
+ * bare `@` where 在画面上框一个 was asked for. Offsets are the document's.
+ */
+type Spot =
+  | { kind: "image"; key: string; line: number; anchor: number; nameFrom: number; nameTo: number; name: string; regionFrom: number | null; regionTo: number | null; region: number[] | null; threshold: string | null }
+  | { kind: "at"; key: string; line: number; anchor: number; from: number; to: number; values: number[]; point: boolean; comma: string }
+  | { kind: "insert"; key: string; line: number; anchor: number; point: boolean };
+const NUMS = /@(-?\d+)([,，])\s*(-?\d+)(?:[,，]\s*(\d+)[,，]\s*(\d+))?/g;
+/** The spot at [pos] of [state], when there is one (the 图 part only with [images]). */
+function spotAt(state: EditorState, pos: number, images: boolean): Spot | null {
+  const line = state.doc.lineAt(pos);
+  const text = stripComment(line.text);
+  const at = pos - line.from;
+  if (at > text.length) return null;
+  if (images) for (const m of text.matchAll(/图\s+([^\s@]*)(?:@(\S*))?/g)) {
+    // Only a 图 of its own: not inside quoted text (「等 "藏宝图 已领取"」), and after the line's start, a space or a statement word.
+    if (inQuote(text, m.index!)) continue;
+    const lead = text.slice(0, m.index);
+    if (lead && !/\s$/.test(lead) && !LEADING.has(lead.trim())) continue;
+    const nameFrom = m.index! + /^图\s+/.exec(m[0])![0].length;
+    const nameTo = nameFrom + m[1].length;
+    const regionFrom = m[2] !== undefined ? nameTo + 1 : null, regionTo = regionFrom !== null ? regionFrom + m[2].length : null;
+    if (at < nameFrom || at > (regionTo ?? nameTo)) continue;
+    const nums = m[2]?.split(/[,，]/).map(Number);
+    const after = text.slice(regionTo ?? nameTo);
+    const threshold = /^\s+(0?\.\d+|1(?:\.0+)?)(?=\s|$)/.exec(after)?.[1] ?? null;
+    return { kind: "image", key: `image:${line.number}:${m.index}`, line: line.number, anchor: line.from + nameFrom, nameFrom: line.from + nameFrom, nameTo: line.from + nameTo, name: m[1],
+      regionFrom: regionFrom === null ? null : line.from + regionFrom, regionTo: regionTo === null ? null : line.from + regionTo,
+      region: nums && nums.length === 4 && nums.every((n) => Number.isFinite(n)) ? nums : null, threshold };
+  }
+  for (const m of text.matchAll(NUMS)) {
+    const from = m.index!, to = from + m[0].length;
+    if (at < from || at > to) continue;
+    const values = [m[1], m[3], m[4], m[5]].filter((x) => x !== undefined).map(Number);
+    return { kind: "at", key: `at:${line.number}:${from}`, line: line.number, anchor: line.from + from, from: line.from + from, to: line.from + to, values, point: values.length === 2, comma: m[2] };
+  }
+  return null;
+}
+/** Whether an `@` written at [before] (the line up to it) is a point: right after 点, or a colour set's place. */
+const pointBefore = (before: string) => /^\s*(点|点空白)\s*$/.test(before) || /色\s+\S+$/.test(before);
 
 /** Words a line starts with (docs/design/task-script.md), with what each does, for completion. */
 export const STATEMENTS: [string, string][] = [
@@ -52,20 +98,31 @@ const scriptLanguage = StreamLanguage.define<{ first: boolean; setting: boolean 
   },
 });
 
+// Colours come from the page (Workspace.module.css .script): dark mode has its own, lighter ones.
 const highlight = HighlightStyle.define([
-  { tag: tags.keyword, color: "#7c3aed", fontWeight: "600" },
-  { tag: tags.string, color: "#0f8a5f" },
-  { tag: tags.atom, color: "#2563eb" },
-  { tag: tags.number, color: "#c2410c" },
-  { tag: tags.comment, color: "#8a8f98", fontStyle: "italic" },
-  { tag: tags.operator, color: "#b45309" },
-  { tag: tags.labelName, color: "#db2777", fontWeight: "600" },
-  { tag: tags.propertyName, color: "#0e7490", fontWeight: "600", background: "color-mix(in srgb, #0e7490 10%, transparent)", borderRadius: "3px" },
+  { tag: tags.keyword, color: "var(--hl-keyword)", fontWeight: "600" },
+  { tag: tags.string, color: "var(--hl-string)" },
+  { tag: tags.atom, color: "var(--hl-region)" },
+  { tag: tags.number, color: "var(--hl-number)" },
+  { tag: tags.comment, color: "var(--hl-comment)", fontStyle: "italic" },
+  { tag: tags.operator, color: "var(--hl-operator)" },
+  { tag: tags.labelName, color: "var(--hl-label)", fontWeight: "600" },
+  { tag: tags.propertyName, color: "var(--hl-setting)", fontWeight: "600", background: "color-mix(in srgb, var(--hl-setting) 12%, transparent)", borderRadius: "3px" },
 ]);
 
+/** A setting offered after `{`: [bad] says why it does not suit this place (shown greyed), [needDefault] the `{x|n}` it needs. */
+export interface BraceOption { id: string; label: string; detail: string; bad?: string; needDefault?: string | null }
+/** A value line offered under `按设置 x`: what to write, and what the player sees. */
+export interface ValueOption { word: string; label: string }
 export interface ScriptNames { templates: string[]; regions: string[]; snippets: string[]; fields: string[]; pages: string[];
-  /** Number settings, offered after `{`. */
-  numberFields?: { id: string; label: string }[] }
+  /** Settings offered after `{`, judged for the line's statement ([head]) and what follows the cursor ([after]). */
+  braces?: (head: string, after: string) => BraceOption[];
+  /** The value lines a `按设置 x` can have; null when x is no setting. */
+  values?: (field: string) => ValueOption[] | null;
+  /** 选图's library and picture; given, the cursor on `图 …` opens it (and the template list yields to it). */
+  picker?: PickerHost | null;
+  /** Set by the editor: opens 在画面上框一个 for an `@` just typed at [at]. */
+  onPick?: (at: number, point: boolean) => void }
 /** A problem on a line, as a wavy underline; [col]/[len] narrow it to part of the line. */
 export interface ScriptProblem { line: number; reason: string; severity?: "error" | "warning"; col?: number; len?: number }
 
@@ -145,7 +202,7 @@ function settingHover(look: () => ((id: string) => SettingView | null)) {
       const head = el("div", "", "cm-setting-head"); head.append(el("b", shown.label), el("span", `${shown.id} · ${shown.type}`, "cm-setting-muted"));
       dom.append(head);
       const row = (k: string, v: string) => { if (!v) return; const r = el("div", "", "cm-setting-row"); r.append(el("span", k, "cm-setting-muted"), el("span", v)); dom.append(r); };
-      row("取值", shown.values); row("推荐", shown.recommended); row("提供", shown.step);
+      row("取值", shown.values); row("推荐", shown.recommended); row("归在", shown.step);
       const a = el("a", "去配置项 ›", "cm-setting-link") as HTMLAnchorElement; a.href = hrefOf(shown.href);
       a.addEventListener("click", (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(shown.href); });
       dom.append(a);
@@ -160,25 +217,61 @@ function completer(names: () => ScriptNames) {
     const line = context.state.doc.lineAt(context.pos);
     const before = line.text.slice(0, context.pos - line.from);
     const list = (words: string[], type: string, from: number): { from: number; options: Completion[] } => ({ from, options: words.map((label) => ({ label, type })) });
+    // Nothing in a comment.
+    if (stripComment(before) !== before) return null;
     let m = /@([^\s@]*)$/.exec(before);
-    if (m) return list(names().regions, "constant", context.pos - m[1].length);
+    if (m) {
+      const at = list(names().regions, "constant", context.pos - m[1].length);
+      // A place not written yet: drawn on the phone's picture instead.
+      if (!m[1] && names().onPick) at.options.unshift({ label: "在画面上框一个", detail: "拉框后插入", type: "text", boost: 99,
+        apply: (_v, _c, from) => names().onPick!(from, pointBefore(before.slice(0, -1).replace(/\S*$/, (w) => w.startsWith("\"") || w.startsWith("“") ? w : ""))) });
+      return at;
+    }
     m = /图\s+([^\s@]*)$/.exec(before);
+    // With 选图, the picture panel answers here instead of the list.
+    if (m && names().picker) return null;
     if (m) return list(names().templates, "variable", context.pos - m[1].length);
     m = /^\s*用\s+(\S*)$/.exec(before);
     if (m) return list(names().snippets, "function", context.pos - m[1].length);
     m = /^\s*去\s+(\S*)$/.exec(before);
     if (m) return list(names().pages, "constant", context.pos - m[1].length);
-    m = /\{([^{}\s]*)$/.exec(before);
+    m = /\{([^{}\s|]*)$/.exec(before);
     if (m) {
-      const closed = line.text.slice(context.pos - line.from).startsWith("}");
-      return { from: context.pos - m[1].length, options: (names().numberFields ?? []).map((f) => ({ label: f.id, detail: f.label, type: "property", apply: closed ? f.id : `${f.id}}` })) };
+      const after = line.text.slice(context.pos - line.from);
+      const closed = after.startsWith("}");
+      const head = before.trim().split(/\s+/)[0] ?? "";
+      return { from: context.pos - m[1].length, options: (names().braces?.(head, after) ?? []).map((f) => ({
+        label: f.id, type: "property", boost: f.bad ? -50 : 0, class: f.bad ? "cm-option-off" : undefined,
+        detail: f.bad ? `${f.detail} · ${f.bad}` : f.needDefault ? `${f.detail} · 要默认值` : f.detail,
+        apply: f.needDefault ? `${f.id}|${f.needDefault}${closed ? "" : "}"}` : closed ? f.id : `${f.id}}` })) };
     }
     m = /^\s*按设置\s+(\S*)$/.exec(before);
     if (m) return list(names().fields, "property", context.pos - m[1].length);
+    // A value line one level under 按设置 x: that setting's values, 其他 and 没有值.
+    m = /^(\s+)(\S*)$/.exec(before);
+    if (m) {
+      const field = branchAbove(context.state.doc, line.number, m[1].length);
+      const values = field ? names().values?.(field) : null;
+      if (values) return { from: context.pos - m[2].length, options: [
+        ...values.map((v) => ({ label: v.word, detail: v.label !== v.word ? v.label : undefined, type: "enum" })),
+        { label: "其他", detail: "别的值都走这里", type: "keyword" }, { label: "没有值", detail: "没设值时", type: "keyword" }] };
+    }
     m = /^\s*(\S*)$/.exec(before);
     if (m && (m[1] || context.explicit)) return { from: context.pos - m[1].length, options: STATEMENTS.map(([label, info]) => ({ label, detail: info, type: "keyword" })) };
     return null;
   };
+}
+
+/** The setting of the `按设置 x` a line of [indent] is a value line of (the nearest line above indented less); null when none. */
+function branchAbove(doc: EditorState["doc"], lineNo: number, indent: number): string | null {
+  for (let n = lineNo - 1; n >= 1; n--) {
+    const text = stripComment(doc.line(n).text);
+    if (!text.trim()) continue;
+    const own = text.length - text.trimStart().length;
+    if (own >= indent) continue;
+    return /^\s*按设置\s+(\S+)\s*$/.exec(text)?.[1] ?? null;
+  }
+  return null;
 }
 
 /**
@@ -193,9 +286,49 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
   /** The line the cursor is on, as it moves. */
   onCursor?: (line: number) => void }) {
   const host = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
+  // 选图 / 在画面上选: what is open, the spot closed (not opened again till the cursor leaves it), and a redraw on scroll.
+  // [uid] names the panel for React: a new spot gets a fresh one (no state carried from the last @ or 图), the same spot
+  // keeps it while its text moves.
+  const [spot, setSpotState] = useState<(Spot & { uid: number }) | null>(null);
+  const spotNow = useRef<(Spot & { uid: number }) | null>(null); spotNow.current = spot;
+  const uid = useRef(0);
+  const setSpot = (next: Spot | null, same = false) => {
+    const open = spotNow.current;
+    const keep = !!next && !!open && (same || open.key === next.key);
+    const shown = next ? { ...next, uid: keep ? open!.uid : ++uid.current } : null;
+    spotNow.current = shown; setSpotState(shown);
+  };
+  const dismissed = useRef<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [, setScrolled] = useState(0);
+  const close = () => { const v = view.current; if (spotNow.current) dismissed.current = spotNow.current.key; setSpot(null); v?.focus(); };
+  const closeRef = useRef(close); closeRef.current = close;
+  const follow = (state: EditorState, moved: boolean, mapped: number | null) => {
+    if (moved) setNotice(null);
+    const found = spotAt(state, state.selection.main.head, !!latest.current.names.picker);
+    const open = spotNow.current;
+    if (found) {
+      // A spot closed before stays closed, and the panel of another spot does not stay open over it.
+      if (dismissed.current === found.key) { if (open && open.key !== found.key) setSpot(null); return; }
+      if (open?.key !== found.key || !moved) { setSpot(found); if (view.current) closeCompletion(view.current); }
+      return;
+    }
+    if (moved) dismissed.current = null;
+    // Typed elsewhere: an open spot follows its text, or closes when it is gone (or another one now stands there).
+    if (!open || mapped === null) return;
+    if (open.kind === "insert") { setSpot({ ...open, anchor: mapped, line: state.doc.lineAt(mapped).number, key: `insert:${mapped}` }, true); return; }
+    const again = spotAt(state, mapped, true);
+    setSpot(again && again.kind === open.kind && again.anchor === mapped ? again : null, true);
+  };
+  const followRef = useRef(follow); followRef.current = follow;
   const view = useRef<EditorView | null>(null);
   const latest = useRef({ onChange, onSave, names, template, onCursor, setting });
-  latest.current = { onChange, onSave, names, template, onCursor, setting };
+  latest.current = { onChange, onSave, names: { ...names, onPick: (at: number, point: boolean) => {
+    const v = view.current; if (!v) return;
+    const line = v.state.doc.lineAt(at);
+    setSpot({ kind: "insert", key: `insert:${at}`, line: line.number, anchor: at, point });
+  } }, template, onCursor, setting };
 
   useEffect(() => {
     if (!host.current) return;
@@ -209,7 +342,16 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
           scriptLanguage, syntaxHighlighting(highlight),
           autocompletion({ override: [completer(() => latest.current.names)] }),
           keymap.of([{ key: "Mod-s", preventDefault: true, run: () => { latest.current.onSave(); return true; } }, indentWithTab, ...defaultKeymap, ...historyKeymap]),
+          Prec.highest(keymap.of([{ key: "Escape", run: () => { if (!spotNow.current) return false; closeRef.current(); return true; } },
+            // ⌥↓ goes into the open panel (it opens without taking the keyboard, so moving through lines is not caught).
+            { key: "Alt-ArrowDown", run: () => { const el = wrap.current?.querySelector<HTMLElement>("[data-panel] [role=listbox], [data-panel] [role=dialog][tabindex]"); if (!el) return false; el.focus(); return true; } }])),
+          EditorView.domEventHandlers({ mousedown: () => { dismissed.current = null; return false; } }),
           EditorView.updateListener.of((update) => {
+            if (update.selectionSet || update.docChanged) {
+              const open = spotNow.current;
+              followRef.current(update.state, update.selectionSet && !update.docChanged, open && update.docChanged ? update.changes.mapPos(open.anchor) : null);
+            }
+            if (update.geometryChanged || update.viewportChanged) setScrolled((n) => n + 1);
             if (update.docChanged) latest.current.onChange(update.state.doc.toString());
             if (update.selectionSet || update.docChanged) latest.current.onCursor?.(update.state.doc.lineAt(update.state.selection.main.head).number);
           }),
@@ -239,12 +381,15 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
             "& .cm-tooltip-autocomplete ul li": { color: "var(--color-ink)" },
             "& .cm-tooltip-autocomplete ul li[aria-selected]": { background: "var(--color-nav-current-bg)", color: "var(--color-nav-current)" },
             "& .cm-completionDetail": { color: "var(--color-muted)" },
+            "& .cm-option-off": { opacity: ".55" },
           }),
         ],
       }),
     });
     view.current = created;
-    return () => { created.destroy(); view.current = null; };
+    const scrolled = () => setScrolled((n) => n + 1);
+    created.scrollDOM.addEventListener("scroll", scrolled);
+    return () => { created.scrollDOM.removeEventListener("scroll", scrolled); created.destroy(); view.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A value changed from outside (a save elsewhere, a reload) replaces the text when it differs.
@@ -280,5 +425,47 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     onJumped?.();
   }, [goTo]);
 
-  return <div ref={host} style={{ height: "100%" }} />;
+  /** Writes into the line the open spot is on (found again where it is now), then closes and goes back to the text. */
+  const write = (make: (now: Spot) => { from: number; to: number; insert: string }[]) => {
+    const v = view.current, open = spotNow.current; if (!v || !open) return;
+    // 在画面上框一个 writes right after its @: when that @ is gone, nothing is written.
+    if (open.kind === "insert" && (open.anchor < 1 || open.anchor > v.state.doc.length || v.state.doc.sliceString(open.anchor - 1, open.anchor) !== "@")) {
+      dismissed.current = open.key; setSpot(null); setNotice("位置变了，请重新框"); v.focus(); return;
+    }
+    const now = open.kind === "insert" ? open : spotAt(v.state, open.anchor, true);
+    if (now) {
+      const list = make(now);
+      const changes = v.state.changes(list);
+      // The cursor after what was written, so typing goes on from there.
+      const end = list.length ? changes.mapPos(Math.max(...list.map((c) => c.to)), 1) : v.state.selection.main.head;
+      v.dispatch({ changes, selection: { anchor: end } });
+    }
+    dismissed.current = open.key; setSpot(null); v.focus();
+  };
+  const placed = (() => {
+    const v = view.current, box = wrap.current;
+    if (!spot || !v || !box) return null;
+    const c = v.coordsAtPos(Math.min(spot.anchor, v.state.doc.length)); if (!c) return null;
+    const r = box.getBoundingClientRect();
+    const width = spot.kind === "image" ? 360 : 420, tall = spot.kind === "image" ? 520 : 470;
+    const left = Math.max(8, Math.min(c.left - r.left, r.width - width - 8));
+    const below = c.bottom - r.top + 6;
+    const above = below + tall > r.height && c.top - r.top - 6 - tall >= 0;
+    return { width, left, ...(above ? { bottom: r.height - (c.top - r.top) + 6 } : { top: below }) };
+  })();
+  return <div ref={wrap} style={{ height: "100%", position: "relative" }}>
+    <div ref={host} style={{ height: "100%" }} />
+    {notice && <div className={ps.notice} role="status">{notice}</div>}
+    {spot && placed && <div key={spot.uid} className={ps.shell} style={placed} data-panel>
+      {spot.kind === "image" && names.picker ? <TemplatePicker at={{ line: spot.line, name: spot.name, region: spot.region, threshold: spot.threshold }} host={names.picker} onClose={close}
+          onChoose={(name, region) => write((now) => now.kind !== "image" ? [] : [{ from: now.nameFrom, to: now.nameTo, insert: name },
+            ...(region ? [now.regionFrom !== null ? { from: now.regionFrom, to: now.regionTo!, insert: atText(region) } : { from: now.nameTo, to: now.nameTo, insert: `@${atText(region)}` }] : [])])}
+          onRegion={(region) => write((now) => now.kind !== "image" ? [] : [now.regionFrom !== null ? { from: now.regionFrom, to: now.regionTo!, insert: atText(region) }
+            : { from: now.nameTo, to: now.nameTo, insert: `@${atText(region)}` }])} />
+        : spot.kind === "at" ? <ScreenPick point={spot.point} value={spot.values} title={`第 ${spot.line} 行 · ${spot.point ? "点位" : "区域"}`} onCancel={close}
+            onDone={(vals) => write((now) => now.kind !== "at" ? [] : [{ from: now.from + 1, to: now.to, insert: atText(vals, now.comma) }])} />
+        : spot.kind === "insert" ? <ScreenPick autoFocus point={spot.point} value={null} title={`第 ${spot.line} 行 · ${spot.point ? "点一个位置" : "框一个区域"}`} onCancel={close}
+            onDone={(vals) => write((now) => [{ from: now.anchor, to: now.anchor, insert: atText(vals) }])} /> : null}
+    </div>}
+  </div>;
 }

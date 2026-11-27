@@ -203,3 +203,21 @@ export async function draftBase(target: string): Promise<Obj | null> {
   try { const view = await api<{ body: Obj }>(`/api/dev/drafts/${enc(target)}/base`); return view?.body ?? null; }
   catch (error) { if (error instanceof ApiFailure && (error.status === 404 || error.status === 501)) return null; throw error; }
 }
+
+/** Has the phone take a sample of its screen now, and gives it once it is stored; [signal] gives up (the phone is told to stop). */
+export async function sampleNow(game: string, device: string, signal?: AbortSignal, sent?: () => void, name = "画面"): Promise<Sample> {
+  const run = await dev.startRun({ kind: "sample", target: game, device, name });
+  sent?.();
+  let done = run;
+  while (done.state === "SENT" || done.state === "RUNNING") {
+    await new Promise((r) => setTimeout(r, 1500));
+    if (signal?.aborted) { void dev.stopRun(run.id).catch(() => undefined); throw new DOMException("取消了", "AbortError"); }
+    done = await dev.run(run.id);
+  }
+  if (done.state !== "FINISHED") throw new Error(done.detail || "没采到");
+  const all = await dev.samples(game);
+  const made = all.find((x) => x.id === done.sample) ?? all[0];
+  if (!made) throw new Error("没采到");
+  return made;
+}
+

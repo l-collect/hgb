@@ -25,10 +25,15 @@ const padded = (rect: number[], sm: { width: number; height: number }) => {
  * kept as a sample first (made height 1080, bars cut, as every sample), so the numbers are the ones 素材 gives; the
  * condition made becomes a whole line (等 / 点 / 如果看到) that replaces the line's condition or goes after it, or is copied.
  */
-export function FrameTools({ picture, makeSample, target: into, assets }: {
+export function FrameTools({ picture, makeSample, target: into, assets, fresh = false, pictureKey = "" }: {
   /** What is shown until a tool is picked. */
   picture: ReactNode;
-  makeSample: () => Promise<Sample>;
+  /** Keeps the picture as a sample; [signal] gives up; [sent] is called once the phone has been asked for a new one. */
+  makeSample: (signal: AbortSignal, sent: () => void) => Promise<Sample>;
+  /** No picture has been looked at: the phone takes one (采一张…, which can be cancelled). */
+  fresh?: boolean;
+  /** Which picture is shown: a sample made from another one is made again. */
+  pictureKey?: string;
   /** The line a condition is for (the failed line or the cursor's); null: only 复制. */
   target: InsertTarget | null;
   /** 素材 with this line to come back to. */
@@ -36,6 +41,13 @@ export function FrameTools({ picture, makeSample, target: into, assets }: {
 }) {
   const { game, apply, me, draft } = useDev();
   const [sample, setSample] = useState<Sample | null>(null);
+  const sampleOf = useRef<string | null>(null);
+  const control = useRef<AbortController | null>(null);
+  // Asked of the phone at: 「已发到手机 · N 秒」.
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { if (sentAt === null) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [sentAt]);
+  useEffect(() => () => control.current?.abort(), []);
   const [tool, setTool] = useState<Tool | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<[string, boolean] | null>(null);
@@ -53,16 +65,19 @@ export function FrameTools({ picture, makeSample, target: into, assets }: {
   const start = useRef<[number, number] | null>(null);
   useEffect(() => { setRect(null); setPicks([]); setMade(null); setConfirmed([]); setGroupName(null); }, [tool]);
 
-  const ensure = async (): Promise<Sample | null> => {
-    if (sample) return sample;
-    setBusy("keep"); setSaid(null);
-    try { const made = await makeSample(); setSample(made); return made; }
-    catch (error) { setSaid([failure(error), false]); return null; }
-    finally { setBusy(null); }
+  /** The picture shown as a sample: the one made from it already, else made now, the busy word on the button [who] clicked. */
+  const ensure = async (who: string): Promise<Sample | null> => {
+    if (sample && sampleOf.current === pictureKey) return sample;
+    setBusy(who); setSaid(null);
+    const mine = new AbortController(); control.current = mine;
+    try { const made = await makeSample(mine.signal, () => { setSentAt(Date.now()); setNow(Date.now()); }); sampleOf.current = pictureKey; setSample(made); return made; }
+    catch (error) { if (!mine.signal.aborted) setSaid([error instanceof Error && !(error as { status?: number }).status ? error.message : failure(error), false]); return null; }
+    finally { if (control.current === mine) control.current = null; setBusy(null); setSentAt(null); }
   };
+  const cancel = () => { control.current?.abort(); setSaid(["已取消", true]); };
   const pick = async (t: Tool) => {
     if (tool === t) { setTool(null); return; }
-    const got = await ensure(); if (!got) return;
+    const got = await ensure(t); if (!got) return;
     setTool(t);
     // Region and template want the words on the picture: read on the server when it can.
     if (t !== "color" && !got.recognized && me?.serverRecognizer) {
@@ -71,7 +86,8 @@ export function FrameTools({ picture, makeSample, target: into, assets }: {
       setBusy(null);
     }
   };
-  const keep = async () => { const got = await ensure(); if (got) setSaid(["已存样本", true]); };
+  const keep = async () => { const got = await ensure("keep"); if (got) setSaid(["已存样本", true]); };
+  const working = (who: string, label: string) => busy === who ? (fresh ? "采一张…" : "存中…") : label;
   const copy = (text: string) => { void navigator.clipboard?.writeText(text); setSaid(["已复制", true]); };
 
   const scale = () => sample ? (box.current?.clientWidth ?? sample.width) / sample.width : 1;
@@ -155,11 +171,17 @@ export function FrameTools({ picture, makeSample, target: into, assets }: {
           {rect && <span className={s.box} data-kind="pick" style={pct(rect, sample)} />}
           {tool === "color" && picks.map((p, i) => <span key={i} className={s.pick} style={{ left: `${p.x / sample.width * 100}%`, top: `${p.y / sample.height * 100}%` }} />)}
         </div>
-      ) : picture}
+      ) : null}
+      {/* Kept while a tool is open, so the live screen and the picture looked at stay. */}
+      <div hidden={!!(sample && tool)}>{picture}</div>
       <div className={s.toolRow}>
-        {TOOLS.map(([id, label]) => <button key={id} type="button" className={`${w.btn} ${w.sm}`} aria-pressed={tool === id} disabled={!!busy} onClick={() => void pick(id)}>{label}</button>)}
-        <button type="button" className={`${w.btn} ${w.sm}`} disabled={!!busy} onClick={() => void keep()}>{busy === "keep" ? "存中…" : sample ? "已存样本" : "存样本"}</button>
+        {TOOLS.map(([id, label]) => <button key={id} type="button" className={`${w.btn} ${w.sm}`} aria-pressed={tool === id} disabled={!!busy}
+          title={fresh ? "先让手机采一张" : "用上面这张"} onClick={() => void pick(id)}>{working(id, label)}</button>)}
+        <button type="button" className={`${w.btn} ${w.sm}`} disabled={!!busy} onClick={() => void keep()}>{working("keep", sample && sampleOf.current === pictureKey ? "已存样本" : "存样本")}</button>
       </div>
+      {busy && fresh && busy !== "read" && busy !== "cut" && <div className={s.line}>
+        <span className={w.muted}>{sentAt === null ? "正在请手机采一张…" : `已发到手机 · ${Math.max(0, Math.round((now - sentAt) / 1000))} 秒`}</span>
+        <button type="button" className={`${w.btn} ${w.sm}`} onClick={cancel}>取消</button></div>}
       {sample && tool && !result && <span className={w.muted}>{busy === "read" ? "识别文字…" : tool === "color" ? "点 3–6 个颜色稳定的点" : "在图上拖一个框"}</span>}
       {sample && tool === "template" && rect && !made && (
         <div className={s.result}>

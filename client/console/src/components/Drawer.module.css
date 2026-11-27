@@ -31,4 +31,8 @@
 }
 .select span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick > span, .pick > span > button { display: flex; width: 100%; }
-.field > [role="group"] { padding: 0; border-bottom: 0; }
+/*
+ * A row of options (周期's days) set in a field: the field already spaces it, so it drops the padding and rule it has in
+ * a card. Only option groups (a stepper is a group too and keeps its border): give the row this class.
+ */
+.field > .choiceGroup { padding: 0; border-bottom: 0; }

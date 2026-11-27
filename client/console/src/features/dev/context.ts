@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import { ApiFailure } from "../../api/client";
-import type { Capability, DevMe, DraftPatch, DraftView, Obj, SyncResult, TrialRecord } from "./api";
+import type { Capability, DevMe, DraftPatch, DraftView, Obj, PatchConflict, SyncResult, TrialRecord } from "./api";
 
 /** Patches, or a function making them from the latest draft (when an edit must build on the one before it). */
 export type Edit = DraftPatch[] | ((body: Obj) => DraftPatch[] | Promise<DraftPatch[]>);
@@ -27,6 +27,10 @@ export interface DevContextValue {
   saveScript: (key: string, force?: boolean) => Promise<string | null>;
   /** The phone every page uses (trials, samples, judging, the live screen), chosen once in the top bar; null when there is none. */
   device: string | null; setDevice: (id: string) => void;
+  /** A batch the server refused with both sides of each node, waiting for 用我的 / 用别处的 ([resolveRefused]). */
+  refused: PatchConflict[] | null; resolveRefused: (mine: boolean) => Promise<string | null>;
+  /** The whole draft's last check (发布's): false when it did not pass, null before one; the top bar marks it. */
+  checkFailed: boolean | null; setCheckFailed: (failed: boolean | null) => void;
 }
 export const DevContext = createContext<DevContextValue | null>(null);
 export const useDev = () => { const value = useContext(DevContext); if (!value) throw new Error("useDev outside the workbench"); return value; };

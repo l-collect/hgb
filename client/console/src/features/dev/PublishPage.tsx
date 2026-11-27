@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "../../router";
 import { useConsole } from "../../state/context";
-import { dev, draftBase, queued, type CheckResult, type Obj, type PublishResult, type SyncResult } from "./api";
+import { dev, draftBase, queued, type CheckIssue, type CheckResult, type Obj, type PublishResult, type SyncResult } from "./api";
 import { failure, scriptPath, useDev } from "./context";
-import { IssueText, Located, locate } from "./where";
-import { SyncConflicts, SyncTools } from "./SyncTools";
+import { Located, locate, placeOf } from "./where";
+import { bothChanged, RepoAhead, SyncReport, SyncTools } from "./SyncTools";
 import { standing } from "./HomePage";
 import { isObj, objs, requiredMinApp, snippets, str, target, tasks } from "./model";
 import { changedLines, lineDiff, wbPaths, type DiffLine } from "./wb";
@@ -17,7 +17,7 @@ interface Change { key: string; name: string; summary: string; diffs: { label: s
 
 /** 发布 (v7 V7WbPublish): checks and what changed on the left; version, notes and the automatic preview on the right. */
 export function PublishPage() {
-  const { draft, game, me, trials, digests, edits, reload, saveScript, conflicts } = useDev();
+  const { draft, game, me, trials, digests, edits, reload, saveScript, conflicts, setCheckFailed } = useDev();
   const { data } = useConsole();
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [checkText, setCheckText] = useState<string | null>(null);
@@ -35,10 +35,8 @@ export function PublishPage() {
   const [synced, setSynced] = useState<[string, boolean] | null>(null);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [allIssues, setAllIssues] = useState(false);
-  // 两步发布：第一次点只是待确认，3 秒内再点才发布；改版本号或失去焦点就复原。
-  const [armed, setArmed] = useState(false);
-  useEffect(() => { setArmed(false); }, [version]);
-  useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 3000); return () => clearTimeout(t); }, [armed]);
+  // 发布 asks once more in a dialog that says which version, what changed and who gets it.
+  const confirmBox = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (!draft) return;
     let live = true;
@@ -46,7 +44,7 @@ export function PublishPage() {
     const control = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
     // The server's queue full: its words, and one more try a little later.
-    const send = (again: boolean) => dev.check(draft.body, control.signal).then((c) => { if (live) setCheck(c); }, (e) => {
+    const send = (again: boolean) => dev.check(draft.body, control.signal).then((c) => { if (live) { setCheck(c); setCheckFailed(!c.ok); } }, (e) => {
       if (!live) return;
       if (queued(e) && !again) { setCheckText(`${failure(e)}${RETRYING}`); retry = setTimeout(() => { setCheckText(null); void send(true); }, 8000); return; }
       setCheckText(failure(e));
@@ -110,8 +108,8 @@ export function PublishPage() {
   const changes = changesOf(draft.body, base ?? null, draft.bases, digests, game);
   const kb = (n: number) => `${Math.max(1, Math.round(n / 1024))} KB`;
   const publish = async () => {
-    if (!armed) { setArmed(true); return; }
-    setArmed(false); setBusy(true); setText(null);
+    confirmBox.current?.close();
+    setBusy(true); setText(null);
     try {
       const done = await dev.publish(game, { version: version.trim(), changelog: changelog.trim(), minApp, dryRun: false });
       await reload();
@@ -120,7 +118,14 @@ export function PublishPage() {
     setBusy(false);
   };
   const stale = version.trim() !== settled.trim();
-  const label = !maintainer ? "只有维护者能发布" : failed ? `发布（${failed} 项没过）` : !check ? "检查中…" : busy ? "发布中…" : !changelog.trim() ? "先写更新说明" : armed ? `确认发布 ${version.trim()}` : "发布";
+  const label = !maintainer ? "只有维护者能发布" : failed ? `发布（${failed} 项没过）` : !check ? "检查中…" : busy ? "发布中…" : !changelog.trim() ? "先写更新说明" : `发布 ${version.trim()}`;
+  const both = bothChanged(syncResult);
+  /** A check's issue under its row: where, why, and a way there. */
+  const issueRow = (i: CheckIssue, k: string, warn = false) => {
+    const place = placeOf(i.where, draft.body) ?? locate(i.location, draft.body);
+    return <div key={k} className={`${p.row} ${warn ? p.warn : p.issue}`}><span className={p.mark} />
+      <span className={p.grow}>{place ? `${place.label}：` : ""}{i.reason}</span>{place && <Link to={place.to} className={p.link}>去改 ›</Link>}</div>;
+  };
   return (
     <>
       <h1 className={p.title}>发布 {version.trim() || ""}</h1>
@@ -129,8 +134,9 @@ export function PublishPage() {
           <section className={w.card} aria-labelledby="ck">
             <div className={p.head}><b id="ck" className={p.grow}>检查</b>
               <SyncTools changed={rows.filter((r) => r.changed).length} onDone={(said, result) => { setSynced(said); setSyncResult(result ?? null); }} /></div>
-            {synced && <div role="status" className={`${p.row} ${synced[1] ? w.muted : w.message}`}>{synced[0]}</div>}
-            {syncResult?.conflicts?.length ? <div className={p.row}><SyncConflicts result={syncResult} body={draft.body} /></div> : null}
+            <RepoAheadRow changed={rows.filter((r) => r.changed).length} onDone={(said, result) => { setSynced(said); setSyncResult(result ?? null); }} />
+            {syncResult ? <div className={p.row}><SyncReport result={syncResult} body={draft.body} onUndone={(said) => { if (said[1]) { setSyncResult(null); setSynced(said); } }} /></div>
+              : synced && <div role="status" className={`${p.row} ${synced[1] ? `${w.muted} ${w.okText}` : w.message}`}>{synced[0]}</div>}
             {checks.map((c, i) => <div key={i}>
               <div className={p.row}>
                 <span className={p.mark} data-ok={c.ok === null ? "wait" : String(c.ok)} aria-hidden="true">{c.ok === null ? "…" : c.ok ? "✓" : "✗"}</span>
@@ -141,23 +147,23 @@ export function PublishPage() {
               {i === 0 && unsavedKeys.map((k) => <div key={k} className={`${p.row} ${p.issue}`}><span className={p.mark} />
                 <span className={p.grow}>{scriptName(k)}{conflicts.includes(k) ? " · 冲突" : ""}</span><Link to={scriptPath(k)} className={p.link}>去看 ›</Link></div>)}
               {i === 0 && saveText && <div className={`${p.row} ${saveText === "已保存" ? w.muted : w.message}`}>{saveText}</div>}
+              {i === 1 && check && !check.ok && (allIssues ? check.issues : check.issues.slice(0, 5)).map((x, k) => issueRow(x, `i${k}`))}
+              {i === 1 && check && check.issues.length > 5 && <div className={`${p.row} ${p.issue}`}><span className={p.mark} />
+                <button type="button" className={p.link} onClick={() => setAllIssues(!allIssues)}>{allIssues ? "收起" : `其余 ${check.issues.length - 5} 处 ›`}</button></div>}
+              {i === 1 && check && (check.warnings?.length ?? 0) > 0 && <>
+                <div className={`${p.row} ${p.warn}`}><span className={p.mark} data-ok="wait" aria-hidden="true">!</span><span className={p.grow}>提醒 {check.warnings!.length} 条 · 不挡发布</span></div>
+                {check.warnings!.map((x, k) => issueRow(x, `w${k}`, true))}
+              </>}
               {i === 2 && untried.map((r) => <div key={r.task.id} className={`${p.row} ${p.issue}`}><span className={p.mark} />
                 <span className={p.grow}>{r.task.name} · {r.label}</span><Link to={`${wbPaths.task(r.task.id)}?scope=task`} className={p.link}>整任务试跑 ›</Link></div>)}
             </div>)}
-            {check && !check.ok && (allIssues ? check.issues : check.issues.slice(0, 5)).map((i, k) => <div key={`i${k}`} className={`${p.row} ${p.issue}`}><span className={p.mark} /><span className={p.grow}><IssueText issue={i} body={draft.body} /></span></div>)}
-            {check && check.issues.length > 5 && <div className={`${p.row} ${p.issue}`}><span className={p.mark} />
-              <button type="button" className={p.link} onClick={() => setAllIssues(!allIssues)}>{allIssues ? "收起" : `其余 ${check.issues.length - 5} 处 ›`}</button></div>}
-            {check && (check.warnings?.length ?? 0) > 0 && <>
-              <div className={p.row}><span className={p.mark} data-ok="wait" aria-hidden="true">!</span><span className={p.grow}>提醒 {check.warnings!.length} 条 · 不挡发布</span></div>
-              {check.warnings!.map((i, k) => <div key={`w${k}`} className={`${p.row} ${p.warn}`}><span className={p.mark} /><span className={p.grow}><IssueText issue={i} body={draft.body} /></span></div>)}
-            </>}
           </section>
           <section className={w.card} aria-labelledby="ch">
             <div className={p.head}><b id="ch" className={p.grow}>改动</b><span className={w.muted}>对比 {draft.baseVersion || "上个版本"}</span></div>
             {changes.map((c) => (
               <div key={c.key}>
                 <div className={p.row}>
-                  <span className={p.grow}>{c.name}</span><span className={w.muted}>{c.summary}</span>
+                  <span className={p.grow}>{c.name}{both.has(c.key) && <span className={w.both} title="仓库也改了它，留的是你的"> 两边都改</span>}</span><span className={w.muted}>{c.summary}</span>
                   {c.diffs.length > 0 && <button type="button" className={p.link} aria-expanded={open === c.key} onClick={() => setOpen(open === c.key ? null : c.key)}>差异 {open === c.key ? "▾" : "›"}</button>}
                 </div>
                 {open === c.key && c.diffs.map((d) => (
@@ -185,15 +191,31 @@ export function PublishPage() {
             : typeof plan === "string" ? <span className={w.message}>预演：<Located text={plan} body={draft.body} /></span>
             : `预演：包 ${kb(plan.bundleBytes)} · 上传 ${plan.uploads.length} 张图 ${kb(plan.uploadBytes)} · 复用 ${plan.reused.length}`}</div>
           <div className={p.confirm}>
-            <button type="button" className={`${w.btn} ${w.primary} ${p.center}`} onBlur={() => setArmed(false)}
-              disabled={!maintainer || failed > 0 || !check || busy || !validVersion || stale || !changelog.trim() || typeof plan === "string"} onClick={publish}>{label}</button>
-            {armed && <button type="button" className={`${w.btn} ${w.sm}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setArmed(false)}>取消</button>}
+            <button type="button" className={`${w.btn} ${w.primary} ${p.center}`}
+              disabled={!maintainer || failed > 0 || !check || busy || !validVersion || stale || !changelog.trim() || typeof plan === "string"} onClick={() => confirmBox.current?.showModal()}>{label}</button>
           </div>
+          <dialog ref={confirmBox} className={p.dialog} aria-labelledby="pubTitle">
+            <b id="pubTitle" className={p.dialogTitle}>发布 {version.trim()}？</b>
+            <div className={p.dialogPart}><span className={p.lbl}>改了</span>
+              {changes.length ? <ul className={p.dialogList}>{changes.slice(0, 6).map((c) => <li key={c.key}>{c.name}<span className={w.muted}> · {c.summary}</span></li>)}
+                {changes.length > 6 && <li className={w.muted}>等 {changes.length} 项</li>}</ul> : <span className={w.muted}>没有改动</span>}</div>
+            <div className={p.dialogPart}><span className={p.lbl}>谁会拿到</span><span>App ≥ {minApp} 的玩家，下次更新任务时拿到</span></div>
+            {changelog.trim() && <div className={p.dialogPart}><span className={p.lbl}>更新说明</span><span className={p.notes}>{changelog.trim()}</span></div>}
+            <div className={p.dialogRow}>
+              <button type="button" className={w.btn} onClick={() => confirmBox.current?.close()}>取消</button>
+              <button type="button" className={`${w.btn} ${w.primary}`} onClick={() => void publish()}>发布</button>
+            </div>
+          </dialog>
           {text && <div role="status" className={text[1] ? p.done : w.message}>{text[1] ? text[0] : <Located text={text[0]} body={draft.body} />}</div>}
         </section>
       </div>
     </>
   );
+}
+
+/** 仓库有新任务 as a row of the checks, only when it says something. */
+function RepoAheadRow(props: Parameters<typeof RepoAhead>[0]) {
+  return <div className={p.rowWrap}><RepoAhead {...props} /></div>;
 }
 
 /** The next version after [last]: a minor step when a task is new, else a patch. */

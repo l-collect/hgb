@@ -6,6 +6,7 @@ import { uniqueId } from "./HomePage";
 import { idOf } from "./NameButton";
 import { arr, isObj, nodeDigest, objs, str, target } from "./model";
 import w from "./Wb.module.css";
+import { PickOnScreen } from "./ScreenPick";
 import g from "./Game.module.css";
 
 /** The page graph's pieces (pages, routes, generic close fallbacks) and judging pages on samples, for the 页面 section. */
@@ -190,6 +191,7 @@ export function PageDefForm({ page, known, taken = [], onSave, onDelete, onCance
           : <div className={g.pair}>
             <input aria-label="文字" style={{ flex: "2 1 150px" }} value={words} onChange={(e) => setWords(e.target.value)} placeholder="结界突破" />
             <input aria-label="区域 x,y,宽,高" style={{ flex: "1 1 140px" }} value={within} onChange={(e) => setWithin(e.target.value)} />
+            <PickOnScreen value={region.length === 4 ? region : null} onPick={(v) => setWithin(v.join(","))} />
           </div>}
       </div>
       <div className={g.pair}>

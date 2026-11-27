@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { AuthOptions, Channel, ChannelKind, ChannelSave, Delivery, EventRule } from "../../api/types";
-import { Button, Card, Empty, LiveSwitch, Message, Muted, Pill } from "../../components/ui";
+import { Button, Card, Empty, FootBar, LiveSwitch, Message, Muted, Pill } from "../../components/ui";
 import { orToast, useAction } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { ask } from "../../components/Confirm";
@@ -22,7 +22,7 @@ const KINDS: [ChannelKind, string, FieldSpec[]][] = [
     { id: "server", label: "服务器（可不填）", hint: "https://api.day.app", note: "自建服务器填自己的地址", secret: false },
     { id: "key", label: "设备密钥", hint: "在 Bark App 里复制", note: "保存后不再显示", secret: true, masked: true }]],
   ["EMAIL", "邮件", []],
-  ["LOCAL", "本机通知", [{ id: "device", label: "设备", hint: "", note: "设备在线时由服务端推给护肝宝 App 弹出；设备自己发现的事件断网也会先弹出", secret: false }]],
+  ["LOCAL", "本机通知", [{ id: "device", label: "设备", hint: "", note: "推到这台手机的护肝宝，断网时手机自己也会弹", secret: false }]],
   ["WEBHOOK", "Webhook", [
     { id: "url", label: "地址", hint: "https://", note: "以 JSON 发送事件：source、rule、title、detail、at、jobId", secret: true },
     { id: "header", label: "认证头（可不填）", hint: "Authorization: Bearer …", note: "保存后不再显示", secret: true, masked: true }]],
@@ -71,7 +71,7 @@ export function Channels({ channels, rules }: { channels: Channel[]; rules: Even
                   : <LiveSwitch checked={channel.enabled} label={`启用渠道：${channel.name}`} save={(on) => toggle(channel, on)} />}
               </div>
               <div className={s.chips}>
-                {channel.rules.length ? channel.rules.map((id) => <Pill key={id} tone="info">{names[id] ?? id}</Pill>) : <Muted as="span">还没有订阅规则</Muted>}
+                {channel.rules.length ? channel.rules.map((id) => <Pill key={id} tone="soft">{names[id] ?? id}</Pill>) : <Muted as="span">还没有订阅规则</Muted>}
               </div>
               <Muted as="span">{channel.last ? `${shortTime(channel.last.at)}${channel.last.test ? " 测试" : ""} · ${deliveryText(channel.last)}` : "还没有发过"}</Muted>
               <div className={s.channelActions}>
@@ -81,7 +81,7 @@ export function Channels({ channels, rules }: { channels: Channel[]; rules: Even
             </Card>
           ))}
         </div>
-      ) : editing === null && <Card><Empty>还没有渠道</Empty></Card>}
+      ) : editing === null && <Card><Empty>默认已用本机通知；想在别处收到可加钉钉、Bark 等</Empty></Card>}
     </>
   );
 }
@@ -124,11 +124,7 @@ function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules:
     <Card as="section" aria-labelledby="channel-form" className={s.form}>
       <div className={s.formHead}>
         <h2 id="channel-form" className={s.formTitle}>{channel ? `编辑“${channel.name}”` : "添加渠道"}</h2>
-        <Button onClick={test} disabled={busy}>测试发送</Button>
-        <Button variant="primary" onClick={save} disabled={busy}>保存</Button>
-        <Button onClick={done}>取消</Button>
       </div>
-      <Message text={message?.text} ok={message?.ok} />
       <div role="radiogroup" aria-label="渠道类型" className={s.kinds}>
         {kinds.map(([id, label]) => <button key={id} type="button" role="radio" aria-checked={kind === id} className={s.kind} onClick={() => pick(id)}>{label}</button>)}
       </div>
@@ -159,6 +155,11 @@ function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules:
         ))}
         {kind === "EMAIL" && <Muted>发到本账号已验证的邮箱</Muted>}
       </div>
+      <div className={s.test}>
+        <Button small onClick={test} disabled={busy}>测试发送</Button>
+        <Muted as="span">用填的内容发一条，不保存</Muted>
+      </div>
+      <Message text={message?.text} ok={message?.ok} />
       <fieldset className={s.subscribe}>
         <legend>订阅哪些规则</legend>
         <div className={s.chips}>
@@ -167,6 +168,10 @@ function ChannelForm({ channel, rules, done }: { channel: Channel | null; rules:
         </div>
         <Muted as="span">{visible.length ? "只列开着的规则" : "先到「规则」里打开规则"}</Muted>
       </fieldset>
+      <FootBar>
+        <Button variant="primary" onClick={save} disabled={busy}>保存</Button>
+        <Button onClick={done}>取消</Button>
+      </FootBar>
     </Card>
   );
 }

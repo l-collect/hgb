@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
-import type { Game, GameAccount, Job, Plan, PlanDayRuns, PlanLastRun } from "../../api/types";
+import type { Game, GameAccount, Job, Plan, PlanDayRuns, PlanLastRun, PlanRunState } from "../../api/types";
 import { Button, Card, Empty, LiveSwitch, Pill, SegmentTabs, join, ui } from "../../components/ui";
-import { clockText, nextTime, PLAN_RUN_STATES, shortTime, WEEK, type Tone } from "../../format";
+import { clockText, nextTime, shortTime, WEEK } from "../../format";
 import { useConsole } from "../../state/context";
 import { Link, navigate, paths } from "../../router";
-import { ProCount, ProLimitButton, ProLockButton, usePro } from "../../components/Pro";
-import { planEntries, planHref, planLast, switchPlan, type PlanEntry } from "./Plans";
+import { ProLockButton, usePro } from "../../components/Pro";
+import { PlanCounts, planEntries, planHref, planLast, switchPlan, type PlanEntry } from "./Plans";
 import d from "../../shell/Desk.module.css";
 import s from "./PlansDesk.module.css";
 
@@ -31,9 +31,9 @@ export function PlanTable({ account, game, plans, jobs }: { account: GameAccount
   return (
     <section className={d.stack} aria-label="定时计划">
       <div className={d.toolbar}>
-        <h2>定时计划 <span className={ui.tiny}>{enabled}/{entries.length} 启用</span> <ProCount text={pro.count("maxPlans", plans.length) && `计划 ${pro.count("maxPlans", plans.length)}`} /></h2>
+        <h2>定时计划</h2>
         <SegmentTabs label="视图" value={view} onChange={setView} items={[["list", "列表"], ["week", "周视图"]]} />
-        {full ? <ProLimitButton small what="计划" /> : <Button small onClick={() => navigate(paths.planNew(account.id))}>＋ 新建</Button>}
+        <PlanCounts enabled={enabled} full={full} used={plans.length} newPlan={() => navigate(paths.planNew(account.id))} />
       </div>
       {entries.length === 0 ? <Card><Empty>还没有计划，点「＋ 新建」</Empty></Card>
         : view === "list" ? <PlanRows account={account} entries={entries} jobs={jobs} full={full} />
@@ -79,9 +79,11 @@ function PlanRows({ account, entries, jobs, full }: { account: GameAccount; entr
   );
 }
 
-type Cell = "ok" | "bad" | "run" | "warn" | "plan" | "miss" | "unknown" | "";
-const CELL_TEXT: Record<Cell, string> = { ok: "完成", bad: "异常", run: "运行中", warn: "未完成", plan: "待跑", miss: "没跑", unknown: "—", "": "" };
-const toneCell = (tone: Tone): Cell => tone === "ok" ? "ok" : tone === "bad" ? "bad" : tone === "info" ? "run" : "warn";
+/** A day of a plan in 周视图: how its runs ended, or 待跑 / 没跑 when it has none. Each has a fill or an outline and a mark, so none is told by colour alone. */
+type Cell = "ok" | "bad" | "partial" | "check" | "run" | "skip" | "plan" | "miss" | "unknown" | "";
+const CELL_TEXT: Record<Cell, string> = { ok: "完成", bad: "失败", partial: "部分失败", check: "待核对", run: "运行中", skip: "取消或跳过", plan: "待跑", miss: "没跑", unknown: "不知道", "": "" };
+const CELL_MARK: Record<Cell, string> = { ok: "✓", bad: "✕", partial: "!", check: "?", run: "…", skip: "–", plan: "", miss: "", unknown: "?", "": "" };
+const RUN_CELL: Record<PlanRunState, Cell> = { UNKNOWN: "check", COMPLETED: "ok", FAILED: "bad", PARTIAL_FAILED: "partial", ACTIVE: "run", CANCELLED: "skip", SKIPPED: "skip" };
 const DAY = 86400000;
 /** A day as yyyy-MM-dd in [timeZone]. */
 const dayIn = (at: number, timeZone: string) => {
@@ -119,8 +121,10 @@ function WeekGrid({ account, entries }: { account: GameAccount; entries: PlanEnt
     const date = dates[i];
     const ran = known?.get(`${entry.plan.id}/${date}`);
     if (ran?.length) {
-      const tones = ran.map((run) => toneCell((PLAN_RUN_STATES[run.state] ?? ["", ""])[1]));
-      return tones.includes("bad") ? "bad" : tones.includes("run") ? "run" : tones.every((t) => t === "ok") ? "ok" : "warn";
+      const cells = ran.map((run) => RUN_CELL[run.state] ?? "skip");
+      // The worst of the day's runs; a failure beside a success is a partial one.
+      if (cells.includes("bad")) return cells.includes("ok") ? "partial" : "bad";
+      return cells.includes("partial") ? "partial" : cells.includes("check") ? "check" : cells.includes("run") ? "run" : cells.includes("ok") ? "ok" : "skip";
     }
     if (date > today) return entry.plan.enabled ? "plan" : "";
     if (!known) return "unknown";
@@ -147,13 +151,13 @@ function WeekGrid({ account, entries }: { account: GameAccount; entries: PlanEnt
             {WEEK.map((day, i) => {
               const state = cell(entry, i);
               return <span key={day} role="cell" className={`${s.cell} ${state ? s[`cell_${state}`] : ""}`} title={state ? `周${day} ${clockText(entry.minuteOfDay)} ${CELL_TEXT[state]}` : undefined}
-                aria-label={state ? CELL_TEXT[state] : "不跑"}>{state === "unknown" ? "—" : null}</span>;
+                aria-label={state ? CELL_TEXT[state] : "不跑"}><span aria-hidden="true">{CELL_MARK[state]}</span></span>;
             })}
           </div>
         ))}
       </div>
       <div className={s.legend}>
-        {(["ok", "bad", "run", "miss", "plan"] as Cell[]).map((state) => <span key={state}><i className={`${s.cell} ${s[`cell_${state}`]}`} />{CELL_TEXT[state]}</span>)}
+        {(["ok", "partial", "bad", "check", "run", "plan", "miss"] as Cell[]).map((state) => <span key={state}><i className={`${s.cell} ${s[`cell_${state}`]}`} aria-hidden="true">{CELL_MARK[state]}</i>{CELL_TEXT[state]}</span>)}
       </div>
     </Card>
   );

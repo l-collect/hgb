@@ -1,5 +1,5 @@
 /*
- * The widths of the design (网页桌面 · 断点): the full sidebar from 1280 (DESK in useWidth.ts), the rail from 600
+ * The widths of the design (网页桌面 · 断点): the full sidebar from 1280 (a third column only from 1440, DESK in useWidth.ts), the rail from 600
  * (breakpoint.medium), the bottom bar below. Media queries cannot read CSS variables, so the numbers are repeated here.
  */
 .shell { min-height: 100vh; display: flex; background: var(--color-bg); }
@@ -55,14 +55,17 @@
     display: flex; align-items: center; gap: var(--space-3); position: sticky; top: 0; z-index: 2; min-height: 56px; padding: 0 var(--space-4);
     background: var(--color-surface); border-bottom: 1px solid var(--color-line);
   }
-  .topTitle { flex: 1; font-size: 17px; font-weight: 700; }
+  .topTitle { flex: 1 0 auto; font-size: 17px; font-weight: 700; white-space: nowrap; }
+  /* The primary page's actions (PageHeader's aside) at the end of the bar; the connection then shows as its dot only. */
+  .topSlot { display: flex; justify-content: flex-end; min-width: 0; flex: 0 1 auto; }
+  .topSlot:not(:empty) ~ .liveShort .liveShortText { display: none; }
   .liveShort { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--color-muted); }
   .nav {
     position: fixed; z-index: 2; left: 0; right: 0; bottom: 0; top: auto; height: auto; flex-direction: row; padding: 0 var(--space-1) env(safe-area-inset-bottom);
     border-right: 0; border-top: 1px solid var(--color-line);
   }
   .navBrand, .foot { display: none; }
-  .topAdmin { display: inline; font-size: var(--text-sm); font-weight: 600; text-decoration: none; }
+  .topAdmin { display: inline; flex: none; font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
   .links { flex: 1; flex-direction: row; gap: 0; }
   .link { flex: 1 1 0; width: auto; }
   .linkIcon { width: 52px; height: 28px; border-radius: 14px; }

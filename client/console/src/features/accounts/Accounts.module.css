@@ -82,7 +82,7 @@
 .planRow:last-child { border-bottom: 0; }
 .planLink { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px var(--space-4); color: inherit; text-decoration: none; }
 .planLink:hover { color: inherit; background: var(--color-bg); }
-.planTime { width: 72px; flex: none; display: flex; flex-direction: column; }
+.planTime { min-width: 104px; flex: none; display: flex; flex-direction: column; white-space: nowrap; }
 .planTime b { font-size: 18px; line-height: 1.3; }
 .planName { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .planName b { font-weight: 600; }
@@ -117,13 +117,31 @@
 .staleLine { padding: 8px 12px; border-radius: var(--radius-md); background: var(--color-warn-soft); border: 1px solid var(--color-warn-line); color: var(--color-warn-ink); font-size: var(--text-sm); }
 .backLink { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--color-primary); font-size: var(--text-sm); font-weight: 600; }
 .orderButtons { display: inline-flex; gap: 2px; }
-.orderButton { width: 32px; height: 32px; border: 1px solid var(--color-control); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-ink); padding: 0; font-weight: 700; }
+.orderButton { position: relative; width: 32px; height: 32px; border: 1px solid var(--color-control); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-ink); padding: 0; font-weight: 700; }
 .orderButton:hover:not(:disabled) { background: var(--color-bg); }
 .orderButton:disabled { opacity: .35; cursor: default; }
-.changed { color: var(--color-run); font-weight: 600; }
+.changed { color: var(--color-nav-current); font-weight: 600; }
 /* 读取登录 and what came of it, beside the button. */
 .loginAction { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
 .loginNote { font-size: var(--text-xs); overflow-wrap: anywhere; }
 /* 下次 / 上次 under a plan's tasks. */
 .planWhen { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 2px; }
 .planLast { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+/* 账号 chips: a dot before the name says what needs a look (red), is held (orange) or runs (blue). */
+.chip { display: inline-flex; align-items: center; gap: 6px; }
+.mark { width: 7px; height: 7px; flex: none; border-radius: 50%; }
+.mark_bad { background: var(--color-danger); }
+.mark_warn { background: var(--color-warn); }
+.mark_info { background: var(--color-run); }
+.warnCell { color: var(--color-warn); font-weight: 600; }
+.tableEnd { display: flex; justify-content: flex-end; padding: 10px var(--space-4); border-top: 1px solid var(--color-line-soft); }
+/* No account yet: how accounts come in, and reading a rooted phone's login as the second way. */
+.emptyHow { padding: 24px 16px; text-align: center; display: grid; gap: 10px; justify-items: center; }
+.emptyAlt { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
+/* 定时计划's head: 「3 个启用」, the count at the limit, and 新建. */
+.planCounts { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px; }
+/* 「＋ · Pro」 at the end of the chips, shaped like them. */
+.chipLimit { min-height: 32px; border-radius: var(--radius-pill); padding: 0 12px; font-size: var(--text-sm); }
+/* ↑↓ keep their 32 look but take a 44 press. */
+.orderButton::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+.orderButtons { gap: 12px; }

@@ -33,7 +33,16 @@
 .grow { flex: 1; }
 .unsaved { font-size: var(--text-xs); color: var(--color-warn); }
 .kbd { font-family: ui-monospace, Menlo, monospace; font-size: 11px; padding: 0 5px; border: 1px solid var(--color-control); border-radius: 6px; color: var(--color-muted); background: var(--color-surface); }
-.script { flex: 1; min-height: 0; overflow: hidden; padding: 6px 0; }
+.script { flex: 1; min-height: 0; overflow: visible; padding: 6px 0;
+  --hl-keyword: #7c3aed; --hl-string: #0f8a5f; --hl-region: #2563eb; --hl-number: #c2410c; --hl-comment: #7d8290;
+  --hl-operator: #b45309; --hl-label: #db2777; --hl-setting: #0e7490; }
+/* Dark: the same hues, lighter, so they read on the dark surface (≥ 4.5:1). */
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .script { --hl-keyword: #b79bff; --hl-string: #5fd3a3; --hl-region: #7fb0ff; --hl-number: #ffa36b;
+    --hl-comment: #9a98a8; --hl-operator: #f2bf62; --hl-label: #ff8fc4; --hl-setting: #5ed2e6; }
+}
+:global(:root[data-theme="dark"]) .script { --hl-keyword: #b79bff; --hl-string: #5fd3a3; --hl-region: #7fb0ff; --hl-number: #ffa36b;
+  --hl-comment: #9a98a8; --hl-operator: #f2bf62; --hl-label: #ff8fc4; --hl-setting: #5ed2e6; }
 .blocks { padding: 24px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .linkish { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .linkish:hover { text-decoration: underline; }
@@ -93,7 +102,7 @@
 .poll { padding: 4px 10px 8px 46px; font-size: var(--text-xs); color: var(--color-muted); }
 .problem { display: block; width: 100%; text-align: left; border: 1px solid var(--color-line); border-radius: var(--radius-md); background: var(--color-surface); color: inherit; font: inherit; font-size: var(--text-sm); padding: 8px 10px; cursor: pointer; }
 .problem:hover { border-color: var(--color-control); }
-.help { display: flex; flex-direction: column; gap: 6px; }
+.help { display: flex; flex-direction: column; gap: 2px; }
 .help > div { display: flex; flex-direction: column; }
 .help code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--color-primary); }
 .peek { margin: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -102,3 +111,18 @@
 .conflict { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin-bottom: 8px; border-color: var(--color-danger); }
 .toolCol { display: flex; flex-direction: column; gap: 6px; }
 .warnTag { font-size: 11px; color: var(--color-warn); margin-right: 6px; font-weight: 600; }
+.problemNew { border-color: var(--color-warn-line); }
+.fold { border: 0; background: transparent; padding: 4px 8px; color: var(--color-muted); font: inherit; font-size: var(--text-xs); font-weight: 600; text-align: left; cursor: pointer; }
+.fold:hover { color: var(--color-ink); }
+.stale { opacity: .7; }
+.countErr { color: var(--color-danger); }
+.countWarn { color: var(--color-warn); }
+.helpItem { display: flex; flex-direction: column; align-items: flex-start; gap: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: inherit; font: inherit; text-align: left; padding: 4px 6px; margin: 0 -6px; cursor: pointer; }
+.helpItem:hover { background: var(--color-bg); }
+.helpItem:disabled { cursor: default; }
+.helpItem:disabled:hover { background: transparent; }
+.late { color: var(--color-warn); font-weight: 600; }
+.small { font-size: var(--text-xs); }
+.blocked { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 6px 10px; border-left: 3px solid var(--color-danger); background: var(--color-danger-bg); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: var(--text-sm); }
+.blocked b { color: var(--color-danger); }
+.helpItem > span { color: var(--color-muted); font-size: var(--text-xs); }

@@ -3,10 +3,12 @@ import { BREAKPOINT } from "../theme/tokens";
 
 /**
  * The desktop widths of the design (网页桌面 · 断点): from BREAKPOINT.wide (1024) lists and details sit side by side,
- * and from DESK (1280) a third column holds the context. Below wide the pages stay one screen at a time, as on the App.
- * Media queries in CSS repeat these numbers, since they cannot read variables.
+ * and from DESK (1440) a third column holds the context; 1024–1439 keep two columns, with 在哪跑 in the title row (at
+ * 1280 the full sidebar and a third column together squeezed the middle until names broke a letter a line). Below wide
+ * the pages stay one screen at a time, as on the App. Media queries in CSS repeat these numbers, since they cannot read
+ * variables.
  */
-export const DESK = 1280;
+export const DESK = 1440;
 
 function useMedia(query: string): boolean {
   return useSyncExternalStore(
@@ -17,5 +19,7 @@ function useMedia(query: string): boolean {
 }
 /** ≥1024: list and detail side by side, tables, drawers. */
 export const useWide = () => useMedia(`(min-width: ${BREAKPOINT.wide}px)`);
-/** ≥1280: the third column (context) beside the detail. */
+/** ≥1440: the third column (context) beside the detail. */
 export const useDesk = () => useMedia(`(min-width: ${DESK}px)`);
+/** <600: the top bar and the four tabs at the bottom. */
+export const useNarrow = () => useMedia(`(max-width: ${BREAKPOINT.medium - 1}px)`);

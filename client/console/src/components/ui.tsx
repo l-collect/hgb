@@ -1,6 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type CSSProperties, type FormEvent, type HTMLAttributes, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type CSSProperties, type FormEvent, type HTMLAttributes, type ReactNode } from "react";
 import type { Tone } from "../format";
+import { createPortal } from "react-dom";
 import { Link } from "../router";
+import { TopBarContext } from "../shell/topBar";
+import { useNarrow } from "../shell/useWidth";
 import { useOptimistic } from "./useAction";
 import s from "./ui.module.css";
 
@@ -105,12 +108,13 @@ export function Loading({ card }: { card?: boolean }) {
   const line = <p className={s.empty} role="status">读取中…</p>;
   return card ? <Card>{line}</Card> : line;
 }
-/** A read that failed: the reason and 重试. */
-export function ErrorCard({ text, retry }: { text: string; retry?: () => void }) {
+/** A read that failed: the reason and 重试, then [extra] (another way out). */
+export function ErrorCard({ text, retry, extra }: { text: string; retry?: () => void; extra?: ReactNode }) {
   return (
     <Card className={s.errorCard} role="alert">
       <span>{text}</span>
       {retry && <Button small onClick={retry}>重试</Button>}
+      {extra}
     </Card>
   );
 }
@@ -279,7 +283,7 @@ export function CardHead({ title, aside, soft, id }: { title: ReactNode; aside?:
   return <div className={join(s.cardHead, soft && s.cardHeadSoft)}><h2 id={id}>{title}</h2>{aside}</div>;
 }
 /** The bar of buttons fixed at the bottom of a detail page (默认 / 保存 / ▶ 保存并开跑). */
-export function FootBar({ children }: { children: ReactNode }) { return <div className={s.footBar}>{children}</div>; }
+export function FootBar({ children }: { children: ReactNode }) { return <div className={s.footBar} data-footbar="">{children}</div>; }
 
 export function Breadcrumb({ items }: { items: [string, string | null][] }) {
   return (
@@ -288,8 +292,25 @@ export function Breadcrumb({ items }: { items: [string, string | null][] }) {
     </nav>
   );
 }
-/** A page's title row; [aside] sits at the end, [subtitle] under the title. */
+/**
+ * A page's title row; [aside] sits at the end, [subtitle] under the title. On a narrow window a primary page (任务,
+ * 账号计划, 设备战报, 我的) is already named by the top bar: its title is kept for screen readers only and [aside] moves
+ * to the end of the top bar, or, when it does not fit there, stays as a row of its own without the title.
+ */
 export function PageHeader({ title, subtitle, aside }: { title: ReactNode; subtitle?: ReactNode; aside?: ReactNode }) {
+  const top = useContext(TopBarContext);
+  const narrow = useNarrow();
+  // Too wide for the top bar (pickers, several buttons): a row of its own at the top of the page instead.
+  const [fits, setFits] = useState(true);
+  if (narrow && top.primary) {
+    return (
+      <>
+        <h1 className="visually-hidden">{title}</h1>
+        {subtitle && <p className={s.narrowSubtitle}>{subtitle}</p>}
+        {aside && (fits && top.slot ? createPortal(<TopAside overflow={() => setFits(false)}>{aside}</TopAside>, top.slot) : <div className={s.narrowAside}>{aside}</div>)}
+      </>
+    );
+  }
   return (
     <header className={s.header}>
       <div><h1 className={s.title}>{title}</h1>{subtitle && <p className={s.subtitle}>{subtitle}</p>}</div>
@@ -297,6 +318,16 @@ export function PageHeader({ title, subtitle, aside }: { title: ReactNode; subti
     </header>
   );
 }
+/** A primary page's actions at the end of the narrow top bar; [overflow] when they do not fit there. */
+function TopAside({ children, overflow }: { children: ReactNode; overflow: () => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (el && el.scrollWidth > el.clientWidth + 1) overflow();
+  });
+  return <div ref={box} className={s.topAside}>{children}</div>;
+}
+
 /** A label-value list like 应用 / 上次结果. */
 export function Facts({ items, className }: { items: [string, ReactNode][]; className?: string }) {
   return <dl className={join(s.facts, className)}>{items.map(([term, value]) => <div key={term} className={s.fact}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>;
@@ -331,6 +362,7 @@ export function Popover({ label, trigger, children, align = "start", plain }: { 
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   // Placed on the page, not inside its card: a card clips what overflows it, which hid all but the first menu items.
   const [place, setPlace] = useState<CSSProperties>({});
   useLayoutEffect(() => {
@@ -339,7 +371,12 @@ export function Popover({ label, trigger, children, align = "start", plain }: { 
       const rect = button.current?.getBoundingClientRect(); if (!rect) return;
       const below = window.innerHeight - rect.bottom; const vertical: CSSProperties = below < 240 && rect.top > below
         ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 };
-      setPlace({ ...vertical, ...(align === "end" ? { right: Math.max(8, window.innerWidth - rect.right) } : { left: Math.max(8, rect.left) }) });
+      // Kept inside the window: a panel that would run off the right edge lines up with the trigger's right instead,
+      // and one that would run off the left with its left.
+      const width = panel.current?.offsetWidth ?? 0;
+      const room = window.innerWidth - 8;
+      const end = align === "end" ? rect.right - width >= 8 : rect.left + width > room;
+      setPlace({ ...vertical, ...(end ? { right: Math.max(8, window.innerWidth - rect.right) } : { left: Math.max(8, Math.min(rect.left, room - width)) }) });
     };
     at();
     // The page or a list scrolling moves the button; the menu follows it.
@@ -356,7 +393,7 @@ export function Popover({ label, trigger, children, align = "start", plain }: { 
   return (
     <span ref={box} className={s.popover}>
       <button ref={button} type="button" className={plain ? s.plainTrigger : s.iconButton} aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}>{trigger}</button>
-      {open && <div className={s.panel} style={place} role="menu">{children(() => setOpen(false))}</div>}
+      {open && <div ref={panel} className={s.panel} style={place} role="menu">{children(() => setOpen(false))}</div>}
     </span>
   );
 }

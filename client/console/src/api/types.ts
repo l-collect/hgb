@@ -50,6 +50,10 @@ export interface Job {
   latestStartAt: number | null; pauseRequested: boolean; coopGroupId?: string | null;
   /** While WAITING or QUEUED: what holds it, in a few words (「设备离线」「切号需 Pro」…). */
   waitReason?: string | null;
+  /** The job's phone still holds it, waiting for 做完了 / 重做这步 (远程核对). */
+  held?: boolean;
+  /** Only while UNKNOWN and [held]: which check the phone waits on; sent back with /resolve so a stale one is refused. */
+  check?: number | null;
 }
 export interface JobEvent { at: number; kind: string; step: string; stepName: string; action: string; detail: string; elapsedMs: number }
 export interface InterruptionChoice { id: string; name: string }
@@ -119,7 +123,7 @@ export interface Plan {
   coopMode?: CoopMode;
 }
 export type CoopMode = "account" | "none" | "custom";
-export type PlanRunState = "ACTIVE" | "COMPLETED" | "PARTIAL_FAILED" | "FAILED" | "CANCELLED" | "SKIPPED";
+export type PlanRunState = "UNKNOWN" | "ACTIVE" | "COMPLETED" | "PARTIAL_FAILED" | "FAILED" | "CANCELLED" | "SKIPPED";
 export interface PlanLastRun { at: number; state: PlanRunState; detail: string; jobIds: string[] }
 /** A plan's runs on one day (yyyy-MM-dd in the user's time zone); a day with none is not listed. */
 export interface PlanDayRuns { planId: string; day: string; runs: PlanLastRun[] }

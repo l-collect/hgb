@@ -68,3 +68,15 @@
 @media (max-width: 767px) { .layout { grid-template-columns: minmax(0, 1fr); } .rows { max-height: 280px; } .tools { min-width: 0; flex-basis: 100%; } .setSide { flex: 1 1 100%; } }
 .out { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-primary-soft); }
 .out code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; white-space: pre-wrap; }
+/* 漂移: the guide on top of 素材. */
+.drift { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 12px; border-color: var(--color-warn-line); }
+.driftHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.driftSteps { display: flex; flex-wrap: wrap; gap: 8px; }
+.driftLine { display: flex; align-items: center; gap: 8px; }
+.driftCompare { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.driftPic { margin: 0; display: flex; flex-direction: column; gap: 4px; max-width: min(360px, 100%); }
+.driftPic > img { max-width: 100%; max-height: 220px; border-radius: var(--radius-md); background: #2e2a3a; }
+.driftTpl { image-rendering: pixelated; min-height: 64px; object-fit: contain; }
+.driftCrop { position: relative; overflow: hidden; border-radius: var(--radius-md); background: #2e2a3a; }
+.driftCrop > img { position: absolute; max-width: none; }
+.item[data-hit] { box-shadow: inset 3px 0 0 var(--color-warn); }

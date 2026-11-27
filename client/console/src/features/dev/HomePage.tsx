@@ -5,7 +5,8 @@ import { Link, navigate } from "../../router";
 import { dev, type DriftWarning, type SyncResult, type TrialRecord } from "./api";
 import { devPaths, failure, useDev } from "./context";
 import { NameButton } from "./NameButton";
-import { SyncConflicts, SyncTools } from "./SyncTools";
+import { DRIFT, driftLink, driftReason } from "./DriftGuide";
+import { bothChanged, RepoAhead, SyncReport, SyncTools, useRepoOnly } from "./SyncTools";
 import { arr, childIds, isObj, nodeDigest, objs, requiredMinApp, shallowDigest, snippets, str, target, tasks, usedSnippets, type TaskDef } from "./model";
 import type { Obj } from "./api";
 import w from "./Wb.module.css";
@@ -36,6 +37,7 @@ export function HomePage() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, []);
+  const repoOnly = useRepoOnly();
   if (!draft) return null;
   const list = tasks(draft.body);
   const lib = snippets(draft.body);
@@ -90,8 +92,9 @@ export function HomePage() {
           <SyncTools changed={changed.length} onDone={(said, result) => { setNotice(said); setSynced(result ?? null); }} />
           <NameButton label="＋ 任务" placeholder="任务名" askId onName={create} />
         </div>
-        {notice && <div role="status" className={notice[1] ? `${w.muted} ${w.okText}` : w.message}>{notice[0]}</div>}
-        <SyncConflicts result={synced} body={draft.body} />
+        <RepoAhead changed={changed.length} onDone={(said, result) => { setNotice(said); setSynced(result ?? null); }} />
+        {synced ? <SyncReport result={synced} body={draft.body} onUndone={(said) => { if (said[1]) { setSynced(null); setNotice(said); } }} />
+          : notice && <div role="status" className={notice[1] ? `${w.muted} ${w.okText}` : w.message}>{notice[0]}</div>}
         <div className={w.stats}>
           <button type="button" className={`${w.card} ${w.stat}`} onClick={() => setFilter("changed")}><span className={w.figure} data-tone={changed.length ? "warn" : undefined}>{changed.length}</span><span className={w.muted}>改过未发布</span></button>
           <button type="button" className={`${w.card} ${w.stat}`} onClick={() => setFilter("fail")}><span className={w.figure} data-tone={failed.length ? "bad" : undefined}>{failed.length}</span><span className={w.muted}>试跑失败</span></button>
@@ -108,7 +111,8 @@ export function HomePage() {
           <div className={`${w.tasksGrid} ${w.thead}`}><span>任务</span><span>状态</span><span>最近试跑</span><span>配置</span><span /></div>
           {shown.length ? shown.map((r) => <div key={r.task.id}>
             <div className={`${w.tasksGrid} ${w.trow}`}>
-              <Link to={devPaths.task(r.task.id)} className={w.taskName}><span className={w.bold}>{r.task.name}</span>{r.changed && <span className={w.changed}>● {r.isNew ? "新" : "改过"}</span>}</Link>
+              <Link to={devPaths.task(r.task.id)} className={w.taskName}><span className={w.bold}>{r.task.name}</span>{r.changed && <span className={w.changed}>● {r.isNew ? "新" : "改过"}</span>}
+                {bothChanged(synced).has(`tasks/${r.task.id}`) && <span className={w.both} title="仓库也改了它，留的是你的">两边都改</span>}</Link>
               <span><Pill tone={TONE[r.tone]}>{r.label}</Pill></span>
               <span className={w.muted}>{r.run}</span>
               <span className={w.muted}>{r.fields}</span>
@@ -122,6 +126,12 @@ export function HomePage() {
             {editing?.id === r.task.id && <TaskEdit task={r.task} kind={editing.kind} categories={categories} onCancel={() => setEditing(null)}
               onSet={(value) => void setTask(r.task.id, value)} onDelete={() => void removeTask(r.task.id)} />}
           </div>) : <div className={w.empty}>{list.length ? "没有符合的任务" : "还没有任务"}</div>}
+          {/* Published but not in the draft (it was imported before they came): listed, so they are not taken for missing. */}
+          {filter === "all" && repoOnly.filter((t) => !q || t.name.toLowerCase().includes(q) || t.taskId.toLowerCase().includes(q)).map((t) =>
+            <div key={t.taskId} className={`${w.tasksGrid} ${w.trow} ${w.repoOnly}`} title="草稿里没有：从仓库同步后才能改">
+              <span className={w.taskName}><span className={w.bold}>{t.name}</span></span>
+              <span><Pill>只在仓库</Pill></span><span className={w.muted}>同步后可改</span><span className={w.muted}>—</span><span />
+            </div>)}
         </div>
       </div>
 
@@ -143,8 +153,9 @@ export function HomePage() {
           <div className={`${w.card} ${w.clip}`}>
             {drifts.map((d) => (
               <div key={`${d.state}:${d.kind}:${d.subject}`} className={w.sideRow}>
-                <span className={w.sideText}><b className={w.medium}>{d.state}</b><span className={w.muted}>{DRIFT[d.kind] ?? "临界"} {d.observed}（阈值 {d.threshold}）</span></span>
-                <Link className={`${w.btn} ${w.sm}`} to={devPaths.assets}>补采</Link>
+                <span className={w.sideText}><b className={w.medium}>{d.state} · {DRIFT[d.kind] ?? "临界"}</b>
+                  <span className={w.muted} title={d.subject}>{d.subject}</span><span className={w.muted}>{driftReason(d)}</span></span>
+                <Link className={`${w.btn} ${w.sm}`} to={driftLink(d)}>补采</Link>
                 <button type="button" className={`${w.btn} ${w.sm}`} aria-label="忽略" onClick={async () => {
                   try { await dev.clearDriftWarnings(game, { state: d.state, kind: d.kind, subject: d.subject });
                     setDrifts((prev) => prev.filter((x) => !(x.state === d.state && x.kind === d.kind && x.subject === d.subject))); }
@@ -169,7 +180,6 @@ export function HomePage() {
   );
 }
 
-const DRIFT: Record<string, string> = { image: "小图", absentImage: "反面图", color: "取色差", text: "文字", redundantImage: "辅助图", redundantColor: "辅助色" };
 const older = (a: string, b: string) => {
   const x = a.split(".").map(Number), y = b.split(".").map(Number);
   for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0);

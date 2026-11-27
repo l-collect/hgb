@@ -1,11 +1,11 @@
 /*
- * Wide layouts (网页桌面): from 1024 a list beside its detail, from 1280 a third column of context. These are used only
+ * Wide layouts (网页桌面): from 1024 a list beside its detail, from 1440 (DESK) a third column of context. These are used only
  * when useWide() / useDesk() say the window is that wide, so the narrow pages are untouched.
  */
 .cols { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
-@media (min-width: 1280px) { .cols3 { grid-template-columns: 320px minmax(0, 1fr) 280px; } }
+@media (min-width: 1440px) { .cols3 { grid-template-columns: 320px minmax(0, 1fr) 280px; } }
 .colsMain { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
-@media (min-width: 1280px) { .colsMain { grid-template-columns: minmax(0, 1fr) 320px; } .colsMainWide { grid-template-columns: minmax(0, 1fr) 360px; } }
+@media (min-width: 1440px) { .colsMain { grid-template-columns: minmax(0, 1fr) 320px; } .colsMainWide { grid-template-columns: minmax(0, 1fr) 360px; } }
 
 /* A side column keeps its place while the detail scrolls, and scrolls by itself when longer than the window. */
 .side {

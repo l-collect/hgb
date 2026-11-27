@@ -57,7 +57,7 @@ export function GameCard({ samples }: { samples: Sample[] }) {
 }
 
 /** The reference size from library defaults, or from actions, or 2400 × 1080 when scripts are present. */
-function referenceSize(body: Obj, gameId: string): string | null {
+export function referenceSize(body: Obj, gameId: string): string | null {
   const app = target(body, gameId);
   const lib = isObj(app?.library) ? app.library : undefined;
   const defs = isObj(lib?.defaults) ? lib.defaults : undefined;

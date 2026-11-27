@@ -28,8 +28,10 @@ export function usePro() {
   };
 }
 
-/** Opens 会员与账号 (activation code), asking first when a form has unsaved edits. */
-export const goPro = () => navigate(paths.meAccount);
+/** 会员与账号 opened from a lock: the activation code box opens at once, focused. */
+export const PRO_REDEEM = `${paths.meAccount}?redeem=1`;
+/** Opens 会员与账号 with the code box open, asking first when a form has unsaved edits. */
+export const goPro = () => navigate(PRO_REDEEM);
 
 export function LockIcon({ size = 14 }: { size?: number }) {
   return (
@@ -72,9 +74,9 @@ export function ProLockRow({ label, detail, name, compact }: { label: ReactNode;
 }
 
 /** 上限锁: the 新建 / 添加 button once the quota is used up: grey, locked, 「新建 · Pro」, and it opens 会员与账号. */
-export function ProLimitButton({ text = "新建", what, small, label }: { text?: string; what: string; small?: boolean; label?: string }) {
+export function ProLimitButton({ text = "新建", what, small, label, className }: { text?: string; what: string; small?: boolean; label?: string; className?: string }) {
   return (
-    <button type="button" className={join(p.limit, small && p.limitSmall)} aria-label={label ?? `${what}已达上限，${text}需 Pro，去开通`} onClick={goPro}>
+    <button type="button" className={join(p.limit, small && p.limitSmall, className)} aria-label={label ?? `${what}已达上限，${text}需 Pro，去开通`} onClick={goPro}>
       <LockIcon />{text} · <span className={p.pro}>Pro</span>
     </button>
   );

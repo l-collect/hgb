@@ -1,14 +1,18 @@
-.cols { grid-template-columns: minmax(0, 1.3fr) minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1fr) 118px 64px 84px; }
+.cols { grid-template-columns: minmax(0, 1.3fr) minmax(0, .8fr) minmax(0, 1fr) minmax(0, 1fr) 104px 56px 132px; }
 .nowrap { white-space: nowrap; }
 .task { font-weight: 600; }
 .more { display: flex; justify-content: center; padding: var(--space-2); }
 .sideHead { display: flex; align-items: center; gap: var(--space-2); min-height: 52px; padding: 8px var(--space-4); border-bottom: 1px solid var(--color-line-soft); }
 .sideHead b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .sideBody { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); }
-.why { padding: 10px 12px; border-radius: var(--radius-lg); background: var(--color-danger-bg); color: var(--color-danger); font-size: var(--text-sm); overflow-wrap: anywhere; }
+/* Why it stopped, coloured by how it ended (format.ts STATE_TONES). */
+.why { padding: 10px 12px; border-radius: var(--radius-lg); border: 1px solid var(--color-warn-line); background: var(--color-warn-soft); color: var(--color-warn-ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.why_bad { border-color: var(--color-danger-line); background: var(--color-danger-soft); color: var(--color-danger); }
+.why_neutral { border-color: var(--color-line); background: var(--color-neutral-bg); color: var(--color-ink); }
 .sideActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .full { margin-left: auto; font-size: var(--text-sm); font-weight: 600; text-decoration: none; }
 .ok { color: var(--color-ok); font-size: var(--text-sm); }
 .bad { color: var(--color-danger); font-size: var(--text-sm); }
-.reason { display: block; margin-top: 2px; color: var(--color-warn); font-size: var(--text-xs); font-weight: 600; overflow-wrap: anywhere; }
+.reasonBad { display: block; margin-top: 2px; color: var(--color-danger); font-size: var(--text-xs); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reason { display: block; margin-top: 2px; color: var(--color-warn); font-size: var(--text-xs); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wait { padding: 10px 12px; border-radius: var(--radius-lg); background: var(--color-warn-soft); color: var(--color-warn-ink); font-size: var(--text-sm); overflow-wrap: anywhere; }

@@ -1,19 +1,59 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, enc, githubStart } from "../../api/client";
-import type { Account, MergeOffer } from "../../api/types";
-import { Breadcrumb, Button, ButtonLink, Card, Grow, MoreMenu, Pill, Popover, Row, TextSelect, ui } from "../../components/ui";
+import type { Account, Channel, EventRule, MergeOffer } from "../../api/types";
+import { Breadcrumb, Button, ButtonLink, Card, Grow, join, MoreMenu, Pill, Popover, Row, RowLink, TextSelect, ui } from "../../components/ui";
 import { applyAppearance, readAppearance, type Appearance } from "../../theme/appearance";
 import { orToast, useOptimistic } from "../../components/useAction";
 import { toast } from "../../components/Toast";
 import { ask } from "../../components/Confirm";
 import { platformName, shortTime } from "../../format";
-import { Link, paths } from "../../router";
+import { Link, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
+import { APP_DOWNLOAD } from "../onboarding/Onboarding";
 import { BindEmail, DeleteAccount, MergeCard } from "./AccountActions";
 import s from "./Me.module.css";
 
-/** 我的: the member summary, the developer workbench, preferences, and help; 会员 › opens 会员与账号. */
+/** 「免费版」 or 「Pro」 beside the email. */
+export function TierPill({ account }: { account: Account }) {
+  return account.tier === "PRO" ? <Pill tone="soft">Pro</Pill> : <Pill>免费版</Pill>;
+}
+
+/** 设备 2/2 · 账号 3/3 · 计划 4/3: a free account's use of its quota, a number at or over its limit in the warning colour. */
+export function QuotaLine({ account }: { account: Account }) {
+  const { data } = useConsole();
+  const quota = account.quota;
+  if (account.tier === "PRO" || !quota) return null;
+  const items: [string, number, number][] = [["设备", data.devices.length, quota.maxDevices], ["账号", data.accounts.length, quota.maxGameAccounts], ["计划", data.plans.length, quota.maxPlans]];
+  return (
+    <span className={s.quota}>
+      {items.map(([name, used, max], i) => (
+        <span key={name}>{i > 0 && " · "}{name} <span className={join(s.quotaNum, used >= max && s.quotaFull)}>{used}/{max}</span></span>
+      ))}
+    </span>
+  );
+}
+
+/** Opened from a Pro lock (?redeem=1): the code box starts open. */
+export const useRedeemAsked = () => useQuery().get("redeem") === "1";
+
+/** 本机通知 · 3 条规则: the channels on and the rules on; null until read. */
+export function useNoticeLine(): string | null {
+  const { data } = useConsole();
+  const [line, setLine] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    Promise.all([api<Channel[]>("/api/notifications/channels"), api<EventRule[]>("/api/notifications/rules")]).then(([channels, rules]) => {
+      if (!current) return;
+      const outside = channels.filter((c) => c.enabled && c.kind !== "LOCAL").length;
+      setLine(`${outside ? `${outside + 1} 个渠道` : "本机通知"} · ${rules.filter((r) => r.enabled).length} 条规则`);
+    }).catch(() => { if (current) setLine(null); });
+    return () => { current = false; };
+  }, [data.noticeVersion]);
+  return line;
+}
+
+/** 我的: the member summary, 通知, preferences, help, and the developer workbench last; 会员 › opens 会员与账号. */
 export function MePage() {
   const { data, account: initial, setAccount: share } = useConsole();
   const [account, setAccount] = useState(initial);
@@ -21,8 +61,8 @@ export function MePage() {
   useEffect(() => { api<Account>("/api/me").then((next) => { setAccount(next); share(next); }).catch(() => {}); }, [share]);
   const [look, setLook] = useState<Appearance>(readAppearance);
   const who = account.email ?? account.githubLogin ?? "";
-  const isPro = account.tier === "PRO";
   const pickLook = (next: Appearance) => { setLook(next); applyAppearance(next); };
+  const notices = useNoticeLine();
   return (
     <div className={s.page}>
       <h1 className={s.hidden}>我的</h1>
@@ -30,17 +70,14 @@ export function MePage() {
         <Link to={paths.meAccount} className={s.profile}>
           <span className={s.avatar} aria-hidden="true">{who.slice(0, 1).toUpperCase()}</span>
           <span className={s.who}>
-            <span className={s.whoLine}><b className={s.email}>{who}</b>{isPro && <Pill tone="soft">Cloud Pro</Pill>}</span>
+            <span className={s.whoLine}><b className={s.email}>{who}</b><TierPill account={account} /></span>
             <span className={ui.tiny}>{data.devices.length} 台设备 · {data.accounts.length} 个账号 · {data.plans.length} 个计划</span>
           </span>
           <span className={ui.tiny}>会员 ›</span>
         </Link>
       </Card>
-      <Card flush as="section" aria-label="开发者工作台">
-        <Row>
-          <Grow><b className={s.semi}>开发者工作台</b><span className={ui.tiny} style={{ display: "block" }}>采样、试跑、联调</span></Grow>
-          <ButtonLink small to={paths.dev}>进入</ButtonLink>
-        </Row>
+      <Card flush as="section" aria-label="通知">
+        <RowLink to={paths.notices}><b className={s.semi} style={{ flex: 1 }}>通知</b><span className={ui.tiny} style={{ whiteSpace: "nowrap" }}>{notices ?? "事件、规则、渠道"} ›</span></RowLink>
       </Card>
       <Card flush as="section" aria-label="偏好">
         <Row>
@@ -54,6 +91,12 @@ export function MePage() {
         <a className={s.linkRow} href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/issues`} target="_blank" rel="noreferrer"><span>反馈问题</span><span className={ui.tiny}>GitHub ↗</span></a>
         <Link className={s.linkRow} to={paths.privacy}><span>隐私政策</span><span className={ui.tiny}>›</span></Link>
         <Link className={s.linkRow} to={paths.terms}><span>服务条款</span><span className={ui.tiny}>›</span></Link>
+      </Card>
+      <Card flush as="section" aria-label="开发者工作台">
+        <Row>
+          <Grow><b className={s.semi}>开发者工作台</b><span className={ui.tiny} style={{ display: "block" }}>采样、试跑、联调</span></Grow>
+          <ButtonLink small to={paths.dev}>进入</ButtonLink>
+        </Row>
       </Card>
     </div>
   );
@@ -105,7 +148,16 @@ export function MeAccountPage() {
   const { account, setAccount, codeInput, setCodeInput, redeem: redeemCode, redeeming: sending, unlink, unbind, logout, expires, isPro, forever, signedOut } = useMeActions();
   const [binding, setBinding] = useState(false);
   const [offer, setOffer] = useState<MergeOffer | null>(null);
-  const [redeeming, setRedeeming] = useState(false);
+  const asked = useRedeemAsked();
+  const [redeeming, setRedeeming] = useState(asked);
+  const codeField = useRef<HTMLInputElement>(null);
+  // Asked again from within the page (a link to ?redeem=1 while it is open): open the field and put the cursor in it.
+  useEffect(() => {
+    if (!asked) return;
+    setRedeeming(true);
+    const frame = requestAnimationFrame(() => codeField.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [asked]);
   const [showDevices, setShowDevices] = useState(false);
   const redeem = () => void redeemCode(() => setRedeeming(false));
   const pro = usePro();
@@ -115,19 +167,20 @@ export function MeAccountPage() {
       <Breadcrumb items={[["我的", paths.me], ["会员与账号", null]]} />
       <h1 className={s.title}>会员与账号</h1>
       <Card as="section" aria-label="会员" className={s.pro}>
-        {isPro && <b className={s.proName}>Cloud Pro · {expires ? `到期 ${expires}` : "永久"}</b>}
-        {!redeeming && !forever && <Button className={s.wide} onClick={() => setRedeeming(true)}>{isPro ? "用激活码续期" : "兑换激活码"}</Button>}
+        <b className={s.proName}>{isPro ? `Pro · ${expires ? `到期 ${expires}` : "永久"}` : "免费版"}</b>
+        <QuotaLine account={account} />
+        {!forever && (redeeming ? (
+          <form className={s.codeForm} onSubmit={(e) => { e.preventDefault(); if (codeInput.trim() && !sending) redeem(); }}>
+            <label className={s.codeLabel} htmlFor="pro-code">激活码</label>
+            <input ref={codeField} id="pro-code" type="text" autoFocus autoCapitalize="characters" autoComplete="off" spellCheck={false}
+              value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="HGB-PRO-…" />
+            <div className={s.twoButtons}>
+              <Button onClick={() => { setRedeeming(false); setCodeInput(""); }}>取消</Button>
+              <Button type="submit" variant="primary" disabled={!codeInput.trim() || sending}>{sending ? "兑换中…" : "兑换"}</Button>
+            </div>
+          </form>
+        ) : <Button className={s.wide} onClick={() => setRedeeming(true)}>{isPro ? "用激活码续期" : "兑换激活码"}</Button>)}
       </Card>
-      {redeeming && (
-        <Card as="section" aria-label="激活码" className={s.codeCard}>
-          <label className={s.codeLabel} htmlFor="pro-code">激活码</label>
-          <input id="pro-code" type="text" value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder="HGB-PRO-…" />
-          <div className={s.twoButtons}>
-            <Button onClick={() => { setRedeeming(false); setCodeInput(""); }}>取消</Button>
-            <Button variant="primary" onClick={redeem} disabled={!codeInput.trim() || sending}>{sending ? "兑换中…" : "兑换"}</Button>
-          </div>
-        </Card>
-      )}
       <Card flush as="section" aria-label="登录方式">
         <Row>
           <Grow>邮箱<span className={ui.tiny} style={{ display: "block" }}>{account.email ? `${account.email}${account.hasPassword ? "" : " · 验证码登录"}` : "未绑定"}</span></Grow>
@@ -148,7 +201,7 @@ export function MeAccountPage() {
           </Row>
         ))}
         {showDevices && pro.full("maxDevices", data.devices.length) && <Row className={s.subRow}><Grow><span className={ui.tiny}>已达上限</span></Grow><ProLimitButton small text="添加" what="设备" /></Row>}
-        {showDevices && !pro.full("maxDevices", data.devices.length) && <Row className={s.subRow}><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={`https://github.com/${import.meta.env.VITE_CODE_REPO}/releases/latest`}>下载</a></Row>}
+        {showDevices && !pro.full("maxDevices", data.devices.length) && <Row className={s.subRow}><Grow><span className={ui.tiny}>在别的设备装 App 并登录即可添加</span></Grow><a href={APP_DOWNLOAD}>下载</a></Row>}
       </Card>
       {offer && <MergeCard token={offer.token} offer={offer} settled={(merged) => { setOffer(null); setBinding(false); if (merged) location.reload(); }} />}
       <Button variant="danger" className={s.wide} onClick={logout}>退出登录</Button>

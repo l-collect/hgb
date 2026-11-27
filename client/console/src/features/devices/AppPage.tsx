@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { App, Device } from "../../api/types";
+import type { App, AppWaiting, Device } from "../../api/types";
 import { Breadcrumb, Card, Empty, Grow, Muted, PageTabs, Pill, Row, Segments, TextSelect } from "../../components/ui";
 import { appStatus, jobSource, jobStatus, waitNext, waitReason } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
@@ -22,6 +22,11 @@ export function AppPage({ deviceId, appKey }: { deviceId: string; appKey: string
 }
 
 /** One game instance on a device: its accounts behind a gear, what it runs now and what is queued, and running a task on it. */
+/** What the phone waits for and what to do about it, as a bar above the page (等无障碍 · 在手机上重新开启无障碍). */
+export function WaitBanner({ waiting }: { waiting: AppWaiting }) {
+  return <p className={s.waitBanner} role="status"><b>{waiting.text}</b>{waitNext(waiting) && <span>{waitNext(waiting)}</span>}</p>;
+}
+
 export function AppDetail({ device, app, base }: { device: Device; app: App; base: string }) {
   const { data } = useConsole();
   const tab = useQuery().get("tab") === "runs" ? "runs" : "run";
@@ -29,8 +34,8 @@ export function AppDetail({ device, app, base }: { device: Device; app: App; bas
   const accounts = data.accounts.filter((account) => account.gameId === app.gameId);
   const { current, fallback, setCurrent, setDefault } = useAppAccounts(device, app);
   const { current: job } = appJobs(data.jobs, device.id, app.key);
-  // A running job's pause (正在暂停 until the phone says 已暂停) says more than the app's phase.
-  const [status, tone] = job?.state === "RUNNING" && (job.pauseRequested || job.cancelRequested) ? jobStatus(job, data.devices) : appStatus(app.phase, device.online, app.waiting);
+  // The job it runs, read the one way every page reads it (卡住 · 等无障碍, 正在暂停, 已暂停 …), says more than the app's phase.
+  const [status, tone] = job && device.online ? jobStatus(job, data.devices) : appStatus(app.phase, device.online, app.waiting);
   const waiting = device.online ? app.waiting : null;
   return (
     <>
@@ -44,7 +49,7 @@ export function AppDetail({ device, app, base }: { device: Device; app: App; bas
         <AccountMenu app={app} accounts={accounts} current={current} fallback={fallback} setCurrent={setCurrent} setDefault={setDefault} />
         <span className={s.end}><Pill tone={tone} dot>{status}</Pill></span>
       </header>
-      {waiting && <p className={s.waitBanner} role="status"><b>{waiting.text}</b>{waitNext(waiting) && <span>{waitNext(waiting)}</span>}</p>}
+      {waiting && <WaitBanner waiting={waiting} />}
       <Observed app={app} accounts={accounts} />
       <PageTabs label="应用内容" value={tab} tabs={[["run", "运行", base], ["runs", "战报", `${base}?tab=runs`]]} />
       {tab === "run" ? <RunTab device={device} app={app} /> : (

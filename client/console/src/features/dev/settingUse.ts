@@ -37,7 +37,7 @@ export function stripComment(raw: string): string {
 }
 
 /** Whether [at] in [text] is inside a quoted text. */
-function inQuote(text: string, at: number): boolean {
+export function inQuote(text: string, at: number): boolean {
   let quote: string | null = null;
   for (let i = 0; i < at; i++) { const c = text[i]; if (quote) { if (c === quote || (quote === "“" && c === "”")) quote = null; } else if (c === "\"" || c === "“") quote = c; }
   return quote !== null;
@@ -130,7 +130,7 @@ export interface LocalProblem { line: number; col: number; len: number; severity
 
 
 /** Where a number goes, as the engine names it in messages (TaskScript.kt's Slot). */
-interface Slot { what: string; min: number; max: number; integer: boolean; above?: boolean }
+export interface Slot { what: string; min: number; max: number; integer: boolean; above?: boolean }
 const SECONDS: Slot = { what: "等待秒数", min: 0, max: 600, integer: false, above: true };
 const PAUSE: Slot = { what: "“等待”的秒数", min: 0, max: 600, integer: false, above: true };
 const LOOP_TIMES: Slot = { what: "循环次数", min: 1, max: 100, integer: true };
@@ -139,7 +139,7 @@ const HOPS: Slot = { what: "导航步数", min: 1, max: 50, integer: true };
 const rangeOf = (s: Slot) => s.above ? `大于 ${s.min}、不超过 ${s.max}` : `${s.min}–${s.max}`;
 const holds = (s: Slot, n: number) => (s.above ? n > s.min : n >= s.min) && n <= s.max && (!s.integer || Number.isInteger(n));
 /** The slot a number in [head]'s line before [unit] fills; null where the engine reads no setting. */
-function slotOf(head: string, unit: string): Slot | null {
+export function slotOf(head: string, unit: string): Slot | null {
   if (unit === "次") return head === "反复" || head === "直到" ? LOOP_TIMES : head === "点" || head === "点空白" || head === "拖" ? TAP_TIMES : null;
   if (unit === "秒") return head === "等待" ? PAUSE : ["点", "点空白", "拖", "等", "分情况", "如果看到", "如果没看到"].includes(head) ? SECONDS : null;
   if (unit === "步") return head === "去" ? HOPS : null;
@@ -160,8 +160,46 @@ function badBraceReason(head: string, unit: string): string | null {
   return slotOf(head, unit) ? `花括号里写配置项编号，如 最多 {rounds}${unit} 或 最多 {rounds|3}${unit}` : null;
 }
 
+/** The slot an engine [SettingUse] fills (repeat / until counts, an action's seconds or taps); null when it reads no number. */
+export function slotOfUse(kind: string, input?: string | null, capability?: string | null): Slot | null {
+  if (kind === "repeat" || kind === "until") return LOOP_TIMES;
+  if (kind !== "input") return null;
+  if (input === "durationMs") return capability === "control.wait" || !capability ? PAUSE : SECONDS;
+  if (input === "timeoutMs") return SECONDS;
+  if (input === "maximum") return TAP_TIMES;
+  return null;
+}
+/** The slot a line's number fills, guessed while it is still being typed: from the statement and the unit after the cursor. */
+export function slotWhileTyping(head: string, after: string): Slot | null {
+  const unit = /^[^{}\s]*\}?\s*(秒|次|步)/.exec(after)?.[1] ?? "";
+  if (unit) return slotOf(head, unit);
+  if (head === "反复" || head === "直到") return LOOP_TIMES;
+  if (head === "等待") return PAUSE;
+  if (["等", "分情况", "如果看到", "如果没看到"].includes(head)) return SECONDS;
+  return null;
+}
+/** The numbers [f] can be (lo–hi), as the engine judges it; null when it says nothing (a side is missing). */
+export function spanOf(f: Obj): [number, number] | null {
+  const choice = f.widget === "SINGLE_CHOICE";
+  const nums = choice ? objs(f.options).map((o) => decimal(o.value)).filter((n): n is number => n !== null) : [];
+  const low = choice ? (nums.length ? Math.min(...nums) : null) : decimal(f.minimum);
+  const high = choice ? (nums.length ? Math.max(...nums) : null) : decimal(f.maximum);
+  return low === null || high === null ? null : [low, high];
+}
+/** How `{id}` suits [slot]: fine, fine only with a default (`{id|low}`), or not, with a short reason for the completion list. */
+export function braceFit(f: Obj, slot: Slot | null): { ok: boolean; needDefault: string | null; short: string } {
+  if (!readsAsNumber(f)) return { ok: false, needDefault: null, short: "不是数字" };
+  if (!slot) return { ok: true, needDefault: null, short: "" };
+  const reason = settingReason(String(f.id), null, slot, [f]);
+  if (!reason) return { ok: true, needDefault: null, short: "" };
+  const span = spanOf(f);
+  if (reason.includes("可能没有值")) return { ok: true, needDefault: String(span?.[0] ?? 1), short: "要默认值" };
+  if (!span) return { ok: false, needDefault: null, short: "没写最小/最大" };
+  if (reason.includes("超出")) return { ok: false, needDefault: null, short: `${slot.what}只能 ${rangeOf(slot)}` };
+  return { ok: false, needDefault: null, short: "可能是小数" };
+}
 /** What the engine says of `{id|written}` read for [slot] (TaskScript.kt's setting()), in its order; null when it is fine. */
-function settingReason(id: string, written: string | null, slot: Slot, fields: Obj[]): string | null {
+export function settingReason(id: string, written: string | null, slot: Slot, fields: Obj[]): string | null {
   const f = fields.find((x) => String(x.id) === id);
   if (!f) return unknownSetting(id, fields);
   const name = labelOf(f);
@@ -252,6 +290,6 @@ export function settingView(f: Obj, steps: Obj[], href: string): SettingView {
     : isNumberField(f) ? [f.minimum !== undefined ? `≥ ${String(f.minimum)}` : "", f.maximum !== undefined ? `≤ ${String(f.maximum)}` : "", str(f.unit) ?? ""].filter(Boolean).join(" ") || "任意数" : "";
   const rec = f.recommended === undefined ? "—" : f.recommended === true ? "开" : f.recommended === false ? "关" : typeof f.recommended === "string" ? f.recommended : JSON.stringify(f.recommended);
   const sid = str(f.stepId); const idx = sid ? steps.findIndex((s) => s.id === sid) : -1;
-  const step = idx >= 0 ? `步骤 ${idx + 1} · ${str(steps[idx].name) ?? sid}` : sid ? `步骤 ${sid}` : "按读它的步骤";
+  const step = idx >= 0 ? `步骤 ${idx + 1} · ${str(steps[idx].name) ?? sid}` : sid ? `步骤 ${sid}` : "随步骤";
   return { id: String(f.id), label: str(f.label) ?? String(f.id), type, values, recommended: rec, step, href };
 }

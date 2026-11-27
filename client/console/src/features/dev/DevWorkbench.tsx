@@ -47,6 +47,9 @@ export function DevWorkbench() {
   const [conflict, setConflict] = useState(false);
   // A batch the server refused with both sides of each node: shown to choose from, never sent again by itself.
   const [refused, setRefused] = useState<{ patches: DraftPatch[]; conflicts: PatchConflict[] } | null>(null);
+  const [checkFailed, setCheckFailed] = useState<boolean | null>(null);
+  // An edit makes the last whole check stale: the mark goes until 发布 checks again.
+  useEffect(() => { setCheckFailed(null); }, [draft?.revision]);
   // The node each unsaved script was when editing began: its digest is the patch's base, so only a change made
   // elsewhere since then is a conflict.
   const starts = useRef<Record<string, Obj>>({});
@@ -255,7 +258,7 @@ export function DevWorkbench() {
   const gameName = (draft && game && str(target(draft.body, game)?.name)) || data.games.find((g) => g.id === game)?.name || game || "";
   const games: [string, string][] = [...new Set([...drafts.map((d) => d.target), ...data.games.map((g) => g.id), ...(game ? [game] : [])])]
     .map((id) => [id, data.games.find((g) => g.id === id)?.name ?? (id === game ? gameName : id)]);
-  const sync = conflicts.length || conflict ? ["冲突", "bad"] : pending > 0 ? ["保存中", "go"] : ["已同步", "ok"];
+  const sync = conflicts.length || conflict ? ["冲突", "bad"] : pending > 0 ? ["保存中", "go"] : ["已保存", "ok"];
   const top = (
     <header className={w.top}>
       <Link to={paths.tasks} className={w.topBack}>← 控制台</Link>
@@ -273,7 +276,7 @@ export function DevWorkbench() {
           .map(([label, to, on]) => <Link key={label} to={to} className={w.topTab} aria-current={on ? "page" : undefined}>{label}</Link>)}
       </nav>
       <span className={w.topGrow} />
-      {draft && <span className={w.topSync}>修订 {draft.revision} · {conflicts.length
+      {draft && <span className={w.topSync} title={`修订 ${draft.revision}`}>{conflicts.length
         ? <Link to={scriptPath(conflicts[0])} title="别处改过你正在编辑的脚本：去选用哪边" data-tone="bad">冲突{conflicts.length > 1 ? ` ${conflicts.length}` : ""} ›</Link>
         : <span data-tone={sync[1]}>{sync[0]}</span>}</span>}
       <Popover label="当前手机" plain align="end" trigger={<span className={w.topChip}>
@@ -285,14 +288,15 @@ export function DevWorkbench() {
             : <span className={`${w.muted} ${w.menuItem}`}>在手机上登录 App</span>}
         </div>}
       </Popover>
-      <Link to={devPaths.publish} className={`${w.btn} ${w.primary} ${w.topPublish}`}>发布{changed ? ` ${changed}` : ""}</Link>
+      {changed > 0 && <Link to={devPaths.publish} className={`${w.btn} ${w.topPublish}`} title={checkFailed ? "检查没过 · 去发布页看" : "去发布页"}>
+        {changed} 处改动{checkFailed && <span className={w.topBad} aria-label="检查没过" />}</Link>}
     </header>
   );
   let body: ReactNode;
   if (!loaded) body = <div className={w.empty}>正在加载…</div>;
   else if (!game) body = <div className={w.card}><div className={w.empty}>{problem}</div></div>;
   else body = <>{problem && <div className={w.message}>{problem}</div>}{draft ? route(path) : <NoDraft />}</>;
-  /** 用我的: the refused batch again, each conflicting node expected as it is now; 用线上的: dropped (the draft is read already). */
+  /** 用我的: the refused batch again, each conflicting node expected as it is now; 用别处的: dropped (the draft is read already). */
   const resolve = async (mine: boolean) => {
     const was = refused; if (!was) return null;
     setRefused(null);
@@ -318,12 +322,14 @@ export function DevWorkbench() {
     }
     return problem;
   };
-  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, restoreSnapshot, edits, setEdits, setEdit, editBases, conflicts, saveScript, device, setDevice } : null;
+  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, restoreSnapshot, edits, setEdits, setEdit, editBases, conflicts, saveScript, device, setDevice,
+    refused: refused?.conflicts ?? null, resolveRefused: resolve, checkFailed, setCheckFailed } : null;
   return (
     <div className={w.shell}>
       {top}
       <main className={w.main} data-full={workspaceAt(path) ? "true" : undefined}>
-        {refused && draft && <PatchConflicts conflicts={refused.conflicts} body={draft.body} onChoose={resolve} />}
+        {/* In a workspace the card sits at the top of the editor; elsewhere at the top of the page. */}
+        {refused && draft && !workspaceAt(path) && <PatchConflicts conflicts={refused.conflicts} body={draft.body} onChoose={resolve} />}
         {value ? <DevContext.Provider value={value}>{body}</DevContext.Provider> : body}
       </main>
     </div>

@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import type { Job } from "../../api/types";
 import { Button, Card, Empty, ErrorCard, Loading, Pill, SegmentTabs, TextSelect, join, ui } from "../../components/ui";
 import { useAction } from "../../components/useAction";
-import { ACTIVE, jobStatus, shortTime, waitReason } from "../../format";
+import { ACTIVE, jobStatus, jobWaiting, shortTime, waitNext, waitReason } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { useDesk } from "../../shell/useWidth";
-import { StoppedOn } from "../jobs/JobPage";
-import { FILTER_STATES, jobPlace, JobControls, MoreRuns, rerun, useJob, useJobPages } from "../jobs/runs";
+import { StoppedOn, whyTone } from "../jobs/JobPage";
+import { canRerun, FILTER_STATES, jobPlace, JobControls, MoreRuns, rerun, runNote, useJob, useJobPages } from "../jobs/runs";
 import { NextSteps } from "../jobs/JobPage";
 import d from "../../shell/Desk.module.css";
 import s from "./RunsDesk.module.css";
@@ -15,7 +15,7 @@ import s from "./RunsDesk.module.css";
 export type RunFilter = "all" | "active" | "done" | "bad" | "waiting";
 export const RUN_FILTERS: Record<RunFilter, (job: Job) => boolean> = {
   all: () => true,
-  active: (job) => ACTIVE.has(job.state),
+  active: (job) => job.state === "LEASED" || job.state === "RUNNING",
   done: (job) => job.state === "COMPLETED",
   bad: (job) => job.state === "FAILED" || job.state === "UNKNOWN",
   waiting: (job) => job.state === "QUEUED" || job.state === "WAITING",
@@ -118,7 +118,7 @@ export function RunsDesk() {
               <span role="cell" className={ui.tiny}>{jobPlace(job, data.devices)}</span>
               <span role="cell" className={join(ui.mono, s.nowrap)}>{shortTime(job.createdAt)}</span>
               <span role="cell" className={ui.tiny}>{took(tookMs(job))}</span>
-              <span role="cell"><Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill>{waitReason(job) && <span className={s.reason}>{waitReason(job)}</span>}</span>
+              <span role="cell"><Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill>{runNote(job) && <span className={job.state === "FAILED" ? s.reasonBad : s.reason} title={runNote(job)}>{runNote(job)}</span>}</span>
             </div>
           );
         })}
@@ -145,17 +145,20 @@ function JobSide({ job }: { job: Job }) {
   const [label, tone] = jobStatus(job, data.devices);
   const version = `${data.epoch}.${data.logVersion[job.id] ?? 0}`;
   const failed = job.state === "FAILED" || job.state === "UNKNOWN";
+  const why = whyTone(job);
+  const waiting = jobWaiting(job, data.devices);
   const accountExists = data.accounts.some((item) => item.id === job.accountId);
   return (
     <Card flush as="article" aria-label="战报详情">
       <div className={s.sideHead}><b>{job.taskName}{job.accountName ? ` · ${job.accountName}` : ""}</b><Pill tone={tone}>{label}</Pill></div>
       <div className={s.sideBody}>
         <span className={ui.tiny}>{[shortTime(job.createdAt), jobPlace(job, data.devices), job.planName].filter(Boolean).join(" · ")}</span>
-        {job.detail && (failed || job.state === "SKIPPED" || job.state === "CANCELLED") && <p className={s.why}>{job.detail}</p>}
+        {job.detail && (failed || job.state === "SKIPPED" || job.state === "CANCELLED") && <p className={`${s.why} ${s[`why_${why || "neutral"}`] ?? ""}`}>{job.detail}</p>}
+        {waiting && <p className={s.wait} role="status"><b>{waiting.text}</b>{waitNext(waiting) && ` · ${waitNext(waiting)}`}</p>}
         {waitReason(job) && <p className={s.wait}>{label}：{waitReason(job)}</p>}
         {failed && <StoppedOn id={job.id} version={version} />}
         <div className={s.sideActions}>
-          {!ACTIVE.has(job.state) && job.accountId && accountExists && (
+          {canRerun(job, accountExists) && (
             <Button small variant="primary" disabled={again.busy} onClick={() => again.run(() => rerun(job, data.devices))}>重跑</Button>
           )}
           <JobControls job={job} small />

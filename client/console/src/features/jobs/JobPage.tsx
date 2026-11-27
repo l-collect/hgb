@@ -3,11 +3,13 @@ import { api, apiUrl, enc } from "../../api/client";
 import type { Job, JobEvent } from "../../api/types";
 import { Breadcrumb, Button, ButtonLink, Card, Empty, ErrorCard, Loading, Muted, Pill } from "../../components/ui";
 import { useAction } from "../../components/useAction";
-import { ACTIVE, clock, eventDetail, eventKind, jobSource, jobStatus, seconds, shortDuration, shortTime, waitReason } from "../../format";
+import { ACTIVE, clock, eventDetail, eventKind, jobSource, jobStatus, jobWaiting, ranFor, seconds, shortDuration, shortTime, waitReason, type Tone } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
 import { NotFound } from "../ConsolePage";
-import { jobPlace, JobControls, rerun, useJob } from "./runs";
+import { PRO_REDEEM } from "../../components/Pro";
+import { canRerun, jobPlace, JobControls, rerun, useJob } from "./runs";
+import { WaitBanner } from "../devices/AppPage";
 import s from "./Jobs.module.css";
 
 type StepState = "done" | "stop" | "running" | "plain";
@@ -46,6 +48,18 @@ function stepsOf(events: JobEvent[], job: Job): Step[] {
   return steps;
 }
 const MARK: Record<StepState, string> = { done: "✓", stop: "!", running: "…", plain: "" };
+/** The colour of why a run stopped, by how it ended: a failure red, an unconfirmed result orange, the rest grey. */
+export const whyTone = (job: Job): Tone => jobStatus(job)[1];
+/** The minute ticking, for 「已跑 N 分」. */
+function useMinute(on: boolean) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!on) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 20000);
+    return () => window.clearInterval(timer);
+  }, [on]);
+  return now;
+}
 
 /** 战报详情: what the job was, how it ended, and every step and action the device reported. */
 export function JobPage({ id }: { id: string }) {
@@ -60,6 +74,7 @@ export function JobPage({ id }: { id: string }) {
   const [all, setAll] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const again = useAction();
+  const now = useMinute(!!found.job && ACTIVE.has(found.job.state));
   useEffect(() => {
     let current = true;
     api<JobEvent[]>(`/api/jobs/${enc(id)}/events`).then((list) => { if (current) { setEvents(list); setError(null); } })
@@ -83,6 +98,8 @@ export function JobPage({ id }: { id: string }) {
     : job.accountId ? [["账号与计划", paths.accounts], [job.accountName ?? "账号", paths.account(job.accountId, "runs")], ["战报", null]] : [["设备", paths.devices], ["战报", null]];
   const toggle = (key: string) => { setAll(false); setOpen((now) => { const next = new Set(now); if (next.has(key)) next.delete(key); else next.add(key); return next; }); };
   const accountExists = data.accounts.some((item) => item.id === job.accountId);
+  const waiting = jobWaiting(job, data.devices);
+  const why = whyTone(job);
   return (
     <>
       <Breadcrumb items={crumbs} />
@@ -93,19 +110,21 @@ export function JobPage({ id }: { id: string }) {
             {job.accountName && (job.accountId && accountExists ? <Link to={paths.account(job.accountId)} className={s.accountLink}>{job.accountName}</Link> : <Muted as="span">{job.accountName}</Muted>)}
             <Pill tone={tone} live={ACTIVE.has(job.state)}>{label}</Pill></div>
           <Muted>{[data.devices.length > 1 || !job.deviceName ? jobPlace(job, data.devices) : null,
-            started ? `${shortTime(started)} 开始` : `${shortTime(job.createdAt)} 创建`, started && ended && !ACTIVE.has(job.state) ? `用时 ${seconds(ended - started)}` : null, jobSource(job)].filter(Boolean).join(" · ")}</Muted>
+            started ? `${shortTime(started)} 开始` : `${shortTime(job.createdAt)} 创建`, ranFor(job, started, now),
+            started && ended && !ACTIVE.has(job.state) ? `用时 ${seconds(ended - started)}` : null, jobSource(job)].filter(Boolean).join(" · ")}</Muted>
         </div>
         <div className={s.jobActions}>
           <JobControls job={job} />
-          {!ACTIVE.has(job.state) && job.accountId && accountExists && (
+          {canRerun(job, accountExists) && (
             <Button variant="primary" className={s.big} disabled={again.busy} onClick={() => again.run(() => rerun(job, data.devices))}>重跑</Button>
           )}
         </div>
       </header>
       {again.message && !again.message.ok && <p role="alert" className={s.noteBad}>{again.message.text}</p>}
+      {waiting && <WaitBanner waiting={waiting} />}
       {waitReason(job) && <p role="status" className={s.waitNote}>{label}：{waitReason(job)}</p>}
       {(job.state === "FAILED" || job.state === "UNKNOWN" || job.state === "SKIPPED" || (job.state === "CANCELLED" && stopped)) && (
-        <section aria-labelledby="why" className={s.why}>
+        <section aria-labelledby="why" className={`${s.why} ${s[`why_${why || "neutral"}`] ?? ""}`}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v6M12 17h.01" /></svg>
           <div>
             <h2 id="why">{stopped ? `停在“${stopped.name}”：${label}` : label}</h2>
@@ -127,9 +146,9 @@ export function JobPage({ id }: { id: string }) {
             {steps.map((step, i) => {
               const shown = all || open.has(`${i}`);
               return (
-                <li key={i} className={step.state === "stop" ? `${s.step} ${s.stepStop}` : s.step}>
+                <li key={i} className={step.state === "stop" ? `${s.step} ${s[`stepStop_${why || "neutral"}`]}` : s.step}>
                   <button type="button" className={s.stepButton} aria-expanded={shown} onClick={() => toggle(`${i}`)}>
-                    <span aria-hidden="true" className={`${s.stepMark} ${s[`mark_${step.state}`]}`}>{MARK[step.state]}</span>
+                    <span aria-hidden="true" className={`${s.stepMark} ${s[step.state === "stop" ? `mark_stop_${why || "neutral"}` : `mark_${step.state}`]}`}>{MARK[step.state]}</span>
                     <span className={s.stepText}><b>{step.name}</b><span>{step.summary}</span></span>
                     <span className={s.took}>{step.tookMs > 0 ? seconds(step.tookMs) : ""}</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className={s.chevron}><path d={shown ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"} /></svg>
@@ -158,7 +177,7 @@ export function JobPage({ id }: { id: string }) {
 
 /**
  * Where to go after a run that did not finish, by how it ended: a failure to its settings, a held or skipped one to
- * the device or the plan, an unconfirmed one to the phone (放弃本次 is with the other controls).
+ * the device or the plan; an unconfirmed one is settled by 做完了 / 重做这步 / 放弃本次 with the other controls.
  */
 export function NextSteps({ job }: { job: Job }) {
   const { data } = useConsole();
@@ -166,14 +185,19 @@ export function NextSteps({ job }: { job: Job }) {
   const reason = `${job.detail} ${job.waitReason ?? ""}`;
   const links: [string, string][] = [];
   const settings = job.accountId && data.accounts.some((item) => item.id === job.accountId) ? paths.taskDetail(job.targetId, job.taskId, job.accountId) : null;
-  const plan = job.planId && job.accountId && data.plans.some((item) => item.id === job.planId) ? paths.planEdit(job.accountId, job.planId) : null;
+  const planOf = job.planId ? data.plans.find((item) => item.id === job.planId) : undefined;
+  const plan = planOf && job.accountId ? paths.planEdit(job.accountId, planOf.id) : null;
+  // The task set on its own in the plan it came from: its values are the plan's, so that is where to change them.
+  const ownInPlan = planOf && job.accountId && planOf.taskConfigs && Object.prototype.hasOwnProperty.call(planOf.taskConfigs, job.taskId)
+    ? paths.planTaskConfig(job.accountId, planOf.id, job.taskId) : null;
   if (job.state === "FAILED") {
-    if (settings) links.push(["调整参数", settings]);
+    if (ownInPlan) links.push(["调整本计划参数", ownInPlan]);
+    else if (settings) links.push(["调整参数", settings]);
     if (device) links.push(["看设备", paths.device(device.id)]);
   } else if (job.state === "UNKNOWN") {
-    if (device) links.push(["去设备核对", paths.device(device.id)]);
+    if (device) links.push(["看设备", paths.device(device.id)]);
   } else if (job.state === "SKIPPED" || (job.state === "CANCELLED" && !job.cancelRequested)) {
-    if (/Pro|会员/.test(reason)) links.push(["开通会员", paths.meAccount]);
+    if (/Pro|会员/.test(reason)) links.push(["开通会员", PRO_REDEEM]);
     else if (/编号|昵称|账号/.test(reason) && job.accountId) links.push(["补全账号", paths.account(job.accountId)]);
     if (/离线|设备/.test(reason) && device) links.push(["看设备", paths.device(device.id)]);
     if (plan) links.push(["看计划", plan]);
