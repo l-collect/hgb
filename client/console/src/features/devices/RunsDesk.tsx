@@ -6,7 +6,8 @@ import { ACTIVE, jobStatus, jobWaiting, shortTime, waitNext, waitReason } from "
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
 import { useDesk } from "../../shell/useWidth";
-import { StoppedOn, whyTone } from "../jobs/JobPage";
+import { FixStep, StoppedOn, useStop, whyTone } from "../jobs/JobPage";
+import { useDeveloper } from "../../state/developer";
 import { canRerun, FILTER_STATES, jobPlace, JobControls, MoreRuns, rerun, runNote, useJob, useJobPages } from "../jobs/runs";
 import { NextSteps } from "../jobs/JobPage";
 import d from "../../shell/Desk.module.css";
@@ -138,7 +139,10 @@ export function RunsDesk() {
   );
 }
 
-/** A run beside the table: how it ended and why, the screen it stopped on, and what can be done with it now. */
+/**
+ * A run beside the table: how it ended and why, the screen it stopped on, and what can be done with it now. A developer
+ * also gets 详情 (the run's page with every step) and, when it failed or waits on a check, 去改这一步.
+ */
 function JobSide({ job }: { job: Job }) {
   const { data } = useConsole();
   const again = useAction();
@@ -148,6 +152,8 @@ function JobSide({ job }: { job: Job }) {
   const why = whyTone(job);
   const waiting = jobWaiting(job, data.devices);
   const accountExists = data.accounts.some((item) => item.id === job.accountId);
+  const developer = useDeveloper();
+  const stop = useStop(job, developer);
   return (
     <Card flush as="article" aria-label="战报详情">
       <div className={s.sideHead}><b>{job.taskName}{job.accountName ? ` · ${job.accountName}` : ""}</b><Pill tone={tone}>{label}</Pill></div>
@@ -162,10 +168,10 @@ function JobSide({ job }: { job: Job }) {
             <Button small variant="primary" disabled={again.busy} onClick={() => again.run(() => rerun(job, data.devices))}>重跑</Button>
           )}
           <JobControls job={job} small />
-          <Link to={paths.job(job.id)} className={s.full}>步骤明细 ›</Link>
+          <Link to={paths.job(job.id)} className={s.full}>{developer ? "详情 ›" : "战报 ›"}</Link>
         </div>
         {again.message && !again.message.ok && <p role="alert" className={s.bad}>{again.message.text}</p>}
-        <NextSteps job={job} />
+        <NextSteps job={job} fix={developer ? <FixStep job={job} stop={stop} /> : null} />
       </div>
     </Card>
   );

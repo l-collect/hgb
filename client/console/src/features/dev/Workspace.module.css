@@ -43,7 +43,6 @@
 }
 :global(:root[data-theme="dark"]) .script { --hl-keyword: #b79bff; --hl-string: #5fd3a3; --hl-region: #7fb0ff; --hl-number: #ffa36b;
   --hl-comment: #9a98a8; --hl-operator: #f2bf62; --hl-label: #ff8fc4; --hl-setting: #5ed2e6; }
-.blocks { padding: 24px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .linkish { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .linkish:hover { text-decoration: underline; }
 .select { min-height: 30px; border: 1px solid var(--color-control); border-radius: var(--radius-sm); padding: 0 8px; background: var(--color-surface); color: inherit; font: inherit; font-size: var(--text-sm); }
@@ -126,3 +125,9 @@
 .blocked { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 6px 10px; border-left: 3px solid var(--color-danger); background: var(--color-danger-bg); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: var(--text-sm); }
 .blocked b { color: var(--color-danger); }
 .helpItem > span { color: var(--color-muted); font-size: var(--text-xs); }
+/* 画板: the board takes the middle; the right column narrows and holds the chosen card's drawer. */
+.layout[data-view="canvas"] { grid-template-columns: 172px minmax(0, 1fr) 340px; }
+.drawerHost { flex: 1; min-height: 0; flex-direction: column; }
+.narrow, .converted { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-md); font-size: var(--text-sm);
+  background: var(--color-warn-bg); border: 1px solid var(--color-warn-line); color: var(--color-warn-ink); }
+.converted { background: var(--color-ok-bg); border-color: transparent; color: var(--color-ok); }

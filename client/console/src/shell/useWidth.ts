@@ -21,5 +21,7 @@ function useMedia(query: string): boolean {
 export const useWide = () => useMedia(`(min-width: ${BREAKPOINT.wide}px)`);
 /** ≥1440: the third column (context) beside the detail. */
 export const useDesk = () => useMedia(`(min-width: ${DESK}px)`);
+/** ≥1280: the full sidebar with names (below it the rail of icons). */
+export const useFull = () => useMedia("(min-width: 1280px)");
 /** <600: the top bar and the four tabs at the bottom. */
 export const useNarrow = () => useMedia(`(max-width: ${BREAKPOINT.medium - 1}px)`);

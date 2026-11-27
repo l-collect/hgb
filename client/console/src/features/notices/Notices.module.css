@@ -15,7 +15,6 @@
 .rule { align-items: center; }
 .ruleText { display: flex; flex-direction: column; flex: 1 1 260px; }
 .value { display: inline-flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: var(--text-sm); }
-.value input { width: 72px; min-height: var(--control-height-sm); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   min-height: 32px; padding: 0 12px; border-radius: var(--radius-pill); border: 1px solid var(--color-control); background: var(--color-surface);

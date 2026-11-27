@@ -9,6 +9,7 @@ import { ask } from "../../components/Confirm";
 import { platformName, shortTime } from "../../format";
 import { Link, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
+import { useDeveloper } from "../../state/developer";
 import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
 import { APP_DOWNLOAD } from "../onboarding/Onboarding";
 import { BindEmail, DeleteAccount, MergeCard } from "./AccountActions";
@@ -57,6 +58,8 @@ export function useNoticeLine(): string | null {
 export function MePage() {
   const { data, account: initial, setAccount: share } = useConsole();
   const [account, setAccount] = useState(initial);
+  // 开发者工作台 only for developers; on a narrow window this is their way in.
+  const developer = useDeveloper();
   // Read again: a code redeemed on 会员与账号 changes the tier shown here (and the console's Pro locks).
   useEffect(() => { api<Account>("/api/me").then((next) => { setAccount(next); share(next); }).catch(() => {}); }, [share]);
   const [look, setLook] = useState<Appearance>(readAppearance);
@@ -92,12 +95,12 @@ export function MePage() {
         <Link className={s.linkRow} to={paths.privacy}><span>隐私政策</span><span className={ui.tiny}>›</span></Link>
         <Link className={s.linkRow} to={paths.terms}><span>服务条款</span><span className={ui.tiny}>›</span></Link>
       </Card>
-      <Card flush as="section" aria-label="开发者工作台">
+      {developer && <Card flush as="section" aria-label="开发者工作台">
         <Row>
           <Grow><b className={s.semi}>开发者工作台</b><span className={ui.tiny} style={{ display: "block" }}>采样、试跑、联调</span></Grow>
           <ButtonLink small to={paths.dev}>进入</ButtonLink>
         </Row>
-      </Card>
+      </Card>}
     </div>
   );
 }

@@ -19,6 +19,7 @@
 .canvas img { width: 100%; display: block; pointer-events: none; }
 .box { position: absolute; border: 2px solid var(--color-warn); border-radius: 3px; box-sizing: border-box; pointer-events: none; }
 .box[data-kind="new"] { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 18%, transparent); }
+.box[data-kind="hit"] { border-color: var(--color-ok); border-style: dashed; }
 .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .note { font-size: 11px; }
 .filters { display: flex; gap: 6px; }

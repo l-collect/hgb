@@ -13,6 +13,7 @@ import { ProLimitButton, ProLockButton, ProLockRow } from "../../components/Pro"
 import { favKey, RunNeeds, StarButton, taskState, useFavorites } from "./LibraryPage";
 import { InstallAppCard } from "../onboarding/Onboarding";
 import d from "../../shell/Desk.module.css";
+import { DevTaskMenu } from "./DevActions";
 import s from "./Library.module.css";
 
 type Place = { value: string; label: string; device: Device; app: App };
@@ -168,6 +169,7 @@ function TaskPane({ game, task, account, note, runBusy, onRun, locked }: {
     <span className={s.titleLine}>
       <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: 700 }}>{task.name}</h2>
       <StarButton on={favorites.has(key)} toggle={() => toggleFavorite(key)} />
+      <DevTaskMenu gameId={game.id} taskId={task.taskId} />
       {note}
     </span>
   );

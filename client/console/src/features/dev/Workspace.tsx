@@ -1,6 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ask } from "../../components/Confirm";
 import { Chips, MoreMenu, Pill, SegmentTabs } from "../../components/ui";
+import type { CanvasRun } from "./canvas/Canvas";
+import { ToScript } from "./canvas/ToScript";
+import { ConfigTab } from "./config/ConfigTab";
+import { useTestValues } from "./config/testValues";
 import { Link, navigate, usePath, useQuery } from "../../router";
 import { dev, dropped, follow, issuesOf, queued, runId, sampleNow, type CheckIssue, type CheckRequest, type DevRun, type DevTrace, type IssueWhere, type Obj, type Sample, type Template } from "./api";
 import { devPaths, EDIT_CONFLICT, failure, PATCH_CONFLICT, useDev, type Edit } from "./context";
@@ -26,6 +30,15 @@ import s from "./Workspace.module.css";
 
 // The editor (CodeMirror) loads only when a script is opened, so the rest of the console stays light.
 const ScriptEditor = lazy(() => import("./ScriptEditor").then((m) => ({ default: m.ScriptEditor })));
+// 画板 (React Flow) too, only when it is opened.
+const Canvas = lazy(() => import("./canvas/Canvas"));
+/** 画板 needs a window this wide; narrower, the script shows (and ?view=canvas stays, to come back when it widens). */
+const CANVAS_MIN = 1280;
+function useWide(min: number) {
+  const [wide, setWide] = useState(() => typeof window === "undefined" || window.innerWidth >= min);
+  useEffect(() => { const on = () => setWide(window.innerWidth >= min); window.addEventListener("resize", on); return () => window.removeEventListener("resize", on); }, [min]);
+  return wide;
+}
 
 const CATEGORY: Record<string, string> = { daily: "日常", weekly: "每周", event: "活动", account: "账号" };
 
@@ -58,7 +71,7 @@ const HELP: [string, string, string?][] = [
   ["长等待 300秒 / 等待 2秒", "放宽看门狗 / 干等", "等待 2秒"],
 ];
 
-type Tab = "run" | "problems" | "screen" | "help";
+type Tab = "run" | "problems" | "screen" | "help" | "config";
 type Issue = { line: number | null; reason: string; location: string; where?: IssueWhere | null; warning?: boolean };
 /** A problem as listed and marked: from the server's check, or found here on the spot. */
 type Shown = { line: number | null; reason: string; warning: boolean; col?: number; len?: number };
@@ -109,6 +122,35 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const owner = body && key ? ownerIn(body, key) : undefined;
   const saved = key ? savedOf(key) : undefined;
   const isScript = typeof saved === "string";
+  // 脚本 | 画板: ?view=canvas, kept across a reload; ⌘E switches.
+  const wantCanvas = query.get("view") === "canvas";
+  const wide = useWide(CANVAS_MIN);
+  const [narrowSeen, setNarrowSeen] = useState(false);
+  const showCanvas = wantCanvas && wide && isScript;
+  const setView = useCallback((canvas: boolean) => {
+    const q = new URLSearchParams(window.location.search);
+    if (canvas) q.set("view", "canvas"); else q.delete("view");
+    navigate(window.location.pathname + (q.toString() ? `?${q}` : ""), { replace: true });
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "e" && isScript) { e.preventDefault(); setView(!wantCanvas); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isScript, wantCanvas, setView]);
+  useEffect(() => { if (wide) setNarrowSeen(false); }, [wide]);
+  const [drawerHost, setDrawerHost] = useState<HTMLDivElement | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editorRoot, setEditorRoot] = useState<HTMLDivElement | null>(null);
+  // A change made on the board is saved by itself a moment later (改动即时写回), through the same save as ⌘S: by
+  // script, the text the board left. Typing in the script view (after ⌘E, say) is not saved by itself.
+  const boardText = useRef(new Map<OwnerKey, string>());
+  const [boardTick, setBoardTick] = useState(0);
+  const markBoard = useCallback((k: OwnerKey, t: string) => { boardText.current.set(k, t); setBoardTick((n) => n + 1); }, []);
+  // 积木 rewritten as a script here: the node as it was, for 撤销; keys undone are not rewritten again by themselves.
+  const [converted, setConverted] = useState<{ key: OwnerKey; before: Obj; script: string } | null>(null);
+  const undoneKeys = useRef(new Set<OwnerKey>());
   const text = key && edits[key] !== undefined ? edits[key] : saved ?? "";
   const textNow = useRef(text); textNow.current = text;
   const dirtyKeys = Object.keys(edits).filter((k) => savedOf(k) !== undefined && edits[k] !== savedOf(k));
@@ -179,6 +221,27 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     }
   }, [edits, saveScript, scoped, key]);
   const openKeyRef = useRef<(k: OwnerKey) => void>(() => undefined);
+  const saveRef = useRef(save); saveRef.current = save;
+  const editsRef = useRef(edits); editsRef.current = edits;
+  const holdRef = useRef<(k: OwnerKey) => boolean>(() => false);
+  holdRef.current = (k) => !!refused || conflicts.includes(scoped(k));
+  useEffect(() => {
+    for (const [k, t] of [...boardText.current]) if (edits[k] !== t) boardText.current.delete(k);
+    if (!boardText.current.size) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const run = async () => {
+      // A save under way: try again when it is done.
+      if (savingRef.current) { timer = setTimeout(() => void run(), 500); return; }
+      for (const [k, t] of [...boardText.current]) {
+        if (editsRef.current[k] !== t) { boardText.current.delete(k); continue; }
+        if (holdRef.current(k)) continue;
+        boardText.current.delete(k);
+        await saveRef.current(k);
+      }
+    };
+    timer = setTimeout(() => void run(), 2000);
+    return () => clearTimeout(timer);
+  }, [edits, boardTick]);
 
   // ---- checking: only this script, as it would be with this text, a moment after typing stops. A newer check
   // cancels the one before (here and, by the revision, on the server); the last result stays, marked 可能过期, until
@@ -325,6 +388,7 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const template = useCallback((name: string): TemplateView | null => names.templates.includes(name) ? { src: dev.templateImage(game, name), meta: sizes[name] ?? "模板" } : null, [names, game, sizes]);
 
   // ---- trials: the task's newest one, followed while it goes on
+  const tv = useTestValues(taskId ?? "");
   const [run, setRun] = useState<DevRun | null>(null);
   // Starting: the server compiles the draft first (about half a minute), then the phone takes it.
   const [preparing, setPreparing] = useState(false);
@@ -354,8 +418,9 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     if (!running(x) || startingRef.current || startedHere.has(x.id) || shown.current === "") return;
     shown.current = x.id; setRun(x); setFromPhone(true); setRunError(null);
   }, [game, taskId]);
-  const presets = task ? testValues(task.fields) : [];
-  const values = preset === -1 && custom ? custom : presets[preset]?.[1] ?? presets[0]?.[1] ?? {};
+  // The first choice is the test values shared with 配置项 and 画板 (set there by hand, else each default).
+  const presets: [string, Obj][] = task ? testValues(task.fields).map(([name, v], i) => [i === 0 ? "测试值" : name, v] as [string, Obj]) : [];
+  const values = preset === -1 && custom ? custom : preset === 0 ? tv.trial : presets[preset]?.[1] ?? tv.trial;
   const start = async () => {
     if (!task || !device || startingRef.current) return;
     startingRef.current = true; setStarting(true);
@@ -410,6 +475,48 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const typing = !!key && edits[key] !== undefined && edits[key] !== saved;
   if (!typing || shownMarks.current.key !== key) shownMarks.current = { key, value: fresh };
   const { marks, failed } = shownMarks.current.value;
+  // The same trial for 画板: by line of this script, how it went there, the lines it went through one after another.
+  const boardRun = useMemo((): CanvasRun | null => {
+    if (!key || !run || !run.traces.length && !running(run)) return null;
+    const lines = new Map<number, { tone: "ok" | "bad" | "running"; ms: number; times: number }>();
+    const walked = new Set<string>();
+    let prev: number | null = null; let steps = 0;
+    run.traces.forEach((tr, i) => {
+      const here = places[i]?.filter((x) => x.key === key).at(-1);
+      if (!here) return;
+      const was = lines.get(here.line);
+      const tone = i === failIndex ? "bad" : ok(tr.result) ? "ok" : was?.tone ?? "ok";
+      lines.set(here.line, { tone: was?.tone === "bad" ? "bad" : tone, ms: (was?.ms ?? 0) + tr.elapsedMs, times: (was?.times ?? 0) + (was && prev === here.line ? 0 : 1) });
+      if (prev !== null && prev !== here.line) walked.add(`${prev}>${here.line}`);
+      if (prev !== here.line) steps++;
+      prev = here.line;
+    });
+    const busyNow = running(run);
+    if (busyNow && prev !== null) lines.set(prev, { ...(lines.get(prev) ?? { ms: 0, times: 1 }), tone: "running" });
+    const secs = Math.max(0, Math.round((run.updatedAt - run.createdAt) / 1000));
+    if (!steps && !busyNow) return null;
+    return { lines, walked, busy: busyNow, failure: failed, screen: run.screen ? dev.runScreen(run.id) : null, secs, steps, passed: completed(run) };
+  }, [key, run, places, failIndex, failed]);
+
+  // What the board's cards need: named regions (to frame them), how long each snippet is.
+  // The task's settings, the same array until the draft changes (a new one each render would redraw the board).
+  const boardFields = useMemo(() => body && taskId ? tasks(body).find((t) => t.id === taskId)?.fields ?? [] : [], [body, taskId]);
+  const regions = useMemo((): Record<string, number[]> => {
+    if (!body) return {};
+    const g = objs(body.targets).find((t) => t.id === (task?.raw.targetId ?? objs(body.targets)[0]?.id));
+    const lib = isObj(g?.library) ? g.library : {};
+    const rs = isObj(lib.regions) ? lib.regions : {};
+    const out: Record<string, number[]> = {};
+    for (const [name, v] of Object.entries(rs)) {
+      const list = Array.isArray(v) ? v : isObj(v) && Array.isArray(v.within) ? v.within : null;
+      if (list && list.length === 4 && list.every((n) => typeof n === "number")) out[name] = list as number[];
+    }
+    return out;
+  }, [body, taskId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const snippetLines = useCallback((name: string) => {
+    const t = savedOf(snippetKey(name));
+    return t === undefined ? undefined : t.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).length;
+  }, [savedOf]);
 
   if (!draft || !body) return null;
   if (taskId && !task) return <div className={s.missing}><div className={w.card}><div className={w.empty}>草稿里没有这个任务</div></div></div>;
@@ -417,9 +524,11 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
   const busy = starting || running(run);
   const openKey = (k: OwnerKey, line?: number) => {
     if (line) setGoTo({ key: k, line, at: Date.now() });
-    if (!task) { navigate(devPaths.snippet(k.slice(8))); return; }
+    // 画板 stays 画板 while moving between steps and snippets.
+    const q = wantCanvas ? "?view=canvas" : "";
+    if (!task) { navigate(devPaths.snippet(k.slice(8)) + q); return; }
     const st = task.steps.find((x) => ownerOfStep(x) === k);
-    navigate(st ? devPaths.step(task.id, String(st.id)) : devPaths.taskSnippet(task.id, k.slice(8)));
+    navigate((st ? devPaths.step(task.id, String(st.id)) : devPaths.taskSnippet(task.id, k.slice(8))) + q);
   };
   openKeyRef.current = (k) => openKey(k);
   const lines = (k: OwnerKey) => (savedOf(k) ?? "").split("\n").length;
@@ -445,21 +554,32 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
     const o = otherErrors[0]; const place = o ? placeAt(o.where, body) ?? locate(o.location, body) : null;
     if (place) navigate(place.to); else setTab("problems");
   };
-  const tabs: [Tab, string][] = [...(task ? [["run", "试跑"] as [Tab, string]] : []), ["problems", shownIssues.length || otherShown.length ? `问题 ${shownIssues.length + otherShown.length}` : "问题"], ["screen", "画面"], ["help", "写法"]];
+  const tabs: [Tab, string][] = [...(task ? [["run", "试跑"] as [Tab, string]] : []), ["problems", shownIssues.length || otherShown.length ? `问题 ${shownIssues.length + otherShown.length}` : "问题"],
+    ...(task ? [["config", "配置项"] as [Tab, string]] : []), ["screen", "画面"], ["help", "写法"]];
+  const ownerPath = key ? (key.startsWith("snippet:") ? `snippets:${key.slice(8)}` : `tasks:${taskId}/steps:${key.slice(5)}`) : "";
+  const undoConvert = async () => {
+    if (!converted || !key) return;
+    const before = converted.before;
+    // Changed since it was rewritten: going back to the blocks drops those changes, so ask first.
+    if (text !== converted.script && !await ask({ title: "撤销改写？", body: "改写之后在脚本里的改动会丢掉，回到原来的积木", ok: "撤销改写", cancel: "保留脚本", danger: true })) return;
+    const problem = await apply(async (b) => { const now = ownerIn(b, converted.key); return now ? [{ op: "put", path: ownerPath, expect: await nodeDigest(now), value: before }] : []; });
+    if (problem) { say(problem); return; }
+    undoneKeys.current.add(scoped(converted.key)); setConverted(null); setEdit(key, undefined);
+  };
 
   return (
-    <div className={s.layout}>
+    <div className={s.layout} data-view={showCanvas ? "canvas" : undefined}>
       <nav aria-label="步骤和片段" className={s.tree}>
         {task ? <>
           <div className={s.taskHead}>
             <b className={s.taskName} title={task.name}>{task.name}</b>
             <span className={w.muted}>{category} · <Link to={devPaths.config(task.id)}>配置 {task.fields.length} ›</Link></span>
           </div>
-          <Steps task={task} current={step && !snippetId ? String(step.id) : null} run={run} failIndex={failIndex} dirty={dirtyKeys} lines={lines}
+          <Steps query={wantCanvas ? "?view=canvas" : ""} task={task} current={step && !snippetId ? String(step.id) : null} run={run} failIndex={failIndex} dirty={dirtyKeys} lines={lines}
             onAdd={async (name, wanted) => {
               const sid = uniqueId(wanted || name, task.steps.map((x) => String(x.id)), "step");
               const problem = await apply([{ op: "insert", path: `tasks:${task.id}`, field: "steps", after: task.steps.length ? String(task.steps.at(-1)!.id) : null, value: { id: sid, name, script: "" } }]);
-              if (problem) say(problem); else navigate(devPaths.step(task.id, sid));
+              if (problem) say(problem); else navigate(devPaths.step(task.id, sid) + (wantCanvas ? "?view=canvas" : ""));
             }} />
         </> : <div className={s.taskHead}><b>片段</b><span className={w.muted}>{allSnippets.length} 个</span></div>}
         <SnippetList ids={task ? usedSnippets(body, task.raw) : allSnippets.map((sn) => String(sn.id))} title={task ? "用到的片段" : ""} current={key} dirty={dirtyKeys} uses={uses} onOpen={openKey} />
@@ -474,6 +594,8 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
         {key && owner ? <>
           <div className={s.bar}>
             <b className={s.barName}>{stepNo ? `${stepNo} · ` : ""}{label}</b>
+            {isScript && <span title="⌘E 切换"><SegmentTabs label="编辑方式" items={[["script", "脚本"], ["canvas", "画板"]]} value={showCanvas ? "canvas" : "script"}
+              onChange={(v) => { setNarrowSeen(false); setView(v === "canvas"); }} /></span>}
             {task && step && !snippetId && <StepTools task={task} step={step} apply={apply} onMessage={say} onRemoved={() => setEdit(ownerOfStep(step), undefined)} />}
             {key.startsWith("snippet:") && <Pill>片段 · 用在 {uses(key.slice(8))} 处</Pill>}
             <span className={s.grow} />
@@ -490,23 +612,38 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
           {conflicted && isScript && !refused && <Conflict theirs={saved ?? ""} mine={text} busy={saving}
             onMine={async () => { if (await save(key, true)) say(null); }}
             onTheirs={() => { setEdit(key, undefined); setMessage(["已换成别处的版本", true]); }} />}
-          {isScript ? (
-            <div className={`${w.card} ${s.script}`}>
+          {converted && converted.key === key && <div role="status" className={s.converted}>已把积木改写成脚本
+            <button type="button" className={`${w.btn} ${w.sm}`} onClick={() => void undoConvert()}>撤销</button>
+            <button type="button" className={`${s.linkish} ${w.muted}`} aria-label="关掉提示" onClick={() => setConverted(null)}>✕</button></div>}
+          {wantCanvas && !wide && isScript && !narrowSeen && <div role="status" className={s.narrow}><b>画板需要更宽的窗口</b><span className={w.muted}>已切到脚本，窗口拉宽到 {CANVAS_MIN} 以上会回到画板</span>
+            <button type="button" className={`${w.btn} ${w.sm}`} onClick={() => setNarrowSeen(true)}>知道了</button></div>}
+          {isScript ? <>
+            <div ref={setEditorRoot} className={`${w.card} ${s.script}`} style={showCanvas ? { display: "none" } : undefined}>
               <Suspense fallback={<div className={w.empty}>正在打开编辑器…</div>}>
                 <ScriptEditor key={key} value={text} onChange={(v) => setEdit(key, v === saved ? undefined : v)} onSave={() => { if (!conflicted) void save(key); }} onCursor={setCursor}
-                  problems={problems} names={names} goTo={goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)} marks={marks} failure={failed} template={template} setting={setting} />
+                  problems={problems} names={names} goTo={!showCanvas && goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)} marks={marks} failure={failed} template={template} setting={setting} />
               </Suspense>
             </div>
-          ) : (
-            <div className={`${w.card} ${s.blocks}`}>
-              <b>这{key.startsWith("snippet:") ? "个片段" : "一步"}是积木写的</b>
-              <Link className={w.btn} to={key.startsWith("snippet:") ? devPaths.snippetBlocks(key.slice(8)) : devPaths.blocks(taskId!, key.slice(5))}>打开积木</Link>
-            </div>
+            {showCanvas && <Suspense fallback={<div className={`${w.card} ${w.empty}`}>正在打开画板…</div>}>
+              <Canvas key={key} text={text} onText={(v) => { markBoard(key, v); setEdit(key, v === saved ? undefined : v); }} onBoardText={(v) => markBoard(key, v)}
+                lock={conflicted || refused ? "这一步在别处被改过 · 你的改动还在，先在上面选用哪边；选完前画板只读" : null}
+                taskId={task?.id} stepId={step && !snippetId ? String(step.id) : undefined} fields={boardFields} names={names} game={game} problems={problems}
+                run={boardRun} goTo={goTo && goTo.key === key ? goTo : null} onJumped={() => setGoTo(null)}
+                onScript={(line) => { setView(false); if (line) setGoTo({ key, line, at: Date.now() }); }} onSnippet={(name) => openKey(snippetKey(name))}
+                editorRoot={editorRoot} onSave={() => { if (!conflicted) void save(key); }} onRetry={task && device && !offline && !busy ? () => void start() : null}
+                drawerHost={drawerHost} onDrawer={setDrawerOpen} regions={regions} snippetLines={snippetLines} storeKey={`${game}/${scoped(key)}`}
+                saved={saving ? "保存中…" : dirty ? "未保存" : "已写回"} />
+            </Suspense>}
+          </> : (
+            <ToScript key={key} owner={owner} path={ownerPath} apply={apply} auto={!undoneKeys.current.has(scoped(key))}
+              onConverted={(before, script) => { setConverted({ key, before, script }); setGoTo(null); }} />
           )}
         </> : <div className={`${w.card} ${w.empty}`}>{task ? "还没有步骤 · 在左边加一步" : "还没有片段"}</div>}
       </section>
 
       <aside aria-label="试跑 · 问题 · 画面 · 写法" className={s.aside}>
+        {showCanvas && <div ref={setDrawerHost} className={s.drawerHost} style={{ display: drawerOpen ? "flex" : "none" }} />}
+        {!(showCanvas && drawerOpen) && <>
         <div role="tablist" aria-label="右侧面板" className={s.tabs}>
           {tabs.map(([id, name]) => <button key={id} type="button" role="tab" className={s.tab} aria-selected={tab === id} onClick={() => setTab(id)}>{name}</button>)}
         </div>
@@ -538,7 +675,9 @@ export function Workspace({ task: taskId, step: stepId, snippet: snippetId }: { 
               <code>{h[0]}</code><span className={w.muted}>{h[1]}</span></button>)}
             <span className={w.muted}>区域 @x,y,宽,高 · 条件用“且”连 · # 后是注释</span>
           </div>}
+          {tab === "config" && task && <ConfigTab taskId={task.id} />}
         </div>
+        </>}
       </aside>
     </div>
   );
@@ -577,7 +716,7 @@ function ProblemList({ head, checking, items, fresh, stale, onGo }: { head: stri
 }
 
 /** The task's steps, each with how the trial shown went on it (• = not saved), and a way to add one. */
-function Steps({ task, current, run, failIndex, dirty, lines, onAdd }: { task: TaskDef; current: string | null; run: DevRun | null; failIndex: number;
+function Steps({ task, current, run, failIndex, dirty, lines, onAdd, query }: { query: string; task: TaskDef; current: string | null; run: DevRun | null; failIndex: number;
   dirty: string[]; lines: (k: OwnerKey) => number; onAdd: (name: string, id: string) => unknown }) {
   const tone = (sid: string) => {
     if (!run) return undefined;
@@ -590,7 +729,7 @@ function Steps({ task, current, run, failIndex, dirty, lines, onAdd }: { task: T
       const sid = String(st.id); const k = ownerOfStep(st);
       const what = str(st.use) ? `片段 ${str(st.use)}` : typeof st.script === "string" ? `${lines(k)} 行` : "积木";
       return (
-        <Link key={sid} to={devPaths.step(task.id, sid)} className={s.item} aria-current={current === sid ? "page" : undefined} title={what}>
+        <Link key={sid} to={devPaths.step(task.id, sid) + query} className={s.item} aria-current={current === sid ? "page" : undefined} title={what}>
           <span aria-hidden="true" className={s.dot} data-tone={tone(sid)} />
           <span className={s.itemName}>{i + 1} {str(st.name) ?? sid}</span>
           {dirty.includes(k) && <span className={s.unsavedDot} aria-label="没保存">•</span>}
@@ -952,8 +1091,6 @@ function Peek({ device, onShown }: { device: string; onShown?: (url: string | nu
       <figcaption className={w.muted}>{new Date(shown.at).toTimeString().slice(0, 8)}{label ? ` · ${label}` : ""}{mode !== "off" && rate ? ` · ${rate.toFixed(1)} 帧/秒` : ""}</figcaption></figure>}
   </>;
 }
-
-export const Back = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 5L7 12L14 19" /></svg>;
 
 /** The settings a run condition can test: single and multiple choices, and switches. */
 const testable = (fields: Obj[]) => fields.filter((f) => f.widget === "SWITCH" || ((f.widget === "SINGLE_CHOICE" || f.widget === "MULTI_CHOICE") && objs(f.options).length > 0));

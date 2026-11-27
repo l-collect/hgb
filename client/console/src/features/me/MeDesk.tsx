@@ -5,6 +5,7 @@ import { Button, ButtonLink, Card, CardHead, Grow, MoreMenu, Pill, Row, RowLink,
 import { platformName, shortTime } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
+import { useDeveloper } from "../../state/developer";
 import { ProCount, ProLimitButton, usePro } from "../../components/Pro";
 import { applyAppearance, readAppearance, type Appearance } from "../../theme/appearance";
 import { JumpList } from "../accounts/Settings";
@@ -23,6 +24,8 @@ const GROUPS: [string, string][] = [
  */
 export function MeDesk() {
   const { data } = useConsole();
+  // 开发者工作台 only for developers (they also have the sidebar's 开发 group from 600 wide).
+  const developer = useDeveloper();
   const { account, setAccount, codeInput, setCodeInput, redeem, redeeming, unlink, unbind, logout, expires, isPro, forever, signedOut } = useMeActions();
   // Read again: a code redeemed elsewhere changes the tier shown here.
   useEffect(() => { api<Account>("/api/me").then(setAccount).catch(() => {}); }, [setAccount]);
@@ -39,7 +42,7 @@ export function MeDesk() {
   useEffect(() => { if (asked) { codeBox.current?.scrollIntoView({ block: "center" }); codeBox.current?.focus(); } }, [asked]);
   return (
     <div className={s.page}>
-      <JumpList items={GROUPS} />
+      <JumpList items={developer ? GROUPS : GROUPS.filter(([id]) => id !== "me-dev")} />
       <div className={s.content}>
         <h1 className={s.title}>我的</h1>
         <section id="me-account" className={s.group} aria-labelledby="me-account-h">
@@ -126,12 +129,12 @@ export function MeDesk() {
           </Card>
         </section>
 
-        <section id="me-dev" className={s.group} aria-labelledby="me-dev-h">
+        {developer && <section id="me-dev" className={s.group} aria-labelledby="me-dev-h">
           <h2 id="me-dev-h" className={s.groupTitle}>开发者</h2>
           <Card flush>
             <Row><Grow><b className={s.semi}>开发者工作台</b><span className={ui.tiny} style={{ display: "block" }}>采样、试跑、联调</span></Grow><ButtonLink small to={paths.dev}>进入</ButtonLink></Row>
           </Card>
-        </section>
+        </section>}
       </div>
     </div>
   );

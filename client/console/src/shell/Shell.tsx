@@ -3,13 +3,16 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Mark } from "../components/ui";
 import { Link, paths, usePath } from "../router";
 import { TopBarContext } from "./topBar";
+import { DevGroup, DevRail } from "./DevNav";
+import { useDeveloper } from "../state/developer";
+import { useNarrow, useFull } from "./useWidth";
 import type { Connection } from "../state/console";
 import s from "./Shell.module.css";
 
 export type Section = "tasks" | "accounts" | "devices" | "me" | "dev";
 
 const icon = (d: ReactNode) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">{d}</svg>;
-/** [section, label, short label for the rail and the bottom bar, path, icon]. 开发工作台 is entered from 我的. */
+/** [section, label, short label for the rail and the bottom bar, path, icon]. 开发 (developers only) has a group of its own. */
 const LINKS: [Section, string, string, string, ReactNode][] = [
   ["tasks", "任务与日常", "任务", paths.tasks, icon(<path d="M4 5h6v14H4zM14 5l5 1.5-3.5 13L11 18" />)],
   ["accounts", "账号与计划", "账号计划", paths.accounts, icon(<><rect x="3" y="6" width="18" height="12" rx="3" /><path d="M8 10v4M6 12h4M15 11h.01M17 13h.01" /></>)],
@@ -28,15 +31,20 @@ const PRIMARY = new Set<string>([paths.tasks, "/library", paths.accounts, paths.
  * rail of icons with short labels, and below that a top bar with the section's name and four tabs at the bottom.
  * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1200. [admin] adds
  * 后台管理 (/admin, with a frame of its own) above the connection, or to the top bar when narrow. A page that fails while
- * drawing shows 「这页出错了」 in its place; the frame and its navigation stay.
+ * drawing shows 「这页出错了」 in its place; the frame and its navigation stay. A developer also gets the 开发 group under
+ * the navigation (an icon with the same items floating beside it on the rail; nothing on the bottom bar), and the
+ * workbench (section dev) fills the main area below no padding of its own.
  */
 export function Shell({ section, connection, full, admin, stale, children }: { section: Section; connection: Connection; full?: boolean; admin?: boolean; stale?: boolean; children: ReactNode }) {
-  // The workbench lives under 我的.
-  const current = section === "dev" ? "me" : section;
+  const developer = useDeveloper();
+  const narrow = useNarrow();
+  const fullNav = useFull();
+  // Someone who is not a developer can still open /dev by its address: it then sits under 我的, as before.
+  const current = section === "dev" && !developer ? "me" : section;
   const path = usePath();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   return (
-    <div className={s.shell} data-wide={section === "dev" || full === true}>
+    <div className={s.shell} data-wide={section === "dev" || full === true} data-dev={section === "dev" ? "true" : undefined}>
       <header className={s.top}>
         <Mark size={26} /><b className={s.topTitle}>{TITLES[section]}</b>
         {admin && <Link className={s.topAdmin} to="/admin">后台</Link>}
@@ -51,7 +59,9 @@ export function Shell({ section, connection, full, admin, stale, children }: { s
               <span className={s.linkIcon}>{svg}</span><span className={s.linkLabel}>{label}</span><span className={s.linkShort}>{short}</span>
             </Link>
           ))}
+          {developer && !narrow && !fullNav && <DevRail current={section === "dev"} />}
         </div>
+        {developer && fullNav && <DevGroup />}
         <div className={s.foot}>
           {admin && (
             <Link className={s.link} to="/admin">

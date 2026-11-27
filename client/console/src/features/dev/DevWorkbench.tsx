@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ApiFailure } from "../../api/client";
 import { ask } from "../../components/Confirm";
-import { Mark, Popover } from "../../components/ui";
-import { href, leave, Link, match, navigate, paths, usePath } from "../../router";
+import { Popover } from "../../components/ui";
+import { href, leave, Link, match, navigate, usePath } from "../../router";
 import { useConsole } from "../../state/context";
+import { knownTasks, publishWorkbench, useDeveloper } from "../../state/developer";
+import { useNarrow } from "../../shell/useWidth";
+import frame from "../../shell/Shell.module.css";
 import { dev, type Capability, type DevMe, type DraftPatch, type DraftSummary, type DraftView, type Obj, type PatchConflict, type SyncResult, type TrialRecord } from "./api";
 import { CONFLICT, DevContext, devPaths, EDIT_CONFLICT, failure, PATCH_CONFLICT, scriptPath, useDev, type Edit } from "./context";
 import { PatchConflicts } from "./PatchConflicts";
@@ -12,7 +15,6 @@ import { ConfigPage } from "./ConfigPage";
 import { HomePage, standing } from "./HomePage";
 import { nodeDigest, snippets, str, target, tasks, trialDigest } from "./model";
 import { PagesPage } from "./PagesPage";
-import { ProgramPage } from "./ProgramPage";
 import { PublishPage } from "./PublishPage";
 import { SamplesPage } from "./SamplesPage";
 import { Workspace } from "./Workspace";
@@ -24,8 +26,10 @@ const remembered = (key: string): string | null => { try { return localStorage.g
 const remember = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* private window: chosen for this visit only */ } };
 
 /**
- * The developer workbench (developer-workbench.md), full screen over the console: one top bar (game, the four parts,
- * the draft's revision and sync state, the phone every page uses, publish), then the part chosen.
+ * The developer workbench (developer-workbench.md), in the console's frame (section dev): one top bar (game, the draft's
+ * revision and sync state, the phone every page uses, publish), then the part chosen. The parts (任务脚本, 素材, 页面,
+ * 发布) are the sidebar's 开发 group; where the sidebar has none (a narrow window, or someone who is not a developer
+ * opening /dev by its address) the top bar keeps them as tabs.
  */
 export function DevWorkbench() {
   const { data } = useConsole();
@@ -125,8 +129,15 @@ export function DevWorkbench() {
         const [list, cat, mine] = await Promise.all([dev.drafts(), dev.catalog(), dev.me()]);
         setDrafts(list); setCatalog(cat); setMe(mine);
         const known = [...list.map((d) => d.target), ...gameIds.split(",").filter(Boolean)];
+        // ?game= (a link from the App or a run): that game, remembered; the parameter is dropped from the address.
+        const asked = new URLSearchParams(location.search).get("game");
+        if (asked) {
+          remember(GAME_KEY, asked);
+          const rest = new URLSearchParams(location.search); rest.delete("game");
+          history.replaceState(history.state, "", location.pathname + (rest.size ? `?${rest}` : "") + location.hash);
+        }
         const kept = remembered(GAME_KEY);
-        const id = kept && known.includes(kept) ? kept : list[0]?.target ?? known[0] ?? "onmyoji";
+        const id = kept && (known.includes(kept) || kept === asked) ? kept : list[0]?.target ?? known[0] ?? "onmyoji";
         current.current = id; setGame(id); await Promise.all([load(id), loadTrials(id)]);
       } catch (error) { setProblem(failure(error)); }
       setLoaded(true);
@@ -207,6 +218,8 @@ export function DevWorkbench() {
   }, [game, load]);
   const syncRepo = useCallback(() => replaceDraft<SyncResult>((id) => dev.importLatest(id, true)), [replaceDraft]);
   const restoreSnapshot = useCallback(async (snapshot: string) => (await replaceDraft((id) => dev.restoreSnapshot(id, snapshot))).problem, [replaceDraft]);
+  /** 删除草稿: the server keeps a snapshot, then the repository's latest is imported; unsaved text goes as with a sync. */
+  const deleteDraft = useCallback(async () => (await replaceDraft((id) => dev.deleteDraft(id).then(() => dev.importLatest(id, false)))).problem, [replaceDraft]);
 
   /**
    * Saves one script: held back when the draft's text is no longer the one editing began from (someone changed it
@@ -251,6 +264,20 @@ export function DevWorkbench() {
     standing(t, draft.body, draft.bases, digests, trials.find((x) => x.task === t.id), data.devices).changed).length : 0,
   [draft, digests, trials, data.devices]);
 
+  // The sidebar's 开发 group lists the draft's tasks, marks those with unsaved scripts and counts the changes.
+  const unsavedTasks = Object.keys(edits).filter((k) => k.startsWith("step:")).map((k) => k.slice(5).split("/")[0]).sort().join(",");
+  useEffect(() => {
+    // Open but without a draft yet: still reading, or (read) this game has none; the sidebar waits rather than reading its own.
+    if (!game || !draft) { publishWorkbench({ game: game ?? "", tasks: [], known: [], unsaved: [], changed: 0, loading: !loaded }); return; }
+    publishWorkbench({ game, tasks: tasks(draft.body).map((t) => ({ id: t.id, name: t.name })), known: knownTasks(draft),
+      unsaved: unsavedTasks ? unsavedTasks.split(",") : [], changed });
+  }, [game, draft, unsavedTasks, changed, loaded]);
+  useEffect(() => () => publishWorkbench(null), []);
+  const developer = useDeveloper();
+  const narrow = useNarrow();
+  // The rail (600–1279) floats the same items from its 开发 icon; narrow has no group at all.
+  const tabs = !developer || narrow;
+
   // Old addresses (样本库, 游戏设置, 状态库) land on the part that has them now.
   const moved = redirect(path);
   useEffect(() => { if (moved) navigate(moved + location.search + location.hash, { replace: true }); }, [moved]);
@@ -261,20 +288,18 @@ export function DevWorkbench() {
   const sync = conflicts.length || conflict ? ["冲突", "bad"] : pending > 0 ? ["保存中", "go"] : ["已保存", "ok"];
   const top = (
     <header className={w.top}>
-      <Link to={paths.tasks} className={w.topBack}>← 控制台</Link>
-      <span className={w.topBrand}><Mark size={24} /><b>开发</b></span>
       {game && <Popover label="切换游戏" plain trigger={<span className={w.topChip}>{gameName} ▾</span>}>
         {(close) => <div role="listbox" aria-label="游戏" className={w.menu}>
           {games.map(([id, name]) => <button key={id} type="button" role="option" aria-selected={id === game} className={w.menuItem}
             onClick={() => { close(); void switchGame(id); }}>{name}{drafts.some((d) => d.target === id) ? "" : <span className={w.muted}> · 没草稿</span>}</button>)}
         </div>}
       </Popover>}
-      <nav aria-label="开发工作台" className={w.topNav}>
+      {tabs && <nav aria-label="开发工作台" className={w.topNav}>
         {([["任务", devPaths.home, path === devPaths.home || path.startsWith("/dev/tasks") || path.startsWith("/dev/snippets")],
           ["素材", devPaths.assets, path.startsWith(devPaths.assets)], ["页面", devPaths.pages, path.startsWith(devPaths.pages)],
           ["发布", devPaths.publish, path === devPaths.publish]] as [string, string, boolean][])
           .map(([label, to, on]) => <Link key={label} to={to} className={w.topTab} aria-current={on ? "page" : undefined}>{label}</Link>)}
-      </nav>
+      </nav>}
       <span className={w.topGrow} />
       {draft && <span className={w.topSync} title={`修订 ${draft.revision}`}>{conflicts.length
         ? <Link to={scriptPath(conflicts[0])} title="别处改过你正在编辑的脚本：去选用哪边" data-tone="bad">冲突{conflicts.length > 1 ? ` ${conflicts.length}` : ""} ›</Link>
@@ -322,10 +347,10 @@ export function DevWorkbench() {
     }
     return problem;
   };
-  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, restoreSnapshot, edits, setEdits, setEdit, editBases, conflicts, saveScript, device, setDevice,
+  const value = game ? { game, gameName, draft, catalog, me, trials, digests, reload, reloadTrials, apply, syncRepo, restoreSnapshot, deleteDraft, edits, setEdits, setEdit, editBases, conflicts, saveScript, device, setDevice,
     refused: refused?.conflicts ?? null, resolveRefused: resolve, checkFailed, setCheckFailed } : null;
   return (
-    <div className={w.shell}>
+    <div className={frame.devFrame}>
       {top}
       <main className={w.main} data-full={workspaceAt(path) ? "true" : undefined}>
         {/* In a workspace the card sits at the top of the editor; elsewhere at the top of the page. */}
@@ -356,18 +381,19 @@ function redirect(path: string): string | null {
   if (path === "/dev/samples") return devPaths.assets;
   if ((p = match("/dev/samples/:id", path))) return devPaths.asset(p.id);
   if (path === "/dev/game" || path === "/dev/states") return devPaths.pages;
+  // 积木 pages are gone (scripts only): their old addresses open the script.
+  if ((p = match("/dev/tasks/:task/steps/:step/blocks", path))) return devPaths.step(p.task, p.step);
+  if ((p = match("/dev/snippets/:id/blocks", path))) return devPaths.snippet(p.id);
   return null;
 }
 
 function route(path: string): ReactNode {
   let p: Record<string, string> | null;
   // A task is one workspace: moving between its steps and snippets keeps it (and unsaved text) in place.
-  if ((p = match("/dev/tasks/:task/steps/:step/blocks", path))) return <ProgramPage key={path} task={p.task} step={p.step} />;
   if ((p = match("/dev/tasks/:task/steps/:step", path))) return <Workspace key={`task/${p.task}`} task={p.task} step={p.step} />;
   if ((p = match("/dev/tasks/:task/snippets/:id", path))) return <Workspace key={`task/${p.task}`} task={p.task} snippet={p.id} />;
   if ((p = match("/dev/tasks/:task/config", path))) return <ConfigPage key={p.task} id={p.task} />;
   if ((p = match("/dev/tasks/:task", path))) return <Workspace key={`task/${p.task}`} task={p.task} />;
-  if ((p = match("/dev/snippets/:id/blocks", path))) return <ProgramPage key={path} snippet={p.id} />;
   if ((p = match("/dev/snippets/:id", path))) return <Workspace key="snippets" snippet={p.id} />;
   if ((p = match("/dev/assets/:id", path))) return <SamplesPage id={p.id} />;
   if (path === devPaths.assets) return <SamplesPage />;

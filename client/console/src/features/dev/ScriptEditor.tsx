@@ -1,13 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { autocompletion, closeCompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { HighlightStyle, StreamLanguage, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
-import { EditorState, Prec, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
-import { Decoration, EditorView, GutterMarker, WidgetType, gutter, highlightActiveLine, hoverTooltip, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
+import { EditorState, Prec, RangeSet, StateEffect, StateField, Transaction, type Range } from "@codemirror/state";
+import { Decoration, EditorView, GutterMarker, WidgetType, closeHoverTooltips, gutter, highlightActiveLine, hoverTooltip, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { href as hrefOf, navigate } from "../../router";
-import { inQuote, stripComment, type SettingView } from "./settingUse";
+import { Stepper, Switch, join } from "../../components/ui";
+import { href as hrefOf, match, navigate, usePath } from "../../router";
+import type { Json, Obj } from "./api";
+import { DevContext } from "./context";
+import { objs, str, tasks } from "./model";
+import { inQuote, readsOf, slotOf, slotWhileTyping, stripComment, type SettingView, type Slot } from "./settingUse";
+import { ConfigForm } from "./config/ConfigForm";
+import { NewConfigDialog, type ConfigPreset } from "./config/NewConfigDialog";
+import { fallbackValue, idProblem, isNumeric, labelForRole, numberPreset, rangeText, typeName, typeOf, valueText } from "./config/fields";
+import { useFieldOps } from "./config/ops";
+import { useTestValues } from "./config/testValues";
+import { fieldUses, usesCount, usesText, withEdits } from "./config/uses";
+import k from "./config/config.module.css";
+import w2 from "./Wb.module.css";
 import { atText } from "./coords";
 import { ScreenPick } from "./ScreenPick";
 import { TemplatePicker, type PickerHost } from "./TemplatePicker";
@@ -107,7 +119,8 @@ const highlight = HighlightStyle.define([
   { tag: tags.comment, color: "var(--hl-comment)", fontStyle: "italic" },
   { tag: tags.operator, color: "var(--hl-operator)" },
   { tag: tags.labelName, color: "var(--hl-label)", fontWeight: "600" },
-  { tag: tags.propertyName, color: "var(--hl-setting)", fontWeight: "600", background: "color-mix(in srgb, var(--hl-setting) 12%, transparent)", borderRadius: "3px" },
+  // A setting read ({x}, the name after 按设置): the 配置项 purple, as a small tag (the border comes from cfgField).
+  { tag: tags.propertyName, color: "var(--color-nav-current)", fontWeight: "600", background: "var(--color-primary-soft)", borderRadius: "3px" },
 ]);
 
 /** A setting offered after `{`: [bad] says why it does not suit this place (shown greyed), [needDefault] the `{x|n}` it needs. */
@@ -122,7 +135,9 @@ export interface ScriptNames { templates: string[]; regions: string[]; snippets:
   /** 选图's library and picture; given, the cursor on `图 …` opens it (and the template list yields to it). */
   picker?: PickerHost | null;
   /** Set by the editor: opens 在画面上框一个 for an `@` just typed at [at]. */
-  onPick?: (at: number, point: boolean) => void }
+  onPick?: (at: number, point: boolean) => void;
+  /** Set by the editor in a task's step: opens 新建配置项 from a completion (after `{`, or after `按设置 `). */
+  newConfig?: (req: NewRequest) => void }
 /** A problem on a line, as a wavy underline; [col]/[len] narrow it to part of the line. */
 export interface ScriptProblem { line: number; reason: string; severity?: "error" | "warning"; col?: number; len?: number }
 
@@ -186,8 +201,20 @@ function templateHover(look: () => ((name: string) => TemplateView | null)) {
   });
 }
 
-/** A setting's card when the pointer rests on the name after 按设置 or inside {名}. */
-function settingHover(look: () => ((id: string) => SettingView | null)) {
+/** What the editor knows of the task's settings, read when it draws: none in a snippet (it reads no {x}). */
+interface CfgLook {
+  on: boolean;
+  field: (id: string) => Obj | undefined;
+  /** The test value a trial runs with. */
+  value: (id: string) => Json | undefined;
+  /** How many lines of the task read it, and where. */
+  uses: (id: string) => { count: number; countText: string; text: string };
+  /** 💡 / ⌥↵ on a number, 改测试值 / 改配置项 / 全部改名 on a card. */
+  act: (what: "number" | "test" | "form" | "rename", id: string, pos: number) => void;
+}
+
+/** A setting's card when the pointer rests on the name after 按设置 or inside {名}: what it is, its test value, where it is read, and what to do with it. */
+function settingHover(look: () => ((id: string) => SettingView | null), cfg: () => CfgLook) {
   return hoverTooltip((view, pos) => {
     const line = view.state.doc.lineAt(pos);
     const at = pos - line.from;
@@ -195,21 +222,134 @@ function settingHover(look: () => ((id: string) => SettingView | null)) {
       .concat([...line.text.matchAll(/\{\s*([^{}|\s]+)[^{}]*\}/g)].map((m) => ({ id: m[1], from: m.index! + m[0].indexOf(m[1], 1) })))
       .find((x) => at >= x.from && at <= x.from + x.id.length);
     if (!found) return null;
-    const shown = look()(found.id); if (!shown) return null;
-    return { pos: line.from + found.from, end: line.from + found.from + found.id.length, above: true, create: () => {
+    const shown = look()(found.id);
+    const c = cfg(); const f = c.on ? c.field(found.id) : undefined;
+    if (!shown && !f) return null;
+    const start = line.from + found.from;
+    return { pos: start, end: start + found.id.length, above: true, create: () => {
       const dom = document.createElement("div"); dom.className = "cm-setting-tip";
       const el = (tag: string, text: string, cls?: string) => Object.assign(document.createElement(tag), { textContent: text, className: cls ?? "" });
-      const head = el("div", "", "cm-setting-head"); head.append(el("b", shown.label), el("span", `${shown.id} · ${shown.type}`, "cm-setting-muted"));
+      const head = el("div", "", "cm-setting-head");
+      if (f) head.append(el("span", typeOf(f.widget)?.glyph ?? "#", "cm-cfg-glyph"));
+      head.append(el("b", shown?.label ?? str(f?.label) ?? found.id), el("code", found.id, "cm-setting-muted"));
       dom.append(head);
-      const row = (k: string, v: string) => { if (!v) return; const r = el("div", "", "cm-setting-row"); r.append(el("span", k, "cm-setting-muted"), el("span", v)); dom.append(r); };
-      row("取值", shown.values); row("推荐", shown.recommended); row("归在", shown.step);
-      const a = el("a", "去配置项 ›", "cm-setting-link") as HTMLAnchorElement; a.href = hrefOf(shown.href);
-      a.addEventListener("click", (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(shown.href); });
-      dom.append(a);
+      if (f) {
+        const fallback = fallbackValue(f);
+        const test = c.value(found.id);
+        dom.append(el("div", [typeName(f.widget), isNumeric(f.widget) ? rangeText(f) : shown?.values ?? "", `默认 ${valueText(f, fallback)}`, `测试值 ${valueText(f, test)}`].filter(Boolean).join(" · "), "cm-setting-muted"));
+        const u = c.uses(found.id);
+        dom.append(el("div", u.count ? `用在 ${u.countText}：${u.text}` : "还没有脚本读它", "cm-setting-muted"));
+        const row = el("div", "", "cm-cfg-actions");
+        const button = (text: string, what: "test" | "form" | "rename") => {
+          const b = el("button", text) as HTMLButtonElement; b.type = "button";
+          b.addEventListener("mousedown", (e) => e.preventDefault());
+          b.addEventListener("click", () => { view.dispatch({ effects: closeHoverTooltips }); cfg().act(what, found.id, start); });
+          row.append(b);
+        };
+        button("改测试值", "test"); button("改配置项 ›", "form"); button("全部改名", "rename");
+        dom.append(row);
+      } else if (shown) {
+        const row = (key: string, v: string) => { if (!v) return; const r = el("div", "", "cm-setting-row"); r.append(el("span", key, "cm-setting-muted"), el("span", v)); dom.append(r); };
+        row("取值", shown.values); row("推荐", shown.recommended); row("归在", shown.step);
+        const a = el("a", "去配置项 ›", "cm-setting-link") as HTMLAnchorElement; a.href = hrefOf(shown.href);
+        a.addEventListener("click", (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); navigate(shown.href); });
+        dom.append(a);
+      }
       return { dom };
     } };
   });
 }
+
+/** A number written where a setting could be read instead (反复 最多 5 次, 等待 2秒): what 💡 / ⌥↵ turns into a 配置项. */
+export interface NumberSpot { from: number; to: number; text: string; n: number; unit: string; head: string; line: number; role: string; slot: Slot }
+/** What 新建配置项 was opened for: a number to replace, a `{` being completed, or a `按设置 ` line to write branches under. */
+export type NewRequest = { kind: "number"; spot: NumberSpot } | { kind: "brace"; from: number; to: number; head: string; after: string } | { kind: "branch"; line: number };
+const FIXED_NUMBER = /(?<![\d.,，@|{}\w-])(\d+(?:\.\d+)?)(?=\s*(秒|次))/gu;
+/** The fixed number at [pos], when it stands where the engine can read a setting. */
+function numberAt(state: EditorState, pos: number): NumberSpot | null {
+  const line = state.doc.lineAt(pos);
+  const text = stripComment(line.text);
+  const at = pos - line.from;
+  const head = text.trim().split(/\s+/)[0] ?? "";
+  if (head === "长等待") return null;
+  for (const m of text.matchAll(FIXED_NUMBER)) {
+    const from = m.index!, to = from + m[1].length;
+    if (at < from || at > to || inQuote(text, from)) continue;
+    const slot = slotOf(head, m[2]);
+    if (!slot) return null;
+    const role = m[2] === "秒" ? (head === "等待" ? "等待秒数" : "最多秒数") : head === "反复" ? "反复次数" : head === "直到" ? "直到次数" : "点击次数";
+    return { from: line.from + from, to: line.from + to, text: m[1], n: Number(m[1]), unit: m[2], head, line: line.number, role, slot };
+  }
+  return null;
+}
+
+const refreshCfg = StateEffect.define<null>();
+/** The test value after a line reading settings: 「= 5 测试值」. */
+class TestTail extends WidgetType {
+  constructor(readonly text: string) { super(); }
+  eq(other: TestTail) { return other.text === this.text; }
+  toDOM() { return Object.assign(document.createElement("span"), { className: "cm-cfg-tail", textContent: this.text }); }
+}
+/** 💡 after a fixed number that could be a setting. */
+class Bulb extends WidgetType {
+  /** [from] / [text]: the number it is for; another number gets a new 💡, so a click never acts on an old one. */
+  constructor(readonly from: number, readonly text: string, readonly open: (from: number) => void) { super(); }
+  eq(other: Bulb) { return other.from === this.from && other.text === this.text; }
+  toDOM() {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "cm-cfg-bulb", title: "变成配置项（⌥↵）", textContent: "💡" });
+    b.setAttribute("aria-label", "变成配置项");
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => this.open(this.from));
+    const wrap = Object.assign(document.createElement("span"), { className: "cm-cfg-bulbs" });
+    wrap.append(b, Object.assign(document.createElement("span"), { className: "cm-cfg-key", textContent: "⌥↵" }));
+    return wrap;
+  }
+  ignoreEvent() { return true; }
+}
+/** {x} and 按设置 x as tags, the test values after their lines, and 💡 on the number the cursor is on. */
+function cfgField(look: () => CfgLook) {
+  const build = (state: EditorState): DecorationSet => {
+    const c = look();
+    if (!c.on) return Decoration.none;
+    const doc = state.doc;
+    const ranges: Range<Decoration>[] = [];
+    const tails = new Map<number, { id: string; v: string }[]>();
+    for (const r of readsOf(doc.toString()).reads) {
+      if (r.line > doc.lines) continue;
+      const line = doc.line(r.line);
+      const f = c.field(r.field);
+      const cls = f ? "cm-cfg-tag" : "cm-cfg-tag cm-cfg-unknown";
+      if (r.kind === "number") {
+        const open = line.text.lastIndexOf("{", r.col), close = line.text.indexOf("}", r.col);
+        if (open < 0 || close < 0) continue;
+        ranges.push(Decoration.mark({ class: cls }).range(line.from + open, line.from + close + 1));
+      } else ranges.push(Decoration.mark({ class: cls }).range(line.from + r.col, line.from + r.col + r.len));
+      if (!f) continue;
+      const v = c.value(r.field) ?? (r.kind === "number" && r.fallback !== null ? Number(r.fallback) : undefined);
+      if (v === undefined || v === null) continue;
+      const list = tails.get(r.line) ?? [];
+      if (!list.some((x) => x.id === r.field)) list.push({ id: r.field, v: valueText(f, v) });
+      tails.set(r.line, list);
+    }
+    for (const [n, list] of tails) ranges.push(Decoration.widget({ widget: new TestTail(list.length === 1 ? `= ${list[0].v} 测试值` : list.map((x) => `${x.id} = ${x.v}`).join(" · ")), side: 1 }).range(doc.line(n).to));
+    const sel = state.selection.main;
+    const spot = sel.empty ? numberAt(state, sel.head) : null;
+    if (spot) {
+      ranges.push(Decoration.mark({ class: "cm-cfg-num" }).range(spot.from, spot.to));
+      // At the line's end, after its test values, so the line itself does not move.
+      ranges.push(Decoration.widget({ widget: new Bulb(spot.from, spot.text, (from) => look().act("number", "", from)), side: 2 }).range(doc.lineAt(spot.to).to));
+    }
+    return Decoration.set(ranges, true);
+  };
+  return StateField.define<DecorationSet>({
+    create: build,
+    update: (value, tr) => tr.docChanged || tr.selection || tr.effects.some((e) => e.is(refreshCfg)) ? build(tr.state) : value,
+    provide: (f) => EditorView.decorations.from(f),
+  });
+}
+
+/** A completion with a class of its own on its row (greyed, or the ＋ 新建 one). */
+type Opt = Completion & { class?: string };
 
 /** Completes by place: statement words at a line's start, templates after 图, regions after @, snippets after 用, settings after 按设置. */
 function completer(names: () => ScriptNames) {
@@ -240,13 +380,32 @@ function completer(names: () => ScriptNames) {
       const after = line.text.slice(context.pos - line.from);
       const closed = after.startsWith("}");
       const head = before.trim().split(/\s+/)[0] ?? "";
-      return { from: context.pos - m[1].length, options: (names().braces?.(head, after) ?? []).map((f) => ({
-        label: f.id, type: "property", boost: f.bad ? -50 : 0, class: f.bad ? "cm-option-off" : undefined,
+      const typed = m[1].toLowerCase();
+      const from = context.pos - m[1].length;
+      const options: Opt[] = (names().braces?.(head, after) ?? [])
+        .filter((f) => !typed || f.id.toLowerCase().includes(typed) || f.label.toLowerCase().includes(typed)).map((f) => ({
+        label: f.id, type: "property", class: f.bad ? "cm-option-off" : undefined,
         detail: f.bad ? `${f.detail} · ${f.bad}` : f.needDefault ? `${f.detail} · 要默认值` : f.detail,
-        apply: f.needDefault ? `${f.id}|${f.needDefault}${closed ? "" : "}"}` : closed ? f.id : `${f.id}}` })) };
+        apply: f.needDefault ? `${f.id}|${f.needDefault}${closed ? "" : "}"}` : closed ? f.id : `${f.id}}` }));
+      // Last: a new setting made for this place (its type and unit from the line), written in when saved.
+      const make = names().newConfig;
+      if (make) {
+        const unit = /^[^{}\s]*\}?\s*(秒|次)/.exec(after)?.[1] ?? "";
+        options.push({ label: "＋ 新建配置项…", type: "text", class: "cm-option-new", detail: `数字${unit ? ` · ${unit}` : ""}`,
+          apply: (_v, _c, a, b) => make({ kind: "brace", from: a, to: b, head, after }) });
+      }
+      // Filtered here, so the new one stays last whatever is typed.
+      return { from, options, filter: false };
     }
     m = /^\s*按设置\s+(\S*)$/.exec(before);
-    if (m) return list(names().fields, "property", context.pos - m[1].length);
+    if (m) {
+      const typed = m[1].toLowerCase();
+      const options: Opt[] = names().fields.filter((x) => !typed || x.toLowerCase().includes(typed)).map((label) => ({ label, type: "property" }));
+      const make = names().newConfig;
+      if (make) options.push({ label: "＋ 新建开关 / 单选", type: "text", class: "cm-option-new", detail: "写出分支",
+        apply: () => make({ kind: "branch", line: line.number }) });
+      return { from: context.pos - m[1].length, options, filter: false };
+    }
     // A value line one level under 按设置 x: that setting's values, 其他 and 没有值.
     m = /^(\s+)(\S*)$/.exec(before);
     if (m) {
@@ -330,6 +489,40 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     setSpot({ kind: "insert", key: `insert:${at}`, line: line.number, anchor: at, point });
   } }, template, onCursor, setting };
 
+  // ---- 配置项: in a task's own step, {x} are tags with their test values, a fixed number can become one, and `{` /
+  // `按设置 ` offer a new one. The task and step are the page's (/dev/tasks/<task>/steps/<step>).
+  const ctx = useContext(DevContext);
+  const path = usePath();
+  const route = match("/dev/tasks/:task/steps/:step", path) ?? match("/dev/tasks/:task", path);
+  const cfgTask = ctx?.draft && route ? tasks(ctx.draft.body).find((t) => t.id === route.task) : undefined;
+  const cfgStep = cfgTask ? cfgTask.steps.find((st) => st.id === route?.step) ?? cfgTask.steps[0] : undefined;
+  const cfgOn = !!cfgStep && !str(cfgStep.use);
+  const taskId = cfgTask?.id ?? "";
+  const test = useTestValues(taskId);
+  const ops = useFieldOps(taskId);
+  const cfgBody = useMemo(() => ctx?.draft && cfgTask ? withEdits(ctx.draft.body, taskId, ctx.edits) : null, [ctx?.draft, ctx?.edits, taskId, !!cfgTask]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [newReq, setNewReq] = useState<NewRequest | null>(null);
+  // A branch is written once its new setting is in the draft (it needs the options).
+  const [pendingBranch, setPendingBranch] = useState<{ line: number; id: string } | null>(null);
+  const [pop, setPop] = useState<{ kind: "test" | "rename"; id: string; pos: number } | null>(null);
+  const [formId, setFormId] = useState<string | null>(null);
+  const fieldOf = (id: string) => cfgTask?.fields.find((x) => String(x.id) === id);
+  const cfg = useRef<CfgLook>(null!);
+  const closePop = useRef(() => setPop(null));
+  cfg.current = {
+    on: cfgOn, field: fieldOf, value: (id) => test.values[id] as Json | undefined,
+    uses: (id) => { const list = cfgBody ? fieldUses(cfgBody, taskId, id) : []; return { count: list.length, countText: usesCount(list), text: cfgBody ? usesText(cfgBody, taskId, list) : "" }; },
+    act: (what, id, pos) => {
+      const v = view.current; if (!v) return;
+      if (what === "number") { const spot = numberAt(v.state, pos); if (spot) setNewReq({ kind: "number", spot }); return; }
+      if (what === "form") { setFormId(id); return; }
+      setPop({ kind: what, id, pos });
+    },
+  };
+  if (cfgOn) latest.current.names.newConfig = (req) => setNewReq(req);
+  const cfgKey = cfgOn ? JSON.stringify([cfgTask?.fields, test.values]) : "";
+  useEffect(() => { view.current?.dispatch({ effects: refreshCfg.of(null) }); }, [cfgKey]);
+
   useEffect(() => {
     if (!host.current) return;
     const created = new EditorView({
@@ -337,15 +530,17 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
       state: EditorState.create({
         doc: value,
         extensions: [
-          runField, runGutter, lineNumbers(), highlightActiveLine(), history(), lintGutter(), templateHover(() => latest.current.template), settingHover(() => latest.current.setting),
+          runField, runGutter, lineNumbers(), highlightActiveLine(), history(), lintGutter(), templateHover(() => latest.current.template), settingHover(() => latest.current.setting, () => cfg.current), cfgField(() => cfg.current),
           indentUnit.of("  "), EditorState.tabSize.of(2),
           scriptLanguage, syntaxHighlighting(highlight),
-          autocompletion({ override: [completer(() => latest.current.names)] }),
+          autocompletion({ override: [completer(() => latest.current.names)], optionClass: (c) => (c as Opt).class ?? "" }),
           keymap.of([{ key: "Mod-s", preventDefault: true, run: () => { latest.current.onSave(); return true; } }, indentWithTab, ...defaultKeymap, ...historyKeymap]),
           Prec.highest(keymap.of([{ key: "Escape", run: () => { if (!spotNow.current) return false; closeRef.current(); return true; } },
+            // ⌥↵ on a fixed number: make it a 配置项.
+            { key: "Alt-Enter", run: (v) => { if (!cfg.current.on) return false; const spot = numberAt(v.state, v.state.selection.main.head); if (!spot) return false; cfg.current.act("number", "", spot.from); return true; } },
             // ⌥↓ goes into the open panel (it opens without taking the keyboard, so moving through lines is not caught).
             { key: "Alt-ArrowDown", run: () => { const el = wrap.current?.querySelector<HTMLElement>("[data-panel] [role=listbox], [data-panel] [role=dialog][tabindex]"); if (!el) return false; el.focus(); return true; } }])),
-          EditorView.domEventHandlers({ mousedown: () => { dismissed.current = null; return false; } }),
+          EditorView.domEventHandlers({ mousedown: () => { dismissed.current = null; closePop.current(); return false; } }),
           EditorView.updateListener.of((update) => {
             if (update.selectionSet || update.docChanged) {
               const open = spotNow.current;
@@ -366,7 +561,7 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
             ".cm-template-tip": { display: "flex", gap: "10px", alignItems: "center", padding: "8px", maxWidth: "320px" },
             ".cm-template-tip img": { maxWidth: "96px", maxHeight: "72px", borderRadius: "6px", background: "#2e2a3a", imageRendering: "pixelated" },
             ".cm-template-tip div": { display: "flex", flexDirection: "column", fontSize: "12px" },
-            ".cm-setting-tip": { display: "flex", flexDirection: "column", gap: "3px", padding: "8px 10px", background: "var(--color-surface)", color: "var(--color-ink)", borderRadius: "6px", maxWidth: "340px", fontSize: "12px", lineHeight: "18px" },
+            ".cm-setting-tip": { display: "flex", flexDirection: "column", gap: "3px", padding: "10px 12px", background: "var(--color-surface)", color: "var(--color-ink)", borderRadius: "10px", maxWidth: "360px", fontSize: "12px", lineHeight: "18px", fontFamily: "var(--font-body)" },
             ".cm-setting-head": { display: "flex", gap: "8px", alignItems: "baseline" },
             ".cm-setting-row": { display: "flex", gap: "8px" },
             ".cm-setting-row > :first-child": { flex: "none", width: "28px" },
@@ -382,6 +577,20 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
             "& .cm-tooltip-autocomplete ul li[aria-selected]": { background: "var(--color-nav-current-bg)", color: "var(--color-nav-current)" },
             "& .cm-completionDetail": { color: "var(--color-muted)" },
             "& .cm-option-off": { opacity: ".55" },
+            "& .cm-option-new": { color: "var(--color-primary)", fontWeight: "600", borderTop: "1px solid var(--color-line)" },
+            ".cm-cfg-tag": { border: "1px solid var(--color-primary-line)", borderRadius: "5px", padding: "0 2px", background: "var(--color-primary-soft)", color: "var(--color-nav-current)" },
+            ".cm-cfg-tag *": { background: "transparent !important", color: "inherit !important" },
+            ".cm-cfg-unknown": { borderColor: "var(--color-danger-line)", background: "var(--color-danger-soft)", color: "var(--color-danger)" },
+            ".cm-cfg-tail": { color: "var(--color-faint)", fontStyle: "italic", marginLeft: "14px", fontSize: "12px", fontFamily: "var(--font-body)", userSelect: "none" },
+            ".cm-cfg-num": { borderBottom: "2px dotted var(--color-warn)" },
+            ".cm-cfg-bulbs": { display: "inline-flex", alignItems: "center", gap: "4px", marginLeft: "6px", verticalAlign: "middle", userSelect: "none" },
+            ".cm-cfg-bulb": { display: "inline-grid", placeItems: "center", width: "20px", height: "20px", padding: "0", border: "0", borderRadius: "5px", background: "var(--color-warn-bg)", color: "var(--color-warn)", fontSize: "12px", lineHeight: "20px", cursor: "pointer" },
+            ".cm-cfg-bulb:hover": { boxShadow: "0 0 0 1px var(--color-warn-line)" },
+            ".cm-cfg-key": { fontSize: "11px", color: "var(--color-faint)", fontFamily: "var(--font-body)" },
+            ".cm-cfg-glyph": { width: "20px", height: "20px", borderRadius: "6px", background: "var(--color-primary-soft)", color: "var(--color-primary)", display: "inline-grid", placeItems: "center", fontSize: "11px", fontWeight: "700", flex: "none", alignSelf: "center" },
+            ".cm-cfg-actions": { display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" },
+            ".cm-cfg-actions button": { minHeight: "28px", padding: "0 10px", borderRadius: "7px", border: "1px solid var(--color-control)", background: "var(--color-surface)", color: "var(--color-ink)", font: "inherit", fontSize: "12px", fontWeight: "600", cursor: "pointer" },
+            ".cm-cfg-actions button:hover": { background: "var(--color-bg)" },
           }),
         ],
       }),
@@ -392,11 +601,18 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     return () => { created.scrollDOM.removeEventListener("scroll", scrolled); created.destroy(); view.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A value changed from outside (a save elsewhere, a reload) replaces the text when it differs.
+  // A value changed from outside (a save elsewhere, a reload, a 配置项 renamed or deleted) replaces the text when it
+  // differs: only the part that changed, and out of the undo history, so ⌘Z never puts back an id the 配置项 no
+  // longer has (undoing a rename is done on the 配置项); edits typed before it are still undone around it.
   useEffect(() => {
     const v = view.current; if (!v) return;
     const now = v.state.doc.toString();
-    if (now !== value) v.dispatch({ changes: { from: 0, to: now.length, insert: value } });
+    if (now === value) return;
+    let head = 0;
+    while (head < now.length && head < value.length && now[head] === value[head]) head++;
+    let tail = 0;
+    while (tail < now.length - head && tail < value.length - head && now[now.length - 1 - tail] === value[value.length - 1 - tail]) tail++;
+    v.dispatch({ changes: { from: head, to: now.length - tail, insert: value.slice(head, value.length - tail) }, annotations: Transaction.addToHistory.of(false) });
   }, [value]);
 
   useEffect(() => {
@@ -442,6 +658,67 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
     }
     dismissed.current = open.key; setSpot(null); v.focus();
   };
+  /** Writes the new setting [id] where 新建配置项 was opened for [req] (a number or a `{` being completed). */
+  const writeNew = (req: NewRequest, id: string) => {
+    const v = view.current; if (!v) return;
+    const doc = v.state.doc;
+    if (req.kind === "number") {
+      const at = req.spot;
+      if (doc.sliceString(at.from, at.to) !== at.text) { setNotice("那一行变了，没替换"); v.focus(); return; }
+      v.dispatch({ changes: { from: at.from, to: at.to, insert: `{${id}}` }, selection: { anchor: at.from + id.length + 2 } });
+    } else if (req.kind === "brace") {
+      if (req.from < 1 || doc.sliceString(req.from - 1, req.from) !== "{") { setNotice("那一行变了，没写进去"); v.focus(); return; }
+      const closed = doc.sliceString(req.to, req.to + 1) === "}";
+      v.dispatch({ changes: { from: req.from, to: req.to, insert: closed ? id : `${id}}` }, selection: { anchor: req.from + id.length + 1 } });
+    }
+    v.focus();
+  };
+  /** Line [n] (a `按设置 …` being written) becomes `按设置 id` with a branch per value: 开 / 关, or each option and 其他. */
+  const writeBranch = (n: number, id: string, f: Obj) => {
+    const v = view.current; if (!v) return;
+    const line = n <= v.state.doc.lines ? v.state.doc.line(n) : null;
+    const m = line ? /^(\s*)按设置(\s|$)/.exec(line.text) : null;
+    if (!line || !m) { setNotice("那一行变了，没写分支"); v.focus(); return; }
+    const ind = m[1], child = `${ind}  `, grand = `${ind}    `;
+    const word = (x: string) => /^\S+$/.test(x) && !["其他", "没有值"].includes(x) && !/^["“]/.test(x) ? x : `"${x.replace(/"/g, "")}"`;
+    const out = [`${ind}按设置 ${id}`];
+    if (f.widget === "SWITCH") out.push(`${child}开`, `${grand}# 开着时做什么`, `${child}关`, `${grand}# 关着时做什么（可空）`);
+    else {
+      for (const o of objs(f.options)) out.push(`${child}${word(String(o.value))}`, `${grand}# 选「${str(o.label) ?? String(o.value)}」时做什么`);
+      out.push(`${child}其他`, `${grand}# 别的情况（可空）`);
+    }
+    v.dispatch({ changes: { from: line.from, to: line.to, insert: out.join("\n") }, selection: { anchor: line.from + out.slice(0, 3).join("\n").length } });
+    v.focus();
+  };
+  useEffect(() => {
+    if (!pendingBranch) return;
+    const f = fieldOf(pendingBranch.id); if (!f) return;
+    writeBranch(pendingBranch.line, pendingBranch.id, f); setPendingBranch(null);
+  }, [pendingBranch, cfgTask]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** What 新建配置项 starts from for [req]: the type, range and default the place suggests (settingUse's slots). */
+  const presetOf = (req: NewRequest): { preset: ConfigPreset; place: string; kinds?: ("number" | "switch" | "choice" | "multi" | "other")[] } => {
+    if (req.kind === "number") {
+      const at = req.spot;
+      return { preset: { label: labelForRole(at.role), widget: "NUMBER", ...numberPreset(at.slot, at.n, at.unit === "次" && at.head === "反复" ? "轮" : at.unit), recommended: at.n },
+        place: `替换第 ${at.line} 行的 ${at.text}` };
+    }
+    if (req.kind === "brace") {
+      const unit = /^[^{}\s]*\}?\s*(秒|次)/.exec(req.after)?.[1] ?? "";
+      const slot = slotWhileTyping(req.head, req.after);
+      const p = numberPreset(slot, null, unit);
+      const n = view.current ? view.current.state.doc.lineAt(Math.min(req.from, view.current.state.doc.length)).number : 0;
+      return { preset: { widget: "NUMBER", ...p, recommended: slot?.integer ? 3 : p.minimum }, place: `第 ${n} 行的 {…}`, kinds: ["number"] };
+    }
+    return { preset: { widget: "SWITCH" }, place: `第 ${req.line} 行 · 写出分支`, kinds: ["switch", "choice", "multi"] };
+  };
+  const popAt = (() => {
+    const v = view.current, box = wrap.current;
+    if (!pop || !v || !box) return null;
+    const c = v.coordsAtPos(Math.min(pop.pos, v.state.doc.length)); if (!c) return null;
+    const r = box.getBoundingClientRect();
+    return { left: Math.max(8, Math.min(c.left - r.left, r.width - 308)), top: c.bottom - r.top + 6 };
+  })();
+  const popField = pop ? fieldOf(pop.id) : undefined;
   const placed = (() => {
     const v = view.current, box = wrap.current;
     if (!spot || !v || !box) return null;
@@ -467,5 +744,60 @@ export function ScriptEditor({ value, onChange, onSave, problems, names, goTo, o
         : spot.kind === "insert" ? <ScreenPick autoFocus point={spot.point} value={null} title={`第 ${spot.line} 行 · ${spot.point ? "点一个位置" : "框一个区域"}`} onCancel={close}
             onDone={(vals) => write((now) => [{ from: now.anchor, to: now.anchor, insert: atText(vals) }])} /> : null}
     </div>}
+    {pop && popAt && popField && (pop.kind === "test"
+      ? <TestPop style={popAt} f={popField} value={test.values[pop.id]} own={pop.id in test.own} set={(x) => test.set(pop.id, x)} onClose={() => { setPop(null); view.current?.focus(); }} />
+      : <RenamePop style={popAt} f={popField} taken={(cfgTask?.fields ?? []).map((x) => String(x.id)).filter((x) => x !== pop.id)} count={cfg.current.uses(pop.id).count}
+          onRename={(to) => ops.rename(pop.id, to)} onClose={() => { setPop(null); view.current?.focus(); }} />)}
+    {newReq && cfgOn && (() => { const p = presetOf(newReq);
+      return <NewConfigDialog taskId={taskId} stepId={cfgStep ? String(cfgStep.id) : undefined} preset={p.preset} place={p.place} kinds={p.kinds}
+        onDone={(id) => { const req = newReq; setNewReq(null);
+          if (!id) { view.current?.focus(); return; }
+          if (req.kind === "branch") setPendingBranch({ line: req.line, id }); else writeNew(req, id); }} />; })()}
+    {formId && cfgOn && <ConfigForm taskId={taskId} fieldId={formId} onClose={() => { setFormId(null); view.current?.focus(); }} />}
   </div>;
+}
+
+/** 改测试值 over the script: the setting's own control, 改回默认, 完成. */
+function TestPop({ f, value, own, set, onClose, style }: { f: Obj; value: unknown; own: boolean; set: (v: unknown) => void; onClose: () => void; style: React.CSSProperties }) {
+  const label = str(f.label) ?? String(f.id);
+  const n = (x: unknown) => typeof x === "number" ? x : undefined;
+  let control: React.ReactNode;
+  if (isNumeric(f.widget)) control = <Stepper label={`${label} 测试值`} value={n(value)} min={n(f.minimum)} max={n(f.maximum)} step={n(f.step) && n(f.step)! > 0 ? n(f.step) : 1} unit={str(f.unit)} onChange={(x) => set(x)} />;
+  else if (f.widget === "SWITCH") control = <Switch label={`${label} 测试值`} checked={value === true} onChange={(on) => set(on)} />;
+  else if (f.widget === "SINGLE_CHOICE") control = <select className={k.select} aria-label={`${label} 测试值`} value={JSON.stringify(value ?? null)} onChange={(e) => set(JSON.parse(e.target.value))}>
+    {value === undefined || value === null ? <option value="null">—</option> : null}
+    {objs(f.options).map((o) => <option key={String(o.value)} value={JSON.stringify(o.value)}>{str(o.label) ?? String(o.value)}</option>)}</select>;
+  else if (f.widget === "MULTI_CHOICE") { const cur = Array.isArray(value) ? value : [];
+    control = <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{objs(f.options).map((o) => { const on = cur.includes(o.value);
+      return <button key={String(o.value)} type="button" aria-pressed={on} className={k.seg} style={{ flex: "none", padding: "4px 10px", border: "1px solid var(--color-line)" }}
+        onClick={() => set(on ? cur.filter((x) => x !== o.value) : [...cur, o.value])}>{str(o.label) ?? String(o.value)}</button>; })}</div>; }
+  else control = <input className={join(k.input, k.fill)} aria-label={`${label} 测试值`} value={typeof value === "string" ? value : ""} onChange={(e) => set(e.target.value)} />;
+  return <div className={k.pop} style={style} role="dialog" aria-label={`${label} 的测试值`} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } }}>
+    <div className={k.popHead}><b>{label}</b><code>{String(f.id)}</code><span className={k.grow} /><span className={k.hint}>测试值 · 只给试跑</span></div>
+    <div className={k.fv}>{control}</div>
+    <div className={k.buttons}>{own && <button type="button" className={k.link} style={{ marginRight: "auto" }} onClick={() => set(undefined)}>改回默认 {valueText(f, fallbackValue(f))}</button>}
+      <button type="button" className={join(w2.btn, w2.sm)} onClick={onClose}>完成</button></div>
+  </div>;
+}
+
+/** 全部改名 over the script: the new id, and every line reading the old one changes with it. */
+function RenamePop({ f, taken, count, onRename, onClose, style }: { f: Obj; taken: string[]; count: number; onRename: (to: string) => Promise<string | null>; onClose: () => void; style: React.CSSProperties }) {
+  const from = String(f.id);
+  const [to, setTo] = useState(from);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (to === from) { onClose(); return; }
+    const why = idProblem(to, taken); if (why) { setProblem(why); return; }
+    setBusy(true); const result = await onRename(to); setBusy(false);
+    if (result) setProblem(result); else onClose();
+  };
+  return <form className={k.pop} style={style} aria-label={`${str(f.label) ?? from} 改名`} onSubmit={(e) => { e.preventDefault(); void go(); }}
+    onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } }}>
+    <div className={k.popHead}><b>全部改名</b><code>{from}</code></div>
+    <input autoFocus className={join(k.input, k.mono)} aria-label="新编号" value={to} spellCheck={false} onChange={(e) => { setTo(e.target.value.trim()); setProblem(null); }} />
+    <span className={problem ? k.problem : k.hint}>{problem ?? `本任务里读它的 ${count} 处一起改；账号里已存的配置按旧编号存，会对不上`}</span>
+    <div className={k.buttons}><button type="button" className={join(w2.btn, w2.sm)} onClick={onClose}>取消</button>
+      <button type="submit" className={join(w2.btn, w2.sm, w2.primary)} disabled={busy}>{busy ? "改名中…" : "改名"}</button></div>
+  </form>;
 }

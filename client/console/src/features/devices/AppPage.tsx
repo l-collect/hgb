@@ -4,6 +4,7 @@ import { Breadcrumb, Card, Empty, Grow, Muted, PageTabs, Pill, Row, Segments, Te
 import { appStatus, jobSource, jobStatus, waitNext, waitReason } from "../../format";
 import { Link, navigate, paths, useQuery } from "../../router";
 import { useConsole } from "../../state/context";
+import { useDeveloper } from "../../state/developer";
 import { ProLockRow, usePro } from "../../components/Pro";
 import { NotFound } from "../ConsolePage";
 import { appJobs, JobControls, RunRows, switchNote, useRunNow } from "../jobs/runs";
@@ -72,6 +73,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
   const [chosen, setChosen] = useState<string | null>(null);
   const pick = accounts.some((item) => item.id === chosen) ? chosen! : (app.accountId && accounts.some((item) => item.id === app.accountId) ? app.accountId : accounts[0]?.id ?? "");
   const { notes, busy, run, clear } = useRunNow();
+  const developer = useDeveloper();
   // Free: running another account than the one signed in means switching to it first, which is Pro.
   const switchLocked = usePro().locked("allowAutoAccountSwitch") && !!pick && app.accountId !== pick;
   const pickName = accounts.find((item) => item.id === pick)?.name ?? "这个账号";
@@ -85,7 +87,7 @@ function RunTab({ device, app }: { device: Device; app: App }) {
           <div className={s.current}>
             {job ? (
               <>
-                <div className={s.currentHead}><b>{job.taskName}</b><Pill tone={jobStatus(job, data.devices)[1]} live>{jobStatus(job, data.devices)[0]}</Pill><Link to={paths.job(job.id)} className={s.end}>步骤明细 ›</Link></div>
+                <div className={s.currentHead}><b>{job.taskName}</b><Pill tone={jobStatus(job, data.devices)[1]} live>{jobStatus(job, data.devices)[0]}</Pill><Link to={paths.job(job.id)} className={s.end}>{developer ? "详情 ›" : "战报 ›"}</Link></div>
                 <Muted>{[job.accountName, jobSource(job), job.detail].filter(Boolean).join(" · ")}</Muted>
                 <div className={s.actions}><JobControls job={job} small /></div>
               </>

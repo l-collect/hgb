@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import type { Sample } from "./api";
+import { matchOnServer, type Sample } from "./api";
 import { pixelsOf } from "./colors";
+import { useDev } from "./context";
 import { toPicture, toReference, useReference } from "./coords";
 import { ScreenPick } from "./ScreenPick";
 import s from "./Picker.module.css";
@@ -22,6 +23,8 @@ export interface PickerHost {
 export interface PickTarget { line: number; name: string; region: number[] | null; threshold: string | null }
 
 const DEFAULT_THRESHOLD = "0.85";
+/** Who worked out 在画面上试一下's score, said under it. */
+const BY: Record<string, string> = { maa: "服务器识别 · 与手机同一套", server: "服务器按手机的算法算（未装 Maa），以手机为准", web: "网页估算，以手机为准" };
 /** A template's search region: its box with some room around it, inside the picture (as 素材 and 画面 write it). */
 export const padded = (rect: number[], width: number, height: number) => {
   const x = Math.max(0, rect[0] - 24), y = Math.max(0, rect[1] - 24);
@@ -43,6 +46,9 @@ export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: 
   const [name, setName] = useState("");
   const [said, setSaid] = useState<[string, boolean] | null>(null);
   const [busy, setBusy] = useState(false);
+  // Where 在画面上试一下 saw it best, and who worked it out: maa / server (the server) or web (this page's estimate).
+  const [hit, setHit] = useState<{ box: number[] | null; by: string } | null>(null);
+  const { game } = useDev();
   const grid = useRef<HTMLDivElement>(null);
   const reference = useReference();
   // The line's region in the picture's pixels (the script writes reference numbers).
@@ -50,7 +56,7 @@ export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: 
   const box = useRef<HTMLDivElement>(null);
   const start = useRef<[number, number] | null>(null);
   useEffect(() => { let live = true; host.sample().then((x) => { if (live) setSample(x); }, () => { if (live) setSample(null); }); return () => { live = false; }; }, [host]);
-  useEffect(() => { setSaid(null); }, [at.name, at.region?.join(",")]);
+  useEffect(() => { setSaid(null); setHit(null); }, [at.name, at.region?.join(",")]);
 
   const mine = host.templates.find((t) => t.name === at.name);
   const shown = useMemo(() => host.templates.filter((t) => (!page || t.pages.includes(page)) && (!query.trim() || t.name.toLowerCase().includes(query.trim().toLowerCase()))), [host.templates, page, query]);
@@ -80,10 +86,15 @@ export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: 
 
   const tryIt = async () => {
     if (!sample || !mine) return;
-    setBusy(true); setSaid(null);
+    setBusy(true); setSaid(null); setHit(null);
+    const need = Number(at.threshold ?? DEFAULT_THRESHOLD);
+    // The server matches as the phone does; without it (an older server, offline), this page's estimate.
+    const answer = await matchOnServer({ target: game, sample: sample.id, template: mine.name, region, threshold: need });
+    if (answer && "refused" in answer) { setHit(null); setSaid([answer.refused, false]); setBusy(false); return; }
+    const server = answer;
     try {
-      const got = await matchOn(host.sampleSrc(sample.id), mine.src, region);
-      const need = Number(at.threshold ?? DEFAULT_THRESHOLD);
+      const got = server ? server.score : await matchOn(host.sampleSrc(sample.id), mine.src, region);
+      setHit({ box: server?.box ?? null, by: server ? server.by : "web" });
       setSaid([got >= need ? `认得到 · 相似度 ${got.toFixed(2)}` : `认不到 · 最高 ${got.toFixed(2)}，要 ${need}`, got >= need]);
     } catch { setSaid(["没算成：图读不出来", false]); }
     setBusy(false);
@@ -118,6 +129,7 @@ export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: 
               <img src={host.sampleSrc(sample.id)} alt={sample.name} draggable={false} />
               {region && mode === "look" && <span className={s.box} style={pct(region)} />}
               {rect && <span className={s.box} data-kind="new" style={pct(rect)} />}
+              {hit?.box && mode === "look" && <span className={s.box} data-kind="hit" title="最像的地方" style={pct(hit.box)} />}
             </div>
             <span className={s.caption}>{mode === "cut" ? "框出要裁的图" : sample.name}</span>
           </>}
@@ -134,7 +146,7 @@ export function TemplatePicker({ at, host, onChoose, onRegion, onClose }: { at: 
         </>}
       </div>
       {said && <span className={said[1] ? `${w.muted} ${w.okText}` : w.message} role="status">{said[0]}</span>}
-      {mode === "look" && said?.[0].startsWith("认") && <span className={`${w.muted} ${s.note}`}>网页估算，以手机为准</span>}
+      {mode === "look" && said?.[0].startsWith("认") && <span className={`${w.muted} ${s.note}`}>{BY[hit?.by ?? "web"] ?? BY.web}</span>}
       <div className={s.filters}>
         <input aria-label="搜索图" className={`${w.input} ${s.grow}`} placeholder="搜索图名" value={query} onChange={(e) => { setQuery(e.target.value); setFocus(0); }} />
         <select aria-label="按页面" className={s.select} value={page} onChange={(e) => { setPage(e.target.value); setFocus(0); }}>

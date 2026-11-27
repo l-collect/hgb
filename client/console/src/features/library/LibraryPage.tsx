@@ -10,6 +10,7 @@ import { formatSettingValue, resolveTaskDefaults, SettingsForm, stepWillRun, sum
 import { Note, useRunNow, useSwitchLocked } from "../jobs/runs";
 import { ProLockButton, ProLimitButton, ProLockRow } from "../../components/Pro";
 import { InstallAppCard } from "../onboarding/Onboarding";
+import { DevStepButton, DevTaskMenu } from "./DevActions";
 import s from "./Library.module.css";
 
 /** 常用: starred tasks, kept in this browser (the App keeps its own). */
@@ -246,6 +247,7 @@ function TaskDetail({ gameId, taskId, detail }: { gameId: string; taskId: string
                 options={gameAccounts.map((a): [string, string] => [a.id, a.name])} />
             )}
             <StarButton on={favorites.has(key)} toggle={() => toggleFavorite(key)} />
+            <DevTaskMenu gameId={gameId} taskId={taskId} />
           </span>
         }
       />
@@ -319,7 +321,7 @@ function TaskStepDetail({ gameId, taskId, detail, step }: { gameId: string; task
   return (
     <>
       <Breadcrumb items={crumbs} />
-      <PageHeader title={`步骤 ${step.index} · ${step.name}`} />
+      <PageHeader title={`步骤 ${step.index} · ${step.name}`} aside={<DevStepButton gameId={gameId} taskId={taskId} stepId={step.id} />} />
       <div className={s.stepState}>
         <Pill tone={willRun ? CONFIG_TONE.set : CONFIG_TONE.unset} dot>{willRun ? "执行" : "跳过"}</Pill>
         {step.conditionLabel && <span className={ui.tiny}>准入：{step.conditionLabel}</span>}

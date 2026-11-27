@@ -355,10 +355,15 @@ export function Form({ inline, onSubmit, children, className }: { inline?: boole
 export const ui = s;
 
 /**
- * A button that opens a small panel under it (an app's accounts, a row's ⋯ actions). Clicking outside or pressing
- * Escape closes it; [children] gets a function that closes it after an action.
+ * A button that opens a small panel under it (an app's accounts, a row's ⋯ actions), or beside it ([side] "right", as
+ * from the rail's icons). Clicking outside or pressing Escape closes it; [children] gets a function that closes it after
+ * an action. The panel is never taller than the room left in the window (it scrolls inside). [role]: "menu" for a list
+ * of actions, "dialog" for a panel of links and more.
  */
-export function Popover({ label, trigger, children, align = "start", plain }: { label: string; trigger: ReactNode; children: (close: () => void) => ReactNode; align?: "start" | "end"; plain?: boolean }) {
+export function Popover({ label, trigger, children, align = "start", plain, side = "below", role = "menu" }: {
+  label: string; trigger: ReactNode; children: (close: () => void) => ReactNode; align?: "start" | "end"; plain?: boolean;
+  side?: "below" | "right"; role?: "menu" | "dialog";
+}) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -369,20 +374,29 @@ export function Popover({ label, trigger, children, align = "start", plain }: { 
     if (!open) return;
     const at = () => {
       const rect = button.current?.getBoundingClientRect(); if (!rect) return;
-      const below = window.innerHeight - rect.bottom; const vertical: CSSProperties = below < 240 && rect.top > below
-        ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 };
+      const tall = window.innerHeight;
+      if (side === "right") {
+        // Beside the trigger, from its top, moved up as far as needed to stay in the window.
+        const room = tall - 16;
+        const height = Math.min(panel.current?.scrollHeight ?? 0, room);
+        setPlace({ left: rect.right + 6, top: Math.max(8, Math.min(rect.top, tall - 8 - height)), maxHeight: room });
+        return;
+      }
+      const below = tall - rect.bottom; const up = below < 240 && rect.top > below;
+      const vertical: CSSProperties = up ? { bottom: tall - rect.top + 4 } : { top: rect.bottom + 4 };
+      const maxHeight = Math.max(120, Math.min(tall * 0.7, (up ? rect.top : below) - 12));
       // Kept inside the window: a panel that would run off the right edge lines up with the trigger's right instead,
       // and one that would run off the left with its left.
       const width = panel.current?.offsetWidth ?? 0;
       const room = window.innerWidth - 8;
       const end = align === "end" ? rect.right - width >= 8 : rect.left + width > room;
-      setPlace({ ...vertical, ...(end ? { right: Math.max(8, window.innerWidth - rect.right) } : { left: Math.max(8, Math.min(rect.left, room - width)) }) });
+      setPlace({ ...vertical, maxHeight, ...(end ? { right: Math.max(8, window.innerWidth - rect.right) } : { left: Math.max(8, Math.min(rect.left, room - width)) }) });
     };
     at();
     // The page or a list scrolling moves the button; the menu follows it.
     window.addEventListener("resize", at); window.addEventListener("scroll", at, true);
     return () => { window.removeEventListener("resize", at); window.removeEventListener("scroll", at, true); };
-  }, [open, align]);
+  }, [open, align, side]);
   useEffect(() => {
     if (!open) return;
     const away = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false); };
@@ -393,7 +407,7 @@ export function Popover({ label, trigger, children, align = "start", plain }: { 
   return (
     <span ref={box} className={s.popover}>
       <button ref={button} type="button" className={plain ? s.plainTrigger : s.iconButton} aria-label={label} aria-expanded={open} onClick={() => setOpen(!open)}>{trigger}</button>
-      {open && <div ref={panel} className={s.panel} style={place} role="menu">{children(() => setOpen(false))}</div>}
+      {open && <div ref={panel} className={s.panel} style={place} role={role} aria-label={role === "dialog" ? label : undefined}>{children(() => setOpen(false))}</div>}
     </span>
   );
 }

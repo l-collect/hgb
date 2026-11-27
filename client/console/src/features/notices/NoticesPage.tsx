@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { Channel, EventRule, Notice, PlanOutcome } from "../../api/types";
-import { Breadcrumb, Button, Card, Empty, ErrorCard, Grow, LiveSwitch, Loading, Muted, PageHeader, PageTabs, Pill, Row, TextSelect } from "../../components/ui";
+import { Breadcrumb, Button, Card, Empty, ErrorCard, Grow, LiveSwitch, Loading, Muted, PageHeader, PageTabs, Pill, Row, Stepper, TextSelect } from "../../components/ui";
 import { orToast } from "../../components/useAction";
 import { shortTime, type Tone } from "../../format";
 import { Link, paths, useQuery } from "../../router";
@@ -161,6 +161,10 @@ function Rules() {
   );
 }
 
+/** The server's limits (core/server Notices.kt): COUNT 1–100 times, DURATION 1–10080 minutes. */
+const COUNT_MAX = 100;
+const DURATION_MAX = 10080;
+
 /**
  * One rule: its switch, and its threshold or plan results. Turning it on needs a threshold, which starts empty with the
  * suggestion shown as a hint; a change to an enabled rule is saved when the field is left.
@@ -170,12 +174,41 @@ function RuleRow({ rule }: { rule: EventRule }) {
   const [results, setResults] = useState<PlanOutcome[]>(rule.results);
   // Compared by value: the rules are read again on every notice, and a new but equal list must not wipe what is being typed.
   const savedResults = rule.results.join(",");
-  useEffect(() => { setThreshold(rule.threshold?.toString() ?? ""); setResults(rule.results); }, [rule.threshold, savedResults]);
+  // While a threshold is being changed here, a pushed copy only replaces it when it is the value last sent (an older
+  // one, from a save still on its way, would undo the steps taken since).
+  const ruleNow = useRef(rule); ruleNow.current = rule;
+  const dirty = useRef(false);
+  const lastSent = useRef<number | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (dirty.current && rule.threshold !== lastSent.current) return;
+    if (dirty.current && rule.threshold === lastSent.current) dirty.current = false;
+    setThreshold(rule.threshold?.toString() ?? "");
+  }, [rule.threshold]);
+  useEffect(() => { setResults(rule.results); }, [savedResults]); // eslint-disable-line react-hooks/exhaustive-deps
   const hasValue = rule.kind === "COUNT" || rule.kind === "DURATION";
   const [hint, setHint] = useState<string | null>(null);
   useEffect(() => { if (!hint) return; const timer = window.setTimeout(() => setHint(null), 4000); return () => window.clearTimeout(timer); }, [hint]);
   const save = (enabled: boolean, nextResults = results) => orToast(() => api(`/api/notifications/rules/${enc(rule.ruleId)}`, { method: "PUT",
     body: { enabled, threshold: hasValue && threshold.trim() ? Number(threshold) : null, results: nextResults } }), "已保存");
+  // A changed threshold of an enabled rule is saved once the stepper rests (holding + counts many steps).
+  // The switch turned off meanwhile: nothing is saved (and the rule is not turned back on).
+  useEffect(() => {
+    // Back at the value in use: nothing waits to be saved.
+    if (threshold && Number(threshold) === rule.threshold) dirty.current = false;
+    if (!rule.enabled || !hasValue || !threshold || Number(threshold) === rule.threshold) return;
+    timer.current = window.setTimeout(() => {
+      timer.current = undefined;
+      const now = ruleNow.current;
+      if (!now.enabled) return;
+      lastSent.current = Number(threshold);
+      void save(now.enabled).then((ok) => {
+        if (ok) return;
+        dirty.current = false; setThreshold(ruleNow.current.threshold?.toString() ?? "");
+      });
+    }, 600);
+    return () => { window.clearTimeout(timer.current); timer.current = undefined; };
+  }, [threshold]); // eslint-disable-line react-hooks/exhaustive-deps
   const flip = (outcome: PlanOutcome) => {
     const next = results.includes(outcome) ? results.filter((item) => item !== outcome) : [...results, outcome];
     // An enabled rule keeps at least one result: leaving none would show a filter the server does not have.
@@ -187,16 +220,12 @@ function RuleRow({ rule }: { rule: EventRule }) {
     <Row className={s.rule}>
       <Grow className={s.ruleText}><b>{rule.name}</b><Muted as="span">{rule.description}</Muted></Grow>
       {hasValue && (
-        <label className={s.value}>{rule.kind === "COUNT" ? "连续" : "超过"}
-          <input inputMode="numeric" value={threshold} placeholder={rule.suggested?.toString() ?? ""} aria-label={`${rule.name}：${rule.kind === "COUNT" ? "连续次数" : "分钟"}`}
-            onChange={(e) => setThreshold(e.target.value.replace(/\D/g, ""))} onBlur={() => {
-              if (!rule.enabled) return;
-              // An enabled rule needs its threshold: an emptied field goes back to the one in use.
-              if (!threshold) setThreshold(rule.threshold?.toString() ?? "");
-              else if (Number(threshold) !== rule.threshold) void save(true);
-            }} />
-          {rule.kind === "COUNT" ? "次" : "分钟"}
-        </label>
+        <span className={s.value}>{rule.kind === "COUNT" ? "连续" : "超过"}
+          <Stepper small clearable value={threshold || null} min={1} max={Math.max(rule.kind === "COUNT" ? COUNT_MAX : DURATION_MAX, rule.threshold ?? 0)} unit={rule.kind === "COUNT" ? "次" : "分钟"}
+            placeholder={rule.suggested?.toString() ?? ""} label={`${rule.name}：${rule.kind === "COUNT" ? "连续次数" : "分钟"}`}
+            // An enabled rule needs its threshold: an emptied field goes back to the one in use.
+            onChange={(n) => { dirty.current = true; setThreshold(n !== undefined ? String(n) : rule.enabled ? rule.threshold?.toString() ?? "" : ""); }} />
+        </span>
       )}
       {rule.kind === "RESULT" && (
         <span role="group" aria-label="计划结果" className={s.chips}>
@@ -205,10 +234,13 @@ function RuleRow({ rule }: { rule: EventRule }) {
       )}
       {hint && <span className={s.hint} role="alert">{hint}</span>}
       <LiveSwitch checked={rule.enabled} label={`开启规则：${rule.name}`} save={async (on) => {
+        // A threshold save still waiting would otherwise send its own enabled after this one.
+        window.clearTimeout(timer.current); timer.current = undefined;
         // Turning on with the field empty takes the suggestion, shown in the field so the user sees what was set.
         const value = hasValue ? threshold.trim() || rule.suggested?.toString() || "" : "";
         if (on && hasValue && !value) throw new Error("先填写阈值");
         if (hasValue) setThreshold(value);
+        lastSent.current = hasValue && value ? Number(value) : null;
         await api(`/api/notifications/rules/${enc(rule.ruleId)}`, { method: "PUT",
           body: { enabled: on, threshold: hasValue && value ? Number(value) : null, results } });
       }} />

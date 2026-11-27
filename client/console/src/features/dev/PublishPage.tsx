@@ -213,7 +213,7 @@ export function PublishPage() {
   );
 }
 
-/** 仓库有新任务 as a row of the checks, only when it says something. */
+/** 仓库有新版本 as a row of the checks, only when there is one. */
 function RepoAheadRow(props: Parameters<typeof RepoAhead>[0]) {
   return <div className={p.rowWrap}><RepoAhead {...props} /></div>;
 }

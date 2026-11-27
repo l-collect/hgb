@@ -1,14 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, apiUrl, enc } from "../../api/client";
 import type { Job, JobEvent } from "../../api/types";
-import { Breadcrumb, Button, ButtonLink, Card, Empty, ErrorCard, Loading, Muted, Pill } from "../../components/ui";
+import { Breadcrumb, Button, ButtonLink, Card, Empty, ErrorCard, join, Loading, Muted, Pill, ui } from "../../components/ui";
 import { useAction } from "../../components/useAction";
 import { ACTIVE, clock, eventDetail, eventKind, jobSource, jobStatus, jobWaiting, ranFor, seconds, shortDuration, shortTime, waitReason, type Tone } from "../../format";
 import { Link, paths } from "../../router";
 import { useConsole } from "../../state/context";
+import { useDeveloper, withGame, workbenchPaths } from "../../state/developer";
 import { NotFound } from "../ConsolePage";
 import { PRO_REDEEM } from "../../components/Pro";
 import { canRerun, jobPlace, JobControls, rerun, useJob } from "./runs";
+import { lineOf } from "./stepLine";
 import { WaitBanner } from "../devices/AppPage";
 import s from "./Jobs.module.css";
 
@@ -48,6 +50,34 @@ function stepsOf(events: JobEvent[], job: Job): Step[] {
   return steps;
 }
 const MARK: Record<StepState, string> = { done: "✓", stop: "!", running: "…", plain: "" };
+
+/** Where a failed or unconfirmed run stopped, to open in the workbench: the step, and the line when the events say. */
+export function stopOf(events: JobEvent[], job: Job): { step: string; line: number | null } | null {
+  if (job.state !== "FAILED" && job.state !== "UNKNOWN") return null;
+  const steps = stepsOf(events, job);
+  const stopped = steps.find((step) => step.state === "stop") ?? steps[steps.length - 1];
+  if (!stopped || stopped.stepId === "-") return null;
+  return { step: stopped.stepId, line: lineOf(stopped.events) };
+}
+/** 去改这一步 (developers): the step a run stopped on, on the workbench's canvas. */
+export function FixStep({ job, stop }: { job: Job; stop: { step: string; line: number | null } | null }) {
+  if (!stop) return null;
+  return <Link className={join(ui.button, ui.small, ui.ghost)} to={withGame(workbenchPaths.fix(job.taskId, stop.step, stop.line), job.targetId)}>去改这一步</Link>;
+}
+/** For a run beside a list: where it stopped, read from its events only for a developer and only when it failed or waits on a check. */
+export function useStop(job: Job, wanted: boolean): { step: string; line: number | null } | null {
+  const { data } = useConsole();
+  const [stop, setStop] = useState<{ step: string; line: number | null } | null>(null);
+  const bad = job.state === "FAILED" || job.state === "UNKNOWN";
+  const version = `${data.epoch}.${data.logVersion[job.id] ?? 0}`;
+  useEffect(() => {
+    if (!wanted || !bad) { setStop(null); return; }
+    let current = true;
+    api<JobEvent[]>(`/api/jobs/${enc(job.id)}/events`).then((list) => { if (current) setStop(stopOf(list, job)); }).catch(() => {});
+    return () => { current = false; };
+  }, [job.id, job.state, wanted, bad, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  return stop;
+}
 /** The colour of why a run stopped, by how it ended: a failure red, an unconfirmed result orange, the rest grey. */
 export const whyTone = (job: Job): Tone => jobStatus(job)[1];
 /** The minute ticking, for 「已跑 N 分」. */
@@ -61,7 +91,10 @@ function useMinute(on: boolean) {
   return now;
 }
 
-/** 战报详情: what the job was, how it ended, and every step and action the device reported. */
+/**
+ * 战报详情: what the job was, how it ended, why (one line) and what to do next. A developer also gets 详情 (every step
+ * and action the device reported) and, when it failed or waits on a check, 去改这一步.
+ */
 export function JobPage({ id }: { id: string }) {
   const { data } = useConsole();
   // Older than the latest the stream holds: read by id.
@@ -73,6 +106,8 @@ export function JobPage({ id }: { id: string }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [all, setAll] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const developer = useDeveloper();
+  const [detailed, setDetailed] = useState(false);
   const again = useAction();
   const now = useMinute(!!found.job && ACTIVE.has(found.job.state));
   useEffect(() => {
@@ -100,6 +135,7 @@ export function JobPage({ id }: { id: string }) {
   const accountExists = data.accounts.some((item) => item.id === job.accountId);
   const waiting = jobWaiting(job, data.devices);
   const why = whyTone(job);
+  const stop = developer && events ? stopOf(events, job) : null;
   return (
     <>
       <Breadcrumb items={crumbs} />
@@ -129,12 +165,21 @@ export function JobPage({ id }: { id: string }) {
           <div>
             <h2 id="why">{stopped ? `停在“${stopped.name}”：${label}` : label}</h2>
             <p>{job.detail || stopped?.summary || "设备没有说明原因。"}</p>
-            <NextSteps job={job} />
+            <NextSteps job={job} fix={developer ? <FixStep job={job} stop={stop} /> : null} />
             {(job.state === "FAILED" || job.state === "UNKNOWN") && <StoppedOn id={job.id} version={version} />}
           </div>
         </section>
       )}
-      <section aria-labelledby="steps" className={s.stepsSection}>
+      {/* Without the events the reason may say less (where it stopped): a player is told, and can read them again. */}
+      {!developer && error && (
+        <p role="alert" className={s.readFailed}>读不到明细 · <Button variant="link" onClick={() => { setError(null); setEvents(null); setAttempt((n) => n + 1); }}>重试</Button></p>
+      )}
+      {developer && (
+        <div className={s.detailBar}>
+          <Button small aria-expanded={detailed} aria-controls="job-detail" onClick={() => setDetailed(!detailed)}>{detailed ? "收起详情" : "详情"}</Button>
+        </div>
+      )}
+      {developer && detailed && <section id="job-detail" aria-labelledby="steps" className={s.stepsSection}>
         <div className={s.stepsHead}>
           <h2 id="steps">步骤明细</h2>
           {steps.length > 0 && <Button small onClick={() => { setAll(!all); setOpen(new Set()); }}>{all ? "收起全部" : "展开全部"}</Button>}
@@ -170,7 +215,7 @@ export function JobPage({ id }: { id: string }) {
             })}
           </ol>
         )}
-      </section>
+      </section>}
     </>
   );
 }
@@ -179,7 +224,7 @@ export function JobPage({ id }: { id: string }) {
  * Where to go after a run that did not finish, by how it ended: a failure to its settings, a held or skipped one to
  * the device or the plan; an unconfirmed one is settled by 做完了 / 重做这步 / 放弃本次 with the other controls.
  */
-export function NextSteps({ job }: { job: Job }) {
+export function NextSteps({ job, fix }: { job: Job; fix?: ReactNode }) {
   const { data } = useConsole();
   const device = data.devices.find((item) => item.id === job.deviceId);
   const reason = `${job.detail} ${job.waitReason ?? ""}`;
@@ -202,8 +247,8 @@ export function NextSteps({ job }: { job: Job }) {
     if (/离线|设备/.test(reason) && device) links.push(["看设备", paths.device(device.id)]);
     if (plan) links.push(["看计划", plan]);
   }
-  if (!links.length) return null;
-  return <div className={s.next}>{links.map(([text, to]) => <ButtonLink key={to} small to={to}>{text}</ButtonLink>)}</div>;
+  if (!links.length && !fix) return null;
+  return <div className={s.next}>{links.map(([text, to]) => <ButtonLink key={to} small to={to}>{text}</ButtonLink>)}{fix}</div>;
 }
 
 /** The screen the job stopped on, as its device sent it; nothing when there is none. */

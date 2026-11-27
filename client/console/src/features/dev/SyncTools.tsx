@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import { ask } from "../../components/Confirm";
 import { Popover } from "../../components/ui";
 import { useConsole } from "../../state/context";
-import { dev, draftBase, type DraftSnapshot, type Json, type Obj, type SyncResult } from "./api";
+import { dev, draftBase, latestRelease, type DraftSnapshot, type Json, type LatestRelease, type Obj, type SyncResult } from "./api";
 import { failure, useDev } from "./context";
 import { snippets, str, tasks } from "./model";
 import { Sides } from "./PatchConflicts";
 import w from "./Wb.module.css";
 
-const REASON: Record<string, string> = { sync: "同步前", restore: "恢复前", manual: "手动" };
+const REASON: Record<string, string> = { sync: "同步前", restore: "恢复前", manual: "手动", delete: "删除前" };
 
 /** 从仓库同步, asked first (what is kept, what goes), keeping what was changed here; [onDone] gets what to say and what it did. */
 function useSync(onDone: (said: [string, boolean] | null, result?: SyncResult) => void, changed: number) {
@@ -39,16 +39,49 @@ export function useRepoOnly(): { taskId: string; name: string }[] {
   return (data.games.find((g) => g.id === game)?.tasks ?? [])
     .filter((t) => !mine.has(t.taskId) && draft.bases[`tasks/${t.taskId}`] === undefined).map((t) => ({ taskId: t.taskId, name: t.name }));
 }
-/** 「仓库有新任务 · 多 1 个（游戏启动、更新与退出） ［同步］」 when the published tasks are ahead of the draft. */
+/** Whether version [a] (`v2.2.0`) is after [b]; a [b] that is not a version number counts as older when they differ. */
+function newer(a: string, b: string): boolean {
+  const parts = (v: string) => /^v?(\d+(?:\.\d+)*)/.exec(v.trim())?.[1].split(".").map(Number) ?? null;
+  const x = parts(a), y = parts(b);
+  if (!x) return false;
+  if (!y) return a.trim() !== b.trim();
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
+}
+/**
+ * The newest published version (the server's /latest, kept a few minutes) when it is after the one the draft is based
+ * on, with the tasks it has that the draft does not and never had (deleted here, in the draft's bases, is not counted).
+ * Null when there is none newer, or the server cannot tell.
+ */
+export function useRepoNewer(): { version: string; base: string; tasks: { taskId: string; name: string }[] } | null {
+  const { draft, game } = useDev();
+  const { data } = useConsole();
+  const [latest, setLatest] = useState<LatestRelease | null>(null);
+  useEffect(() => {
+    let live = true;
+    setLatest(null);
+    void latestRelease(game).then((x) => { if (live) setLatest(x); });
+    return () => { live = false; };
+  }, [game, draft?.baseVersion]);
+  if (!draft || !latest?.version) return null;
+  // A base label may carry where it came from (`v2.1.0 · main@abc1234`): the version is its first part.
+  const base = draft.baseVersion.split(" · ")[0].trim();
+  if (!newer(latest.version, base)) return null;
+  const mine = new Set(tasks(draft.body).map((t) => t.id));
+  const names = new Map((data.games.find((g) => g.id === game)?.tasks ?? []).map((t) => [t.taskId, t.name]));
+  const only = latest.tasks.filter((id) => !mine.has(id) && draft.bases[`tasks/${id}`] === undefined).map((id) => ({ taskId: id, name: names.get(id) ?? id }));
+  return { version: latest.version, base, tasks: only };
+}
+/** 「仓库有新版本 v2.2.0（草稿基于 v2.1.0）· 多 1 个任务（游戏启动） ［同步］」, only when the repository has a newer version. */
 export function RepoAhead({ onDone, changed }: { onDone: (said: [string, boolean] | null, result?: SyncResult) => void; changed: number }) {
-  const { draft } = useDev();
-  const only = useRepoOnly();
+  const ahead = useRepoNewer();
   const { sync, busy } = useSync(onDone, changed);
-  if (!only.length || !draft) return null;
+  if (!ahead) return null;
+  const only = ahead.tasks;
   const names = only.slice(0, 2).map((t) => t.name).join("、") + (only.length > 2 ? " 等" : "");
   return <div className={w.repoAhead} role="status">
-    <span>仓库有新任务 · 多 {only.length} 个<span className={w.muted}>（{names}）</span></span>
-    <span className={w.muted}>草稿基于 {draft.baseVersion || "更早的版本"}</span>
+    <span>仓库有新版本 {ahead.version}<span className={w.muted}>（草稿基于 {ahead.base || "更早的版本"}）</span>
+      {only.length > 0 && <> · 多 {only.length} 个任务<span className={w.muted}>（{names}）</span></>}</span>
     <button type="button" className={`${w.btn} ${w.sm}`} disabled={busy} onClick={() => void sync()}>{busy ? "同步中…" : "同步"}</button>
   </div>;
 }
@@ -58,7 +91,7 @@ export function RepoAhead({ onDone, changed }: { onDone: (said: [string, boolean
  * the task list and the publish page alike. [onDone] gets what to say: [text, ok].
  */
 export function SyncTools({ onDone, changed }: { onDone: (said: [string, boolean] | null, result?: SyncResult) => void; changed: number }) {
-  const { restoreSnapshot, edits, game } = useDev();
+  const { restoreSnapshot, deleteDraft, edits, game } = useDev();
   const { sync, busy, setBusy } = useSync(onDone, changed);
   const unsaved = Object.keys(edits).length;
   const restore = async (snap: DraftSnapshot) => {
@@ -68,11 +101,22 @@ export function SyncTools({ onDone, changed }: { onDone: (said: [string, boolean
     setBusy(false);
     onDone(problem ? [problem, false] : [`已恢复到 ${when(snap.at)} 的快照`, true]);
   };
+  // 删除草稿: a snapshot is kept first, then a fresh copy of the repository's latest is imported.
+  const remove = async () => {
+    const lost = [changed ? `${changed} 处改动还没发布` : "", unsaved ? `${unsaved} 处脚本没保存` : ""].filter(Boolean).join("、");
+    if (!await ask({ title: "删除这份草稿？", body: `${lost ? `${lost}，会一起丢掉；` : ""}删除前会存一份快照，30 天内可在「快照」里找回。删除后从仓库最新版本重新导入。`, ok: "删除", cancel: "取消", danger: true })) return;
+    setBusy(true); onDone(null);
+    // Through the workbench's queue: patches waiting go first, unsaved text and its bases are dropped with the draft.
+    const problem = await deleteDraft();
+    setBusy(false);
+    onDone(problem ? [problem, false] : ["已删除草稿，换成了仓库最新版本 · 旧的在「快照」里", true]);
+  };
   return <>
     <button type="button" className={w.btn} disabled={busy} onClick={() => void sync()}>{busy ? "同步中…" : "从仓库同步"}</button>
     <Popover label="快照" plain trigger={<span className={w.btn}>快照 ▾</span>}>
       {(close) => <Snapshots game={game} onRestore={(snap) => { close(); void restore(snap); }} />}
     </Popover>
+    <button type="button" className={w.btn} disabled={busy} style={{ color: "var(--color-danger)" }} onClick={() => void remove()}>删除草稿</button>
   </>;
 }
 

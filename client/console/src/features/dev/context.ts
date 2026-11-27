@@ -15,6 +15,8 @@ export interface DevContextValue {
   syncRepo: () => Promise<{ problem: string | null; result: SyncResult | null }>;
   /** Puts a snapshot back as the draft (unsaved text is dropped); a problem in words, or null. */
   restoreSnapshot: (id: string) => Promise<string | null>;
+  /** Deletes the draft (a snapshot is kept) and imports the repository's latest, through the same queue; a problem in words, or null. */
+  deleteDraft: () => Promise<string | null>;
   /** Scripts typed but not saved, by script ("step:<task>/<id>" or "snippet:<id>"): kept while moving around the workbench. */
   edits: Record<string, string>; setEdits: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   /** Puts (or, undefined, drops) the unsaved text of a script; the first edit remembers the saved text it started from. */

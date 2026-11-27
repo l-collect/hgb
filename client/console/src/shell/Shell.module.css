@@ -26,6 +26,52 @@
 .liveDot[data-state="live"] { background: var(--color-live); }
 .liveDot[data-state="lost"] { background: var(--color-lost); }
 .top, .topAdmin { display: none; }
+/* 开发 (developers only): a group under the navigation, folded or open. */
+.devGroup { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-3); min-height: 0; overflow-y: auto; }
+.devHead {
+  display: flex; align-items: center; justify-content: space-between; margin: 0 0 2px; padding: 4px var(--space-3); border: 0; background: none;
+  font: inherit; font-size: var(--text-xs); color: var(--color-faint); letter-spacing: .04em; border-radius: var(--radius-sm, 6px); cursor: pointer;
+}
+.devHead:hover { color: var(--color-ink); }
+.devChev { flex: none; transition: transform .15s; transform: rotate(-90deg); }
+.devChev[data-open="true"] { transform: none; }
+.devItemRow { display: flex; align-items: center; }
+.devItemRow .devItem { flex: 1; min-width: 0; }
+.devItem {
+  display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 var(--space-3); border-radius: var(--radius-md);
+  color: var(--color-nav); text-decoration: none; font-weight: 500; font-size: 14px; white-space: nowrap;
+}
+.devItem:hover { color: var(--color-ink); background: var(--color-bg); }
+.devItem[aria-current="page"] { background: var(--color-nav-current-bg); color: var(--color-nav-current); }
+.devItem[data-within="true"]:not([aria-current]) { color: var(--color-ink); }
+.devLabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.devToggle {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: var(--radius-md); background: none;
+  color: var(--color-muted); cursor: pointer;
+}
+.devToggle:hover { background: var(--color-bg); color: var(--color-ink); }
+.devSubs { display: flex; flex-direction: column; gap: 1px; }
+.devSub {
+  display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 var(--space-3) 0 38px; border-radius: 7px;
+  color: var(--color-muted); font-size: 13px; text-decoration: none; white-space: nowrap;
+}
+.devSub:hover { color: var(--color-ink); background: var(--color-bg); }
+.devSub[aria-current="page"] { background: var(--color-primary-soft); color: var(--color-nav-current); font-weight: 600; }
+.devSub[data-repo="true"] { color: var(--color-faint); }
+.devDot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-warn); flex: none; }
+.devRepo { flex: none; font-size: 11px; padding: 1px 7px; border-radius: var(--radius-pill); background: var(--color-neutral-bg); color: var(--color-muted); }
+.devCount { flex: none; font-size: 11px; padding: 0 7px; border-radius: var(--radius-pill); background: var(--color-warn-bg); color: var(--color-warn-ink); font-weight: 600; }
+.devHint { padding: 4px var(--space-3) 4px 38px; font-size: var(--text-xs); color: var(--color-faint); }
+/* The rail's floating copy: the same items, a little wider. */
+.devFloat { display: flex; flex-direction: column; gap: 2px; padding: var(--space-1); width: 240px; min-height: 0; flex: 1 1 auto; }
+/* Only the task list scrolls: 素材, 页面 and 发布 stay in view however short the window. */
+.devFloat > * { flex: none; }
+.devFloat > .devSubs { flex: 0 1 auto; min-height: 48px; max-height: 50vh; overflow-y: auto; }
+
+/* The workbench fills the main area: its own bar on top, its parts below, no padding of the frame's. */
+.shell[data-dev="true"] .main { padding: 0; gap: 0; height: 100vh; box-sizing: border-box; overflow: hidden; }
+.devFrame { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--color-bg); color: var(--color-ink); }
+
 .shell[data-wide="true"] .main { max-width: none; }
 
 .main { flex: 1 1 auto; min-width: 0; max-width: 1200px; padding: var(--space-6) var(--space-8) 40px; display: flex; flex-direction: column; gap: var(--space-4); }
@@ -42,7 +88,8 @@
   .link[aria-current="page"] { background: none; }
   .linkIcon { width: 48px; height: 30px; border-radius: 15px; }
   .link:hover .linkIcon { background: var(--color-bg); }
-  .link[aria-current="page"] .linkIcon { background: var(--color-nav-current-bg); }
+  .link[aria-current="page"] .linkIcon, .link[data-current="true"] .linkIcon { background: var(--color-nav-current-bg); }
+  .link[data-current="true"] { color: var(--color-nav-current); }
   .linkLabel { display: none; }
   .linkShort { display: inline; }
   .main { padding: var(--space-5) var(--space-6) 32px; }
@@ -70,4 +117,5 @@
   .link { flex: 1 1 0; width: auto; }
   .linkIcon { width: 52px; height: 28px; border-radius: 14px; }
   .main { padding: var(--space-4) var(--space-4) calc(88px + env(safe-area-inset-bottom)); gap: var(--space-4); }
+  .shell[data-dev="true"] .main { height: calc(100dvh - 57px); padding: 0 0 calc(57px + env(safe-area-inset-bottom)); }
 }

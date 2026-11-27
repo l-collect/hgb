@@ -102,6 +102,8 @@ export const dev = {
   waits: (target: string) => api<CompiledWait[]>(`/api/dev/drafts/${enc(target)}/waits`),
   /** [keepMine]: tasks, snippets and the rest changed here stay as they are (a snapshot is kept first either way). */
   importLatest: (target: string, keepMine = true) => api<SyncResult>(`/api/dev/drafts/${enc(target)}/import-latest`, { method: "POST", body: { keepMine } }),
+  /** Deletes this game's draft; a snapshot is kept first (30 days), [unpublished]: changes not yet published. */
+  deleteDraft: (target: string) => api<{ snapshot: string; unpublished: number }>(`/api/dev/drafts/${enc(target)}`, { method: "DELETE" }),
   snapshots: (target: string) => api<DraftSnapshot[]>(`/api/dev/drafts/${enc(target)}/snapshots`),
   saveSnapshot: (target: string) => api<DraftSnapshot>(`/api/dev/drafts/${enc(target)}/snapshots`, { method: "POST", body: {} }),
   restoreSnapshot: (target: string, id: string) => api<SyncResult>(`/api/dev/drafts/${enc(target)}/snapshots/${enc(id)}/restore`, { method: "POST", body: {} }),
@@ -221,3 +223,27 @@ export async function sampleNow(game: string, device: string, signal?: AbortSign
   return made;
 }
 
+
+/** The newest published version of a game and the ids of its tasks and snippets (the server keeps it a few minutes). */
+export interface LatestRelease { version: string | null; tasks: string[]; snippets: string[] }
+/** [LatestRelease] of [target]; null when the server cannot tell (an older server, GitHub unreachable). */
+export async function latestRelease(target: string): Promise<LatestRelease | null> {
+  try { return await api<LatestRelease>(`/api/dev/drafts/${enc(target)}/latest`); } catch { return null; }
+}
+/**
+ * 在画面上试一下 on the server: [template] (a name, its theme variants included, or a resource id) matched on sample
+ * [sample] as the phone matches it. [by]: maa (the phone's own matcher), server (the same formula without Maa).
+ * [box]: where the best score was, in the sample's pixels. Null when the server could not match (an older server, busy, offline).
+ */
+export interface MatchResult { score: number; found: boolean; box: number[] | null; by: "maa" | "server" | string; variant?: string | null; threshold: number }
+/**
+ * The server's match; null when it cannot be asked (an older server, offline) so the page estimates instead, or
+ * { refused } with the server's own words when it answered no (区域太大, busy): an estimate then would mislead.
+ */
+export async function matchOnServer(req: { target: string; sample: string; template: string; region?: number[] | null; threshold?: number }): Promise<MatchResult | { refused: string } | null> {
+  try { return await api<MatchResult>("/api/dev/match", { method: "POST", body: { ...req, region: req.region ?? undefined } }); }
+  catch (error) {
+    if (error instanceof ApiFailure && (error.status === 400 || error.status === 503)) return { refused: error.message };
+    return null;
+  }
+}
