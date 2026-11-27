@@ -1,0 +1,97 @@
+client/console/src/shell/DevNav.tsx
+  s_f7a95e158ed057::t_05d12c161ab240 87-97
+client/console/src/features/accounts/GameAccountsPage.tsx
+  s_f7a95e158ed057::t_95737b3b52cb7c 1,221
+client/console/src/features/dev/States.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 15,17,23,27,29,35
+client/console/src/features/dev/Picker.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 2,13
+client/console/src/components/Hero.tsx
+  s_f7a95e158ed057::t_1b980ea1914239 1,3-44,49,53-56
+  s_f7a95e158ed057::t_95737b3b52cb7c 2,45-48,50-52
+client/console/src/features/dev/ScriptEditor.tsx
+  s_f7a95e158ed057::t_ccabe7bfe356fc 123,559-560,569,577,581,583,587-588
+client/console/src/features/devices/Devices.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 37,69,72,86
+client/console/src/features/dev/Workspace.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 61,82,92,94,113,125,132-133
+client/console/src/features/dev/Samples.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 14,58-59,61,72
+client/console/src/features/dev/config/config.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 56,67,77,80-81,91,94,103,113-114
+client/console/src/features/library/LibraryPage.tsx
+  s_f7a95e158ed057::t_95737b3b52cb7c 1,158
+client/console/src/shell/Shell.tsx
+  s_f7a95e158ed057::t_05d12c161ab240 6,8,30-32,34-37,42,47,50,57-72,82-89
+client/console/src/features/dev/Config.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 23,53,58
+client/console/src/components/Pro.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 5,9,19,25,37,41,46
+client/console/src/features/notices/Notices.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 5,50
+client/console/src/features/me/Me.module.css
+  s_f7a95e158ed057::t_e4557669effe42 14
+  s_f7a95e158ed057::t_ccabe7bfe356fc 21,41,45,51
+  s_f7a95e158ed057::t_95737b3b52cb7c 13
+client/console/src/features/admin/Admin.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 10,13
+client/console/src/features/devices/RunsDesk.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 5
+client/console/src/features/dev/canvas/Canvas.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 23-24,26-27,29,35,37,45,51,53,57,60-61,120,131-132,150,160,197,201,204-205,212,214-215,219
+client/console/src/components/ui.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 30,33-34,37,76
+client/console/src/components/TimePicker.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 34,36,42
+client/console/src/components/Hero.module.css
+  s_f7a95e158ed057::t_1b980ea1914239 1-16
+client/console/src/features/devices/Root.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 17
+client/console/src/features/dev/config/ConfigForm.tsx
+  s_f7a95e158ed057::t_ccabe7bfe356fc 188
+client/console/src/features/admin/pages/pages.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 9,19-20,37,39-40,55
+client/console/src/features/jobs/Jobs.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 48-50,56
+client/console/src/features/devices/DevicesPage.tsx
+  s_f7a95e158ed057::t_95737b3b52cb7c 1,52
+client/console/src/features/accounts/Accounts.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 13,17,23,26,30,48,56-57,59,64,73,81,90,99,112,123,139
+client/console/src/features/accounts/PlansDesk.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 22,30-31,33,35,38
+client/console/src/features/auth/AuthPage.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 5,11-12,15
+client/console/src/features/me/MeDesk.module.css
+  s_f7a95e158ed057::t_95737b3b52cb7c 8
+  s_f7a95e158ed057::t_ccabe7bfe356fc 14,25
+client/docs/src/pages/home.astro
+  s_f7a95e158ed057::t_ccabe7bfe356fc 250,302
+client/console/src/shell/Shell.module.css
+  s_f7a95e158ed057::t_0ed193e2227308 2-4,6-7,18-21,23-25,27-30,32-44,49-64,111-112,115-116,119-123,126,128,138,140,144-145,148
+client/console/src/features/library/Library.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 29
+client/console/src/features/dev/Publish.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 5-6,13,15,17-18,25,29,41
+client/console/src/features/library/TasksDesk.tsx
+  s_f7a95e158ed057::t_95737b3b52cb7c 4,77
+client/console/src/features/dev/Wb.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 19-23,41,50,78,85,94,107-108,131
+client/console/src/features/site/Legal.module.css
+  s_f7a95e158ed057::t_ccabe7bfe356fc 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a137517017acb9dec5a02c865f6f9eea5be92fc",
+  "prompts": {},
+  "sessions": {
+    "s_f7a95e158ed057": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4027ed01-4d57-4a0f-b74b-45d11e560dcb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
