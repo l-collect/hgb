@@ -244,6 +244,8 @@ jobs:
           set -euo pipefail
           apk=client/android/app/build/outputs/apk/release/app-release.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" | grep -q "CN=HuGanBao"
+          # v1 (JAR) too: some phones' own installers (vivo…) refuse a package without it as 「缺乏开发者证书」.
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify -v --min-sdk-version 21 "$apk" | grep -q "Verified using v1 scheme (JAR signing): true"
           name="hgb-${VERSION}.apk"
           mkdir -p "$RUNNER_TEMP/apk-dist"
           cp "$apk" "$RUNNER_TEMP/apk-dist/$name"
