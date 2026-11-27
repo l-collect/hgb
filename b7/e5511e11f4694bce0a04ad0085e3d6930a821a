@@ -1,0 +1,23 @@
+client/console/src/features/dev/TemplatePicker.tsx
+  s_75c1698e4ed8c2::t_ce6f57d7ebaad6 38
+  s_75c1698e4ed8c2::t_5198b16926d940 16-20
+  s_75c1698e4ed8c2::t_14f7660990d748 43-44,62-63,139
+client/console/src/features/dev/Workspace.tsx
+  s_75c1698e4ed8c2::t_5198b16926d940 371-379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b7e5511e11f4694bce0a04ad0085e3d6930a821a",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
