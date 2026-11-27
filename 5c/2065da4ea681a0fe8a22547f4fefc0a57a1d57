@@ -1,0 +1,21 @@
+client/console/src/features/me/MeDesk.module.css
+  s_75c1698e4ed8c2::t_78ffd09c295f45 2
+client/console/src/features/ConsolePage.tsx
+  s_75c1698e4ed8c2::t_78ffd09c295f45 96-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5c2065da4ea681a0fe8a22547f4fefc0a57a1d57",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
