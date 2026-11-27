@@ -1,0 +1,27 @@
+client/console/src/features/auth/AuthPage.tsx
+  s_75c1698e4ed8c2::t_be5fca362060f7 4
+  s_75c1698e4ed8c2::t_6e96a95849d990 86,112,135
+client/console/src/features/accounts/Plans.tsx
+  s_75c1698e4ed8c2::t_6e96a95849d990 367,409,451
+client/console/src/components/ui.module.css
+  s_75c1698e4ed8c2::t_6e96a95849d990 35-38
+client/console/src/components/ui.tsx
+  s_75c1698e4ed8c2::t_6e96a95849d990 1,40-48
+  s_75c1698e4ed8c2::t_85a714aabfb4d0 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "72f19e99c1455643551f95cc44f0c87078bf855a",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
