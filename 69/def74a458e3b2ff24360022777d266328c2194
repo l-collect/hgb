@@ -1,0 +1,49 @@
+client/console/src/features/dev/SamplesPage.tsx
+  s_75c1698e4ed8c2::t_8dee612758734c 2
+client/console/src/features/dev/PagesPage.tsx
+  s_75c1698e4ed8c2::t_f18301a19d01a3 12,25-26
+client/console/src/features/dev/textMatch.ts
+  s_75c1698e4ed8c2::t_8dee612758734c 1-25
+client/console/src/features/dev/Workspace.module.css
+  s_75c1698e4ed8c2::t_9cc459e3e562f9 68,73
+  s_75c1698e4ed8c2::t_510621b3ad862e 37,41,44
+client/console/src/features/dev/ScriptEditor.tsx
+  s_75c1698e4ed8c2::t_cd1cceebe40962 35,40,63-65,67-68,74-76,84-86,513-514,637-643,791,796-801
+  s_75c1698e4ed8c2::t_0066aab87de3c2 26,36,38-39,41-42,66,69-70,73,77-80,160-161
+  s_75c1698e4ed8c2::t_3c58613f848f30 521,526,635-636,644-645,774-775,793,795,802
+  s_75c1698e4ed8c2::t_6228d891dc928c 37,71-72,794
+  s_75c1698e4ed8c2::t_09c88d1dad2b03 496-497
+  s_75c1698e4ed8c2::t_6fd963e3983e92 208-211,468,471-472,500-501
+  s_75c1698e4ed8c2::t_c333a98cb0b24e 515-516,698
+client/console/src/features/dev/SpotPanels.tsx
+  s_75c1698e4ed8c2::t_6228d891dc928c 76-78,139-140
+  s_75c1698e4ed8c2::t_893cf8777b198a 1-25,28-54,65-75,79-84,87,91-97,99-100,105-109,112-118,120-138,141-159,161-170,172-176,178-193,195-198,201-225,227-229,232-233,235-240,242-268
+  s_75c1698e4ed8c2::t_ccb6a62289c41f 26-27,55-64,85-86,88-90,98,101-104,110-111,119,160,171,177,194,199-200,226,230-231,234,241
+client/console/src/features/dev/SpotPanels.module.css
+  s_75c1698e4ed8c2::t_450e695971da90 56
+  s_75c1698e4ed8c2::t_2a861309eb716c 1,3-43,47-55,57
+  s_75c1698e4ed8c2::t_d5c01783c573ad 2,44-46,58-63
+client/console/src/features/dev/coords.ts
+  s_75c1698e4ed8c2::t_09c88d1dad2b03 1,18-20
+client/console/src/features/dev/Workspace.tsx
+  s_75c1698e4ed8c2::t_b583ef3b0983ec 524-525,534
+  s_75c1698e4ed8c2::t_b02e74d29bec0e 579-589,593-594,741
+  s_75c1698e4ed8c2::t_6b9ae8a5ef6cf3 28,415,426-430,436-439,448-453,455-456,458,590-592,595
+  s_75c1698e4ed8c2::t_e08c20ec817c4f 24-27,405-414,416-425,431-435,440-447,454,457,459-460,480,483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "69def74a458e3b2ff24360022777d266328c2194",
+  "prompts": {},
+  "sessions": {
+    "s_75c1698e4ed8c2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "deeba1b2-1cf7-4393-9fbc-f56993a97797",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Class Liu <1659488338@qq.com>"
+    }
+  }
+}
