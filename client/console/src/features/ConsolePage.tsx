@@ -93,8 +93,9 @@ function deskRoute(path: string): readonly [Section, ReactNode, boolean] | null 
   if ((p = match("/accounts/:id/plans/:planId", path))) return plan(p.id, <PlanDetailPage key={`${p.id}:${p.planId}`} accountId={p.id} planId={p.planId} drawer />);
   // The runs table and its detail beside it.
   if (path === paths.devices) return ["devices", <DevicesPage />, true];
-  // 我的 and 会员与账号 are groups of one settings page.
-  if (path === paths.me || path === paths.meAccount) return ["me", <MeDesk />, false];
+  // 我的 and 会员与账号 are groups of one settings page, at the full width the other sections use (so the top bar
+  // stays put when switching to it, and no side of the window is left empty).
+  if (path === paths.me || path === paths.meAccount) return ["me", <MeDesk />, true];
   return null;
 }
 

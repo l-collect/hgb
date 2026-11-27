@@ -1,5 +1,5 @@
 /* 我的 as a settings page (≥1024): the groups on the left, the content no wider than 820. */
-.page { display: grid; grid-template-columns: 200px minmax(0, 820px); gap: var(--space-6); align-items: start; }
+.page { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
 .page > nav { top: var(--space-6); }
 .content { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
 .title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
