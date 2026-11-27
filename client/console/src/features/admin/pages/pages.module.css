@@ -6,7 +6,7 @@
 .kpi { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; }
 .kpi b { font-variant-numeric: tabular-nums; font-size: 24px; line-height: 1.3; }
 .kpiOk { color: var(--color-ok); }
-.kpiRun { color: var(--color-run); }
+.kpiRun { color: var(--color-ink); }
 
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .seg { width: 420px; }
@@ -16,8 +16,8 @@
 .input { min-height: var(--control-height); width: 100%; }
 
 .table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
-.table th { height: 38px; padding: 0 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--color-muted); background: var(--color-surface-head); border-bottom: 1px solid var(--color-line-soft); white-space: nowrap; }
-.table td { height: 46px; padding: 4px 12px; border-bottom: 1px solid var(--color-line-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table th { height: 38px; padding: 0 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--color-muted); background: var(--color-sunken); border-bottom: 1px solid var(--color-line); white-space: nowrap; }
+.table td { height: 46px; padding: 4px 12px; border-bottom: 1px solid var(--color-line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table th:first-child, .table td:first-child { padding-left: 16px; }
 .table td.menu { padding: 0 8px; overflow: visible; text-align: right; }
 .table tbody tr:last-child td { border-bottom: 0; }
@@ -34,10 +34,10 @@
 .split { display: flex; gap: 16px; align-items: flex-start; }
 .splitMain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .side { width: 340px; flex: none; position: sticky; top: 22px; }
-.detailHead { display: flex; flex-direction: column; justify-content: center; min-height: 56px; padding: 8px var(--space-4); border-bottom: 1px solid var(--color-line-soft); overflow-wrap: anywhere; }
+.detailHead { display: flex; flex-direction: column; justify-content: center; min-height: 56px; padding: 8px var(--space-4); border-bottom: 1px solid var(--color-line); overflow-wrap: anywhere; }
 .detailBody { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
-.historyHead { display: flex; align-items: center; min-height: 36px; padding: 0 var(--space-4); font-size: 12px; font-weight: 600; color: var(--color-muted); background: var(--color-surface-head); border-top: 1px solid var(--color-line-soft); border-bottom: 1px solid var(--color-line-soft); }
-.historyRow { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px var(--space-4); border-bottom: 1px solid var(--color-line-soft); font-size: 12.5px; }
+.historyHead { display: flex; align-items: center; min-height: 36px; padding: 0 var(--space-4); font-size: 12px; font-weight: 600; color: var(--color-muted); background: var(--color-sunken); border-top: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line); }
+.historyRow { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px var(--space-4); border-bottom: 1px solid var(--color-line); font-size: 12.5px; }
 .historyRow > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .historyRow:last-child { border-bottom: 0; }
 
@@ -52,7 +52,7 @@
   position: fixed; z-index: 21; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); display: flex; flex-direction: column;
   background: var(--color-surface); border-left: 1px solid var(--color-line); box-shadow: -12px 0 32px rgb(0 0 0 / .08);
 }
-.drawerHead { display: flex; align-items: center; min-height: 60px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--color-line-soft); }
+.drawerHead { display: flex; align-items: center; min-height: 60px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--color-line); }
 .drawerHead b { flex: 1; font-size: 17px; }
 .drawerBody { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
 .drawerFoot { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--color-line); }

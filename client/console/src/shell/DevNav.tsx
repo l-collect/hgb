@@ -84,6 +84,17 @@ export function DevGroup() {
   );
 }
 
+/** The top bar's 开发 (wide and medium windows): a round icon; the same items float under it. */
+export function DevMenu({ current }: { current: boolean }) {
+  return (
+    <Popover label="开发" plain role="dialog" trigger={
+      <span className={s.navIcon} data-current={current ? "true" : undefined} title="开发">{RAIL_ICON}</span>
+    }>
+      {(close) => <div className={s.devFloat}><Items wanted onPick={close} alwaysOpen /></div>}
+    </Popover>
+  );
+}
+
 /** The rail's 开发: one icon; the same items float beside it. */
 export function DevRail({ current }: { current: boolean }) {
   return (

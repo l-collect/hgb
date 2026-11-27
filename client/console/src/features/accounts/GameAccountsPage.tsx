@@ -1,3 +1,4 @@
+import { NextPlanHero } from "../../components/Hero";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, ApiFailure, enc } from "../../api/client";
 import { ask } from "../../components/Confirm";
@@ -217,6 +218,7 @@ export function GameAccountsPage({ accountId, drawer }: { accountId?: string; dr
             : <Button small variant="primary" aria-expanded={adding} onClick={() => setAdding(!adding)}>{adding ? "收起" : "＋ 添加账号"}</Button>}
         </span>
       } />
+      <NextPlanHero />
       {isOnmyoji && <RootBanner devices={data.devices} />}
       {isOnmyoji && <RootDevicesCard devices={data.devices} />}
       {!isOnmyoji && adding && <AddAccount games={data.games} gameId={gameId} done={() => setAdding(false)} />}

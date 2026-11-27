@@ -34,7 +34,7 @@
 .headLine select { min-height: 32px; }
 .under { margin-top: -6px; }
 .observed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: 10px 14px; border-radius: var(--radius-lg);
-  background: var(--color-primary-soft); color: var(--color-nav); }
+  background: var(--color-primary-soft); color: var(--color-muted); }
 .nameForm { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .nameForm input { min-height: var(--control-height-sm); }
 
@@ -66,10 +66,10 @@
 .accountPanel { display: flex; flex-direction: column; min-width: 240px; }
 .accountItem { display: flex; align-items: center; padding-right: var(--space-2); }
 .accountItem:hover { background: var(--color-bg); }
-.accountSelected, .accountSelected:hover { background: var(--color-nav-current-bg); }
+.accountSelected, .accountSelected:hover { background: var(--color-primary-soft); }
 .accountChoice { flex: 1; min-height: 40px; padding: 0 var(--space-4); border: 0; background: none; color: var(--color-ink); text-align: left; }
 .accountChoice:disabled { cursor: default; }
-.accountSelected .accountChoice { color: var(--color-nav-current); font-weight: 600; }
+.accountSelected .accountChoice { color: var(--color-ink); font-weight: 600; }
 .setDefault, .unsetDefault { border: 0; background: none; font-size: var(--text-sm); padding: 4px; white-space: nowrap; }
 .setDefault { color: var(--color-primary); }
 .unsetDefault { color: var(--color-muted); }
@@ -83,7 +83,7 @@
 .stats4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .stats4 .stat { padding: 14px var(--space-4); }
 .stats4 .stat b { font-size: 26px; }
-.statRun { color: var(--color-run); }
+.statRun { color: var(--color-ink); }
 /* What the phone waits for and what to do about it (等无障碍 · 在手机上重新开启无障碍). */
 .waitNext { margin-top: 2px; color: var(--color-warn); font-size: var(--text-sm); font-weight: 600; overflow-wrap: anywhere; }
 .waitBanner {

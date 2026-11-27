@@ -5,13 +5,13 @@
 .title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .group { display: flex; flex-direction: column; gap: var(--space-3); scroll-margin-top: var(--space-6); }
 .groupTitle { font-size: var(--text-xl); font-weight: 500; }
-.profile { display: flex; align-items: center; gap: 14px; padding: 18px; }
+.profile { display: flex; align-items: center; gap: 14px; padding: var(--space-6); background: linear-gradient(135deg, var(--color-hero-from), var(--color-hero-to)); box-shadow: none; }
 .avatar { width: 56px; height: 56px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--color-surface); box-shadow: var(--shadow-sm); color: var(--color-ink); font-size: 20px; font-weight: 600; }
 .who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .who b { font-size: 17px; overflow-wrap: anywhere; }
 .whoLine { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .halves { display: grid; grid-template-columns: 1fr 1fr; }
-.halves > .half + .half { border-left: 1px solid var(--color-line-soft); }
+.halves > .half + .half { border-left: 1px solid var(--color-line); }
 .half { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) 18px; min-width: 0; }
 .label { font-size: var(--text-sm); font-weight: 600; color: var(--color-muted); }
 .codeLine { display: flex; gap: var(--space-2); }
@@ -22,6 +22,6 @@
 .button { display: inline-flex; align-items: center; min-height: var(--control-height-sm); padding: 0 16px; border-radius: var(--radius-pill);
   border: 0; background: var(--color-sunken); color: var(--color-ink); font-weight: 600; text-decoration: none; }
 .button:hover { color: var(--color-ink); background: var(--color-bg); }
-.linkRow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 52px; padding: 0 var(--space-4); border-bottom: 1px solid var(--color-line-soft); color: var(--color-ink); text-decoration: none; }
+.linkRow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 52px; padding: 0 var(--space-4); border-bottom: 1px solid var(--color-line); color: var(--color-ink); text-decoration: none; }
 .linkRow:last-child { border-bottom: 0; }
 .linkRow:hover { background: var(--color-bg); color: var(--color-ink); }

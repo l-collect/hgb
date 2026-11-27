@@ -11,7 +11,7 @@
 .item .grow { display: flex; flex-direction: column; }
 .name { font-weight: 500; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thumb { width: 52px; height: 30px; border-radius: 6px; object-fit: cover; background: #2A2522; flex: none; }
-.tplThumb { width: 36px; height: 36px; object-fit: contain; image-rendering: pixelated; border-radius: 6px; background: var(--color-neutral-bg); flex: none; }
+.tplThumb { width: 36px; height: 36px; object-fit: contain; image-rendering: pixelated; border-radius: 6px; background: var(--color-sunken); flex: none; }
 .swatches { display: flex; gap: 2px; flex: none; width: 52px; }
 .main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .nameRow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 40px; }
@@ -55,10 +55,10 @@
 .made { max-width: 96px; image-rendering: pixelated; align-self: flex-start; }
 .swatch { flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--color-line); }
 .verdict { padding: 10px 12px; border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 4px; font-size: var(--text-sm); }
-.verdict[data-tone="ok"] { background: var(--color-ok-bg); } .verdict[data-tone="ok"] b { color: var(--color-ok); }
-.verdict[data-tone="bad"] { background: var(--color-danger-bg); } .verdict[data-tone="bad"] b { color: var(--color-danger); }
+.verdict[data-tone="ok"] { background: var(--color-sunken); } .verdict[data-tone="ok"] b { color: var(--color-ok); }
+.verdict[data-tone="bad"] { background: var(--color-sunken); } .verdict[data-tone="bad"] b { color: var(--color-danger); }
 .hits { display: flex; flex-wrap: wrap; gap: 4px 10px; max-height: 96px; overflow: auto; }
-.hits button { border: 0; background: none; padding: 0; font: inherit; font-size: var(--text-xs); color: var(--color-nav-current); cursor: pointer; }
+.hits button { border: 0; background: none; padding: 0; font: inherit; font-size: var(--text-xs); color: var(--color-ink); cursor: pointer; }
 .rect { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .rect input { min-height: 36px; width: 100%; box-sizing: border-box; padding: 0 6px; font-family: ui-monospace, Menlo, monospace; }
 .zoom { max-width: 100%; border: 1px solid var(--color-line); border-radius: 6px; background-repeat: no-repeat; image-rendering: pixelated; align-self: flex-start; }
@@ -69,7 +69,7 @@
 .out { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--color-primary-soft); }
 .out code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; white-space: pre-wrap; }
 /* 漂移: the guide on top of 素材. */
-.drift { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 12px; border-color: var(--color-warn-line); }
+.drift { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; margin-bottom: 12px; border-color: var(--color-line); }
 .driftHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .driftSteps { display: flex; flex-wrap: wrap; gap: 8px; }
 .driftLine { display: flex; align-items: center; gap: 8px; }

@@ -20,7 +20,7 @@
 .option input:first-child { flex: 2; }
 .mono { font-family: ui-monospace, Menlo, monospace; }
 .uses { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.use { font-size: var(--text-sm); color: var(--color-nav-current); text-decoration: none; white-space: nowrap; }
+.use { font-size: var(--text-sm); color: var(--color-ink); text-decoration: none; white-space: nowrap; }
 .warn { font-size: var(--text-sm); color: var(--color-danger); }
 .aside { display: flex; flex-direction: column; gap: 8px; }
 .preview { padding: 12px; display: flex; flex-direction: column; gap: 12px; max-height: 620px; overflow: auto; }
@@ -50,9 +50,9 @@
 .flag[data-tone="bad"] { background: var(--color-danger); }
 .flag[data-tone="warn"] { background: var(--color-warn); }
 .idLine { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.idCode { font-family: ui-monospace, Menlo, monospace; font-size: var(--text-sm); padding: 4px 8px; border-radius: var(--radius-sm); background: var(--color-surface-head); border: 1px solid var(--color-line); user-select: all; }
+.idCode { font-family: ui-monospace, Menlo, monospace; font-size: var(--text-sm); padding: 4px 8px; border-radius: var(--radius-sm); background: var(--color-sunken); border: 1px solid var(--color-line); user-select: all; }
 .recommend { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .select { flex: 1; min-width: 0; min-height: 36px; padding: 0 10px; border: 1px solid var(--color-control); border-radius: var(--radius-md); background: var(--color-surface); font: inherit; color: inherit; }
 .numbers { display: flex; flex-direction: column; gap: 4px; }
 .numberUse { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
-.numberUse[data-bad] { padding: 4px 8px; border-left: 3px solid var(--color-danger); background: var(--color-danger-bg); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.numberUse[data-bad] { padding: 4px 8px; border-left: 3px solid var(--color-danger); background: var(--color-sunken); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }

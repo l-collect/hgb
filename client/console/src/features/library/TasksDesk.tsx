@@ -1,6 +1,7 @@
 import { useState, type ReactNode, useEffect } from "react";
 import { api, enc } from "../../api/client";
 import type { Device, App, Game, GameAccount, GameTask, Plan } from "../../api/types";
+import { RunningHero } from "../../components/Hero";
 import { Button, ButtonLink, Card, CardHead, Empty, LiveSwitch, PageHeader, Pill, Row, Segments, SegmentTabs, TextSelect, join, ui, Tag, CategoryTile } from "../../components/ui";
 import { clockText, jobStatus, shortTime } from "../../format";
 import { leave, Link, navigate, paths, useQuery } from "../../router";
@@ -73,7 +74,7 @@ export function TasksDesk({ gameId, taskId }: { gameId?: string; taskId?: string
         <span className={s.pickers} aria-label="在哪跑"><span className={ui.tiny}>账号</span>{pickers.account}<span className={ui.tiny}>设备</span>{pickers.place}</span>
       ) : undefined} />
       {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => leave(() => { setChosenGame(id); run.clear(); navigate(paths.tasks, { force: true }); })} items={data.games.map((item) => [item.id, item.name])} />}
-      {data.devices.length === 0 && <InstallAppCard />}
+      {data.devices.length === 0 ? <InstallAppCard /> : <RunningHero />}
       <div className={join(d.cols, d.cols3)}>
         <TaskList game={game} current={task?.taskId} account={account} notes={run.notes} busy={run.busy} onRun={runTask} locked={switchLocked}
           blocked={!account || data.devices.length === 0} />

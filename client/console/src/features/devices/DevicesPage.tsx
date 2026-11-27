@@ -1,3 +1,4 @@
+import { RunningHero } from "../../components/Hero";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import type { Channel, ChannelKind, Device, EventRule, GameAccount, Job } from "../../api/types";
@@ -48,6 +49,7 @@ export function DevicesPage() {
   return (
     <>
       <PageHeader title="设备与战报" aside={wide ? <NoticeButton /> : undefined} />
+      <RunningHero />
       <div className={wide ? `${s.stats} ${s.stats4}` : s.stats}>
         <div className={s.stat}><b>{data.devices.filter((device) => device.online).length}</b><span>在线设备</span></div>
         {stat(`${paths.devices}?runs=done&span=today`, today.filter(FILTERS.done).length, "今日完成", s.statOk)}

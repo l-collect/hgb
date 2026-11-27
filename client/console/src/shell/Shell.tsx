@@ -3,9 +3,9 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Mark } from "../components/ui";
 import { Link, paths, usePath } from "../router";
 import { TopBarContext } from "./topBar";
-import { DevGroup, DevRail } from "./DevNav";
+import { DevGroup, DevMenu } from "./DevNav";
 import { useDeveloper } from "../state/developer";
-import { useNarrow, useFull } from "./useWidth";
+import { useNarrow, useWide } from "./useWidth";
 import type { Connection } from "../state/console";
 import s from "./Shell.module.css";
 
@@ -27,57 +27,66 @@ const LIVE_SHORT: Record<Connection, string> = { live: "已连接", connecting: 
 const PRIMARY = new Set<string>([paths.tasks, "/library", paths.accounts, paths.devices, paths.me]);
 
 /**
- * The frame every console page sits in, in the widths of the design: from 1280 a 240 sidebar with full names, from 600 a
- * rail of icons with short labels, and below that a top bar with the section's name and four tabs at the bottom.
+ * The frame every console page sits in (UI v8): from 600 one row on top with the logo and the sections as pills (the
+ * current one black with its name, the others round icons), below 600 a top bar with the section's name and the four
+ * tabs floating at the bottom.
  * [full] lets a page with side-by-side columns (list, detail, context) use the whole width instead of 1200. [admin] adds
- * 后台管理 (/admin, with a frame of its own) above the connection, or to the top bar when narrow. A page that fails while
- * drawing shows 「这页出错了」 in its place; the frame and its navigation stay. A developer also gets the 开发 group under
- * the navigation (an icon with the same items floating beside it on the rail; nothing on the bottom bar), and the
- * workbench (section dev) fills the main area below no padding of its own.
+ * 后台管理 (/admin, with a frame of its own) beside the connection. A page that fails while drawing shows 「这页出错了」
+ * in its place; the frame and its navigation stay. A developer also gets 开发, a round icon whose items float under it
+ * (nothing on the bottom bar); in the workbench (section dev) those items also stand in a column on its left from 1024,
+ * and the workbench fills the rest with no padding of its own.
  */
 export function Shell({ section, connection, full, admin, stale, children }: { section: Section; connection: Connection; full?: boolean; admin?: boolean; stale?: boolean; children: ReactNode }) {
   const developer = useDeveloper();
   const narrow = useNarrow();
-  const fullNav = useFull();
+  const wide = useWide();
   // Someone who is not a developer can still open /dev by its address: it then sits under 我的, as before.
   const current = section === "dev" && !developer ? "me" : section;
   const path = usePath();
   const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const live = <><span className={s.liveDot} data-state={connection} aria-hidden="true" /><span className={s.liveText}>{LIVE_SHORT[connection]}</span></>;
   return (
     <div className={s.shell} data-wide={section === "dev" || full === true} data-dev={section === "dev" ? "true" : undefined}>
+      {/* Narrow: a top bar naming the section; the four tabs float at the bottom. */}
       <header className={s.top}>
         <Mark size={26} /><b className={s.topTitle}>{TITLES[section]}</b>
         {admin && <Link className={s.topAdmin} to="/admin">后台</Link>}
         <span ref={setSlot} className={s.topSlot} />
         <span className={s.liveShort} role="status" title={LIVE[connection]}><span className={s.liveDot} data-state={connection} aria-hidden="true" /><span className={s.liveShortText}>{LIVE_SHORT[connection]}</span></span>
       </header>
+      {/* Medium and wide (UI v8): one row on top — the logo, the current section as a black pill with its name, the
+          others as round icons, 开发 for developers, then 后台 and the connection. */}
+      <header className={s.deskTop}>
+        <Link to={paths.tasks} className={s.navBrand}><Mark size={32} /><span className={s.brandName}>护肝宝</span></Link>
+        <nav className={s.deskLinks} aria-label="主导航">
+          {LINKS.map(([id, label, , to, svg]) => id === current ? (
+            <Link key={id} to={to} className={s.navPill} aria-current="page">{svg}<span>{label}</span></Link>
+          ) : (
+            <Link key={id} to={to} className={s.navIcon} aria-label={label} title={label}>{svg}</Link>
+          ))}
+          {developer && !narrow && <DevMenu current={section === "dev"} />}
+        </nav>
+        <span className={s.deskSpacer} />
+        {admin && <Link className={s.adminPill} to="/admin">{ADMIN_ICON}<span>后台管理</span></Link>}
+        <div className={s.live} role="status" title={LIVE[connection]}>{live}</div>
+      </header>
       <nav className={s.nav} aria-label="主导航">
-        <Link to={paths.tasks} className={s.navBrand}><Mark size={26} /><span className={s.brandName}>护肝宝</span></Link>
         <div className={s.links}>
           {LINKS.map(([id, label, short, to, svg]) => (
             <Link key={id} to={to} className={s.link} aria-current={id === current ? "page" : undefined}>
               <span className={s.linkIcon}>{svg}</span><span className={s.linkLabel}>{label}</span><span className={s.linkShort}>{short}</span>
             </Link>
           ))}
-          {developer && !narrow && !fullNav && <DevRail current={section === "dev"} />}
-        </div>
-        {developer && fullNav && <DevGroup />}
-        <div className={s.foot}>
-          {admin && (
-            <Link className={s.link} to="/admin">
-              <span className={s.linkIcon}>{ADMIN_ICON}</span><span className={s.linkLabel}>后台管理</span><span className={s.linkShort}>后台</span>
-            </Link>
-          )}
-          <div className={s.live} role="status" title={LIVE[connection]}>
-            <span className={s.liveDot} data-state={connection} aria-hidden="true" /><span className={s.liveText}>{LIVE[connection]}</span>
-          </div>
         </div>
       </nav>
-      <main className={s.main} data-stale={stale ? "true" : undefined}>
-        <TopBarContext.Provider value={{ primary: PRIMARY.has(path), slot }}>
-          <ErrorBoundary resetKey={path}>{children}</ErrorBoundary>
-        </TopBarContext.Provider>
-      </main>
+      <div className={s.body}>
+        {developer && section === "dev" && wide && <aside className={s.devSide} aria-label="开发">{<DevGroup />}</aside>}
+        <main className={s.main} data-stale={stale ? "true" : undefined}>
+          <TopBarContext.Provider value={{ primary: PRIMARY.has(path), slot }}>
+            <ErrorBoundary resetKey={path}>{children}</ErrorBoundary>
+          </TopBarContext.Provider>
+        </main>
+      </div>
     </div>
   );
 }

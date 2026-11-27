@@ -10,24 +10,24 @@
 .table { width: 100%; border-collapse: collapse; min-width: 640px; }
 .table th { font-size: var(--text-xs); font-weight: 600; color: var(--color-muted); text-align: left; padding: 10px var(--space-4);
   border-bottom: 1px solid var(--color-line); background: none; white-space: nowrap; }
-.table td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-line-soft); vertical-align: middle; }
+.table td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-line); vertical-align: middle; }
 .table tr:last-child td { border-bottom: 0; }
 .name { font-weight: 600; }
 .mutedCell { color: var(--color-muted); font-size: var(--text-sm); }
-.runCell { color: var(--color-run); font-weight: 600; }
+.runCell { color: var(--color-ink); font-weight: 600; }
 .ops { text-align: right; white-space: nowrap; }
 .formButtons { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .pushEnd { margin-left: auto; }
 
 .how { padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: 6px; background: var(--color-primary-soft); border-color: var(--color-primary-line); }
-.how ol { padding-left: var(--space-5); color: var(--color-nav); }
+.how ol { padding-left: var(--space-5); color: var(--color-muted); }
 .rules { padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: 6px; }
 .rulesTitle { font-size: var(--text-lg); font-weight: 600; }
-.rules ul { padding-left: var(--space-5); color: var(--color-nav); display: flex; flex-direction: column; gap: var(--space-1); }
+.rules ul { padding-left: var(--space-5); color: var(--color-muted); display: flex; flex-direction: column; gap: var(--space-1); }
 
 .split { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-start; }
 .taskList { flex: 1 1 300px; }
-.taskRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) 14px; min-height: 56px; padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line-soft); }
+.taskRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) 14px; min-height: 56px; padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line); }
 .taskRow:last-child { border-bottom: 0; }
 .taskOn { background: var(--color-primary-soft); box-shadow: inset 3px 0 0 var(--color-primary); }
 .taskPick { flex: 1 1 140px; display: flex; flex-direction: column; align-items: flex-start; min-height: 40px; padding: 0; border: 0; background: none; text-align: left; }
@@ -45,7 +45,7 @@
 .optionOn { border-color: var(--color-primary); background: var(--color-primary-soft); }
 .option:disabled { opacity: .6; cursor: default; }
 .input { min-height: var(--control-height); max-width: 280px; }
-.saveBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-line-soft); }
+.saveBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-line); }
 .saveBar > span { flex: 1; min-width: 180px; }
 .statusOk { color: var(--color-ok); } .statusWarn { color: var(--color-warn); } .statusBad { color: var(--color-danger); }
 
@@ -53,15 +53,15 @@
 .planFacts { flex: 1 1 260px; }
 .planOps { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .days { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); margin-top: 6px; }
-.day { width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 50%; font-size: var(--text-xs); background: var(--color-neutral-bg); color: var(--color-neutral); }
-.dayPick { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: 50%; border: 0; font-size: var(--text-sm); background: var(--color-neutral-bg); color: var(--color-neutral); }
+.day { width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 50%; font-size: var(--text-xs); background: var(--color-sunken); color: var(--color-muted); }
+.dayPick { width: 40px; height: 40px; display: inline-grid; place-items: center; border-radius: 50%; border: 0; font-size: var(--text-sm); background: var(--color-sunken); color: var(--color-muted); }
 .dayOn { background: var(--color-primary); color: var(--color-on-primary); font-weight: 600; }
-.editorWrap { padding: 0 var(--space-4) var(--space-4); border-bottom: 1px solid var(--color-line-soft); }
+.editorWrap { padding: 0 var(--space-4) var(--space-4); border-bottom: 1px solid var(--color-line); }
 .editor { padding: var(--space-4); border-radius: var(--radius-lg); background: var(--color-bg); gap: 14px; }
 .editorRow { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
 .plainSet { margin: 0; padding: 0; border: 0; min-width: 0; }
 .switchLine { display: inline-flex; align-items: center; gap: 10px; }
-.listHead { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line-soft); font-weight: 600; }
+.listHead { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line); font-weight: 600; }
 .listHead > :first-child { flex: 1; }
 .where { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: 400; font-size: var(--text-sm); color: var(--color-muted); }
 .where select { min-height: 32px; color: var(--color-ink); }
@@ -70,7 +70,7 @@
 .choiceLine { display: flex; align-items: center; gap: var(--space-1); padding: 10px var(--space-4) 2px; color: var(--color-muted); }
 
 /* A setting as a row: its name and default on the left, the control at the end; choices go under the name. */
-.fieldRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) 14px; min-height: 56px; padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line-soft); }
+.fieldRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) 14px; min-height: 56px; padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line); }
 .fieldRow:last-child { border-bottom: 0; }
 .fieldName { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .fieldName b { font-weight: 500; }
@@ -78,7 +78,7 @@
 .fieldWide { flex: 1 1 100%; min-width: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--space-3); }
 
-.planRow { display: flex; align-items: center; gap: 10px; padding-right: var(--space-4); border-bottom: 1px solid var(--color-line-soft); }
+.planRow { display: flex; align-items: center; gap: 10px; padding-right: var(--space-4); border-bottom: 1px solid var(--color-line); }
 .planRow:last-child { border-bottom: 0; }
 .planLink { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 8px var(--space-4); color: inherit; text-decoration: none; }
 .planLink:hover { color: inherit; background: var(--color-bg); }
@@ -87,7 +87,7 @@
 .planName { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .planName b { font-weight: 600; }
 .ellipsis { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.daysRow { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line-soft); }
+.daysRow { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px var(--space-4); border-bottom: 1px solid var(--color-line); }
 .daysRow .dayPick { width: 38px; height: 38px; border: 0; background: var(--color-sunken); color: var(--color-muted); font-weight: 500; }
 .daysRow .dayOn { border-color: var(--color-primary); background: var(--color-primary); color: var(--color-on-primary); }
 .inlineInput { min-height: var(--control-height); flex: 0 1 240px; }
@@ -96,7 +96,7 @@
 .pickPanel { display: flex; flex-direction: column; padding: var(--space-2) var(--space-4); gap: 2px; }
 .columns { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 @media (max-width: 900px) { .columns { grid-template-columns: minmax(0, 1fr); } }
-.dangerWide { width: 100%; border-color: var(--color-danger-bg); }
+.dangerWide { width: 100%; border-color: var(--color-sunken); }
 .tabsLine { margin-top: -4px; }
 
 /* Wide (≥1024): a task's settings on one page, the bar at the top and a jump list of the steps beside the cards. */
@@ -109,7 +109,7 @@
 .jumps { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 2px; }
 .jumps a { padding: 8px 10px; border-radius: 8px; font-size: var(--text-sm); color: var(--color-muted); text-decoration: none; overflow-wrap: anywhere; }
 .jumps a:hover { color: var(--color-ink); background: var(--color-surface); }
-.jumps a[aria-current="true"] { background: var(--color-nav-current-bg); color: var(--color-nav-current); font-weight: 600; }
+.jumps a[aria-current="true"] { background: var(--color-primary-soft); color: var(--color-ink); font-weight: 600; }
 .anchored { scroll-margin-top: 72px; }
 /* A plan's task: 跟随账号, or 单独设置 with what it changed and 恢复跟随. */
 .followLine { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; margin-top: 2px; }
@@ -120,7 +120,7 @@
 .orderButton { position: relative; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--color-sunken); color: var(--color-ink); padding: 0; font-weight: 600; }
 .orderButton:hover:not(:disabled) { background: var(--color-bg); }
 .orderButton:disabled { opacity: .35; cursor: default; }
-.changed { color: var(--color-nav-current); font-weight: 600; }
+.changed { color: var(--color-ink); font-weight: 600; }
 /* 读取登录 and what came of it, beside the button. */
 .loginAction { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
 .loginNote { font-size: var(--text-xs); overflow-wrap: anywhere; }
@@ -136,7 +136,7 @@
 [aria-checked="true"] > .mark { box-shadow: 0 0 0 2px var(--color-on-primary); }
 [aria-checked="true"] > .mark_info { background: var(--color-on-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-on-primary) 40%, transparent); }
 .warnCell { color: var(--color-warn); font-weight: 600; }
-.tableEnd { display: flex; justify-content: flex-end; padding: 10px var(--space-4); border-top: 1px solid var(--color-line-soft); }
+.tableEnd { display: flex; justify-content: flex-end; padding: 10px var(--space-4); border-top: 1px solid var(--color-line); }
 /* No account yet: how accounts come in, and reading a rooted phone's login as the second way. */
 .emptyHow { padding: 24px 16px; text-align: center; display: grid; gap: 10px; justify-items: center; }
 .emptyAlt { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }

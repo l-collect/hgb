@@ -1,3 +1,4 @@
+import { RunningHero } from "../../components/Hero";
 import { useEffect, useState } from "react";
 import { api, enc } from "../../api/client";
 import type { CloudTask, ConfigView, Device, Game, GameAccount, GameTask, Job } from "../../api/types";
@@ -154,6 +155,7 @@ export function LibraryPage() {
               options={[["", "自动分配"], ...places.map((p): [string, string] => [p.value, p.label])]} />
           </span>
         )} />
+      <RunningHero />
       {data.games.length > 1 && <Segments label="游戏" value={game.id} onChange={(id) => { setChosen(id); clear(); }} items={data.games.map((item) => [item.id, item.name])} />}
       <div className={s.filterBar}>
         <SegmentTabs label="筛选" value={view} onChange={setView} items={[["all", `全部 ${game.tasks.length}`], ["fav", `★ 常用 ${starred.length}`]]} />

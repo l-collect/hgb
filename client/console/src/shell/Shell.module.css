@@ -1,9 +1,10 @@
 /*
- * The widths of the design (网页桌面 · 断点): the full sidebar from 1280 (a third column only from 1440, DESK in useWidth.ts), the rail from 600
- * (breakpoint.medium), the bottom bar below. Media queries cannot read CSS variables, so the numbers are repeated here.
+ * The widths of the design (UI v8): from 600 (breakpoint.medium) one row on top with the logo and the sections as pills,
+ * below it a top bar and the four tabs floating at the bottom. Media queries cannot read CSS variables, so the numbers
+ * are repeated here.
  */
-.shell { position: relative; min-height: 100vh; display: flex; background: var(--color-bg); isolation: isolate; }
-/* UI v8：页面顶部一层很淡的极光，只在背后，不挡内容。 */
+.shell { position: relative; min-height: 100vh; display: flex; flex-direction: column; background: var(--color-bg); isolation: isolate; }
+/* 页面顶部一层很淡的极光，只在背后，不挡内容。 */
 .shell::before {
   content: ""; position: absolute; z-index: -1; inset: 0 0 auto 0; height: 420px; pointer-events: none;
   background:
@@ -14,28 +15,53 @@
 }
 .shell[data-dev="true"]::before { display: none; }
 
-/* Wide: the full sidebar. */
-.nav {
-  flex: 0 0 240px; position: sticky; top: 0; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-1);
-  padding: var(--space-5) var(--space-3); background: transparent;
+/* Medium and wide: the row on top. */
+.deskTop {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); width: 100%; max-width: calc(1280px + 2 * var(--space-8)); margin: 0 auto;
+  padding: var(--space-5) var(--space-8) var(--space-1); position: relative; z-index: 3;
 }
-.navBrand { display: flex; align-items: center; gap: 8px; padding: 0 var(--space-2) var(--space-4); color: var(--color-ink); text-decoration: none; font-weight: 500; font-size: var(--text-xl); }
+.shell[data-wide="true"] .deskTop { max-width: none; }
+.shell[data-dev="true"] .deskTop { padding-bottom: var(--space-3); }
+.navBrand { display: flex; align-items: center; gap: 10px; margin-right: var(--space-4); color: var(--color-ink); text-decoration: none; font-weight: 500; font-size: var(--text-xl); }
 .navBrand:hover { color: var(--color-ink); }
-.links { display: flex; flex-direction: column; gap: var(--space-1); }
-.link {
-  display: flex; align-items: center; gap: 10px; min-height: var(--control-height-lg); padding: 0 var(--space-4); border-radius: var(--radius-pill);
-  color: var(--color-muted); text-decoration: none; font-weight: 500; white-space: nowrap;
+.deskLinks { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.navPill {
+  display: inline-flex; align-items: center; gap: 8px; height: var(--control-height-lg); padding: 0 20px 0 16px; border-radius: var(--radius-pill);
+  background: var(--color-primary); color: var(--color-on-primary); font-weight: 500; font-size: var(--text-lg); text-decoration: none; white-space: nowrap;
 }
-.link:hover { color: var(--color-ink); background: color-mix(in srgb, var(--color-ink) 5%, transparent); }
-.link[aria-current="page"] { background: var(--color-primary); color: var(--color-on-primary); font-weight: 500; }
-.linkIcon { display: grid; place-items: center; flex: none; }
-.linkShort { display: none; }
-.foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1); }
+.navPill:hover { color: var(--color-on-primary); background: var(--color-primary-hover); }
+.navIcon {
+  display: inline-grid; place-items: center; flex: none; width: var(--control-height-lg); height: var(--control-height-lg); border-radius: 50%;
+  background: var(--color-surface); box-shadow: var(--shadow-sm); color: var(--color-muted); text-decoration: none; transition: color var(--motion-fast) ease-out;
+}
+.navIcon:hover { color: var(--color-ink); }
+.navIcon[data-current="true"] { background: var(--color-primary); color: var(--color-on-primary); box-shadow: none; }
+.deskSpacer { flex: 1; }
+.adminPill {
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 12px; border-radius: var(--radius-pill);
+  background: var(--color-surface); box-shadow: var(--shadow-sm); color: var(--color-ink); font-size: var(--text-sm); font-weight: 500; text-decoration: none; white-space: nowrap;
+}
+.adminPill:hover { color: var(--color-ink); box-shadow: var(--shadow-md); }
 .live { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 var(--space-4); border-radius: var(--radius-pill); background: var(--color-surface); box-shadow: var(--shadow-sm); font-size: var(--text-xs); color: var(--color-muted); }
 .liveDot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--color-control); }
 .liveDot[data-state="live"] { background: var(--color-ok); }
 .liveDot[data-state="lost"] { background: var(--color-danger); }
-.top, .topAdmin { display: none; }
+
+/* The bottom bar (narrow only). */
+.nav, .top, .topAdmin { display: none; }
+.links { display: flex; }
+.link {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--color-muted); text-decoration: none;
+  font-size: var(--text-xs); font-weight: 500; white-space: nowrap;
+}
+.linkIcon { display: grid; place-items: center; flex: none; }
+.linkLabel { display: none; }
+
+.body { flex: 1 1 auto; display: flex; width: 100%; min-height: 0; }
+/* The workbench's 开发 items in a column of their own, on its left. */
+.devSide { flex: 0 0 240px; display: flex; flex-direction: column; padding: 0 var(--space-3) var(--space-4); min-height: 0; overflow-y: auto; }
+.devSide .devGroup { margin-top: 0; }
+
 /* 开发 (developers only): a group under the navigation, folded or open. */
 .devGroup { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-3); min-height: 0; overflow-y: auto; }
 .devHead {
@@ -82,33 +108,24 @@
 .shell[data-dev="true"] .main { padding: 0; gap: 0; height: 100vh; box-sizing: border-box; overflow: hidden; }
 .devFrame { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--color-bg); color: var(--color-ink); }
 
+.shell[data-dev="true"] { height: 100vh; }
+.shell[data-dev="true"] .main { padding: 0; gap: 0; height: auto; min-height: 0; box-sizing: border-box; overflow: hidden; }
 .shell[data-wide="true"] .main { max-width: none; }
 
-.main { flex: 1 1 auto; min-width: 0; max-width: 1280px; padding: var(--space-6) var(--space-8) 40px; display: flex; flex-direction: column; gap: var(--space-5); }
+.main { flex: 1 1 auto; min-width: 0; max-width: calc(1280px + 2 * var(--space-8)); margin: 0 auto; padding: var(--space-4) var(--space-8) 40px; display: flex; flex-direction: column; gap: var(--space-5); }
+.shell[data-wide="true"] .main { margin: 0; }
 .main:focus { outline: none; }
 
-/* Medium: a rail of icons with short labels, until the columns need the room of the full sidebar. */
-@media (max-width: 1279px) {
-  .nav { flex-basis: 80px; padding: var(--space-4) 0; align-items: center; }
-  .navBrand { padding: 0 0 var(--space-3); }
-  .brandName, .liveText { display: none; }
-  .links, .foot { align-items: center; }
-  .link { width: 64px; min-height: 60px; padding: 0; flex-direction: column; justify-content: center; gap: 2px; font-size: var(--text-xs); font-weight: 500; background: none; border-radius: var(--radius-lg); }
-  .link:hover { background: none; }
-  .link[aria-current="page"] { background: none; color: var(--color-ink); }
-  .linkIcon { width: 48px; height: 32px; border-radius: 16px; }
-  .link:hover .linkIcon { background: color-mix(in srgb, var(--color-ink) 5%, transparent); }
-  .link[aria-current="page"] .linkIcon, .link[data-current="true"] .linkIcon { background: var(--color-primary); color: var(--color-on-primary); }
-  .link[data-current="true"] { color: var(--color-ink); }
-  .live { padding: 0; width: 40px; justify-content: center; }
-  .linkLabel { display: none; }
-  .linkShort { display: inline; }
-  .main { padding: var(--space-5) var(--space-6) 32px; }
+@media (max-width: 1023px) {
+  .brandName { display: none; }
+  .deskTop { padding-left: var(--space-6); padding-right: var(--space-6); }
+  .main { padding: var(--space-3) var(--space-6) 32px; }
+  .adminPill span { display: none; }
 }
 
-/* Narrow: a top bar, and the navigation fixed at the bottom. */
+/* Narrow: a top bar, and the navigation floating at the bottom. */
 @media (max-width: 599px) {
-  .shell { flex-direction: column; }
+  .deskTop { display: none; }
   .top {
     display: flex; align-items: center; gap: var(--space-3); position: sticky; top: 0; z-index: 2; min-height: 60px; padding: 0 var(--space-4);
     background: color-mix(in srgb, var(--color-bg) 85%, transparent); backdrop-filter: blur(12px);
@@ -118,17 +135,16 @@
   .topSlot { display: flex; justify-content: flex-end; min-width: 0; flex: 0 1 auto; }
   .topSlot:not(:empty) ~ .liveShort .liveShortText { display: none; }
   .liveShort { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--color-muted); }
+  .topAdmin { display: inline; flex: none; font-size: var(--text-sm); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; color: var(--color-ink); }
   .nav {
-    position: fixed; z-index: 2; left: var(--space-4); right: var(--space-4); bottom: calc(14px + env(safe-area-inset-bottom)); top: auto; height: 68px; flex-direction: row; align-items: center; padding: 0 6px;
+    display: flex; position: fixed; z-index: 2; left: var(--space-4); right: var(--space-4); bottom: calc(14px + env(safe-area-inset-bottom)); height: 68px; align-items: center; padding: 0 6px;
     border-radius: var(--radius-pill); background: var(--color-surface); box-shadow: var(--shadow-md);
   }
-  .navBrand, .foot { display: none; }
-  .topAdmin { display: inline; flex: none; font-size: var(--text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
   .links { flex: 1; flex-direction: row; gap: 0; }
-  .link { flex: 1 1 0; width: auto; min-height: 58px; border-radius: var(--radius-pill); }
-  .link[aria-current="page"] { background: var(--color-primary-soft); }
-  .link[aria-current="page"] .linkIcon, .link[data-current="true"] .linkIcon { background: none; color: var(--color-ink); }
+  .link { flex: 1 1 0; min-height: 58px; border-radius: var(--radius-pill); }
+  .link[aria-current="page"] { background: var(--color-primary-soft); color: var(--color-ink); }
   .linkIcon { width: 40px; height: 26px; }
   .main { padding: var(--space-4) var(--space-4) calc(104px + env(safe-area-inset-bottom)); gap: var(--space-3); }
+  .shell[data-dev="true"] { height: auto; }
   .shell[data-dev="true"] .main { height: calc(100dvh - 60px); padding: 0 0 calc(96px + env(safe-area-inset-bottom)); }
 }

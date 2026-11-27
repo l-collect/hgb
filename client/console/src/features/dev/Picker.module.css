@@ -1,5 +1,5 @@
 /* 选图 and 在画面上选: one floating panel in the script editor (and a dialog on forms). */
-.notice { position: absolute; z-index: 31; right: 8px; top: 8px; padding: 4px 10px; border-radius: var(--radius-sm); background: var(--color-danger-bg); color: var(--color-danger); font-size: var(--text-sm); }
+.notice { position: absolute; z-index: 31; right: 8px; top: 8px; padding: 4px 10px; border-radius: var(--radius-sm); background: var(--color-sunken); color: var(--color-danger); font-size: var(--text-sm); }
 .shell { position: absolute; z-index: 30; width: 360px; max-width: calc(100% - 16px); outline: none; }
 .picker, .pick { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; box-sizing: border-box; background: var(--color-surface); color: var(--color-ink);
   border: 1px solid var(--color-line); border-radius: var(--radius-lg); box-shadow: 0 10px 30px rgba(0, 0, 0, .22); font-size: var(--text-sm); outline: none; }
@@ -10,7 +10,7 @@
 .close { width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: 18px; line-height: 1; cursor: pointer; }
 .close:hover { background: var(--color-bg); color: var(--color-ink); }
 .pair { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; align-items: start; }
-.mine { display: flex; flex-direction: column; gap: 4px; align-items: center; min-height: 64px; justify-content: center; padding: 6px; border-radius: var(--radius-md); background: var(--color-surface-head); }
+.mine { display: flex; flex-direction: column; gap: 4px; align-items: center; min-height: 64px; justify-content: center; padding: 6px; border-radius: var(--radius-md); background: var(--color-sunken); }
 .mine img { max-width: 84px; max-height: 72px; image-rendering: pixelated; }
 .caption { font-size: 11px; color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .screen { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

@@ -185,7 +185,7 @@ export function ConfigForm({ taskId, fieldId, onClose, inline, onSaved, onDelete
           <Preview field={next} value={next.recommended as Json | undefined} onChange={(v) => set("recommended", v)} />
         </div>
         <span className={k.sideTitle}>检查</span>
-        {shape && <div className={k.warnbox} style={{ background: "var(--color-danger-bg)", color: "var(--color-danger)" }}>{shape}</div>}
+        {shape && <div className={k.warnbox} style={{ background: "var(--color-sunken)", color: "var(--color-danger)" }}>{shape}</div>}
         {unhandled.map((v) => <div key={v.word} className={k.warnbox}>提醒 · 「{v.label}{v.label !== v.word ? ` ${v.word}` : ""}」没写分支：选它时什么也不做
           {isChoice(next.widget) && <> <button type="button" className={w.linkBtn} disabled={busy} onClick={() => void addCase(v.value, v.label)}>补一支 ›</button></>}</div>)}
         {numberIssues.map((t, i) => <div key={i} className={k.warnbox}>{t}</div>)}
